@@ -77,16 +77,30 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient: ctxClient } = Route.useRouteContext();
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const { isAuthenticated, loading } = useAuth();
+
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register") ||
     pathname.startsWith("/forgot-password") || pathname.startsWith("/reset-password") ||
     pathname.startsWith("/verify-email");
 
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      router.invalidate();
+      queryClient.invalidateQueries();
+    });
+    return () => subscription.unsubscribe();
+  }, [router, queryClient]);
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={ctxClient}>
       {isAuthRoute ? (
         <Outlet />
+      ) : !loading && !isAuthenticated ? (
+        <Navigate to="/login" />
       ) : (
         <SidebarProvider>
           <div className="flex min-h-screen w-full bg-background">
