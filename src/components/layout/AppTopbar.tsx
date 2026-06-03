@@ -1,17 +1,42 @@
-import { Bell, Moon, Search, Sun } from "lucide-react";
+import { Bell, LogOut, Moon, Search, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/use-auth";
+
+const ROLE_LABELS: Record<string, string> = {
+  student: "Student",
+  faculty: "Faculty",
+  institution_admin: "Institution Admin",
+  super_admin: "Super Admin",
+};
 
 export function AppTopbar() {
   const [dark, setDark] = useState(false);
+  const { user, roles, signOut } = useAuth();
+  const navigate = useNavigate();
+
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
+
+  const email = user?.email ?? "";
+  const initials = (email.slice(0, 2) || "··").toUpperCase();
+  const roleLabel = roles[0] ? ROLE_LABELS[roles[0]] ?? roles[0] : "Member";
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate({ to: "/login" });
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-3 backdrop-blur-md md:px-6">
@@ -33,15 +58,28 @@ export function AppTopbar() {
           <Badge className="absolute -right-0.5 -top-0.5 h-4 min-w-4 rounded-full bg-destructive p-0 text-[10px] leading-none text-destructive-foreground">3</Badge>
         </Button>
         <Separator orientation="vertical" className="mx-1 h-6" />
-        <div className="flex items-center gap-2 pr-1">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">AP</AvatarFallback>
-          </Avatar>
-          <div className="hidden text-right leading-tight sm:block">
-            <p className="text-xs font-medium text-foreground">Aarav Patel</p>
-            <p className="text-[10px] text-muted-foreground">Faculty · MIT</p>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 rounded-md pr-1 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="hidden text-right leading-tight sm:block">
+                <p className="text-xs font-medium text-foreground max-w-[160px] truncate">{email || "Account"}</p>
+                <p className="text-[10px] text-muted-foreground">{roleLabel}</p>
+              </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>Settings</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+              <LogOut className="mr-2 h-4 w-4" /> Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
