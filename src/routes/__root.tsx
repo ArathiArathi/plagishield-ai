@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import {
   Outlet, Link, createRootRouteWithContext, useRouter, useRouterState,
-  HeadContent, Scripts,
+  HeadContent, Scripts, Navigate,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -11,6 +11,8 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopbar } from "@/components/layout/AppTopbar";
 import { Toaster } from "@/components/ui/sonner";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
   return (
@@ -75,16 +77,30 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const { queryClient: ctxClient } = Route.useRouteContext();
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const { isAuthenticated, loading } = useAuth();
+
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register") ||
     pathname.startsWith("/forgot-password") || pathname.startsWith("/reset-password") ||
     pathname.startsWith("/verify-email");
 
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      router.invalidate();
+      queryClient.invalidateQueries();
+    });
+    return () => subscription.unsubscribe();
+  }, [router, queryClient]);
+
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={ctxClient}>
       {isAuthRoute ? (
         <Outlet />
+      ) : !loading && !isAuthenticated ? (
+        <Navigate to="/login" />
       ) : (
         <SidebarProvider>
           <div className="flex min-h-screen w-full bg-background">
