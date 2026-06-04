@@ -79,7 +79,6 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient: ctxClient } = Route.useRouteContext();
-  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { isAuthenticated, loading } = useAuth();
@@ -91,10 +90,10 @@ function RootComponent() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
       router.invalidate();
-      queryClient.invalidateQueries();
+      ctxClient.invalidateQueries();
     });
     return () => subscription.unsubscribe();
-  }, [router, queryClient]);
+  }, [router, ctxClient]);
 
   return (
     <QueryClientProvider client={ctxClient}>
