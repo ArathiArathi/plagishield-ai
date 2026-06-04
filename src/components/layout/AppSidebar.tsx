@@ -7,6 +7,8 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth, type AppRole } from "@/hooks/use-auth";
+import { ROUTE_ROLES } from "@/components/auth/RoleGuard";
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -22,6 +24,11 @@ const orgItems = [
   { title: "Subscription", url: "/subscription", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
+
+function allowed(roles: AppRole[], url: string) {
+  const req = ROUTE_ROLES[url];
+  return !req || roles.some((r) => req.includes(r));
+}
 
 export function AppSidebar() {
   const { state } = useSidebar();
