@@ -13,6 +13,7 @@ import { AppTopbar } from "@/components/layout/AppTopbar";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { RoleGuard } from "@/components/auth/RoleGuard";
 
 function NotFoundComponent() {
   return (
