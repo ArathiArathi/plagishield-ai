@@ -76,7 +76,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Organization</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {orgItems.map((item) => (
+              {visibleOrg.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>
