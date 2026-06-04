@@ -34,7 +34,10 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const { roles } = useAuth();
   const isActive = (url: string) => url === "/" ? pathname === "/" : pathname.startsWith(url);
+  const visibleMain = mainItems.filter((i) => allowed(roles, i.url));
+  const visibleOrg = orgItems.filter((i) => allowed(roles, i.url));
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
