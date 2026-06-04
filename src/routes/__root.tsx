@@ -13,6 +13,7 @@ import { AppTopbar } from "@/components/layout/AppTopbar";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { RoleGuard } from "@/components/auth/RoleGuard";
 
 function NotFoundComponent() {
   return (
@@ -108,7 +109,9 @@ function RootComponent() {
             <div className="flex flex-1 flex-col min-w-0">
               <AppTopbar />
               <main className="flex-1 p-4 md:p-6 lg:p-8">
-                <Outlet />
+                <RoleGuard pathname={pathname}>
+                  <Outlet />
+                </RoleGuard>
               </main>
             </div>
           </div>

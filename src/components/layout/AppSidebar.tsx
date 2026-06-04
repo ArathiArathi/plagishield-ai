@@ -7,6 +7,8 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth, type AppRole } from "@/hooks/use-auth";
+import { ROUTE_ROLES } from "@/components/auth/RoleGuard";
 
 const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -23,11 +25,19 @@ const orgItems = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
+function allowed(roles: AppRole[], url: string) {
+  const req = ROUTE_ROLES[url];
+  return !req || roles.some((r) => req.includes(r));
+}
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const { roles } = useAuth();
   const isActive = (url: string) => url === "/" ? pathname === "/" : pathname.startsWith(url);
+  const visibleMain = mainItems.filter((i) => allowed(roles, i.url));
+  const visibleOrg = orgItems.filter((i) => allowed(roles, i.url));
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -49,7 +59,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainItems.map((item) => (
+              {visibleMain.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>
@@ -66,7 +76,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Organization</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {orgItems.map((item) => (
+              {visibleOrg.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>
