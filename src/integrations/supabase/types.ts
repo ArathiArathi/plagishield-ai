@@ -14,6 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
+      analyses: {
+        Row: {
+          ai_score: number | null
+          citation_score: number | null
+          created_at: string
+          document_id: string
+          error: string | null
+          grammar_score: number | null
+          id: string
+          results: Json | null
+          similarity_score: number | null
+          status: string
+          updated_at: string
+          version_id: string
+        }
+        Insert: {
+          ai_score?: number | null
+          citation_score?: number | null
+          created_at?: string
+          document_id: string
+          error?: string | null
+          grammar_score?: number | null
+          id?: string
+          results?: Json | null
+          similarity_score?: number | null
+          status?: string
+          updated_at?: string
+          version_id: string
+        }
+        Update: {
+          ai_score?: number | null
+          citation_score?: number | null
+          created_at?: string
+          document_id?: string
+          error?: string | null
+          grammar_score?: number | null
+          id?: string
+          results?: Json | null
+          similarity_score?: number | null
+          status?: string
+          updated_at?: string
+          version_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analyses_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analyses_version_id_fkey"
+            columns: ["version_id"]
+            isOneToOne: false
+            referencedRelation: "document_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_versions: {
+        Row: {
+          created_at: string
+          document_id: string
+          id: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          id?: string
+          size_bytes?: number
+          storage_path: string
+          uploaded_by: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          id?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_by?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_versions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          created_at: string
+          file_type: string
+          id: string
+          latest_version: number
+          name: string
+          owner_id: string
+          size_bytes: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          file_type: string
+          id?: string
+          latest_version?: number
+          name: string
+          owner_id: string
+          size_bytes?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          file_type?: string
+          id?: string
+          latest_version?: number
+          name?: string
+          owner_id?: string
+          size_bytes?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
