@@ -72,12 +72,20 @@ function AnalysisPage() {
     if (!selectedDoc || !analysis) return;
     setRerunning(true);
     try {
+      const { data: version, error } = await supabase
+        .from("document_versions")
+        .select("storage_path")
+        .eq("id", analysis.version_id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!version?.storage_path) throw new Error("Stored file not found for this version");
+
       const res = await runAnalysis({
         data: {
           analysisId: analysis.id,
           documentId: analysis.document_id,
           versionId: analysis.version_id,
-          storagePath: "",
+          storagePath: version.storage_path,
         },
       });
       if (!res.ok) throw new Error(res.error ?? "Analysis failed");
@@ -348,7 +356,9 @@ function ScoreBlock({ label, value, tone, sub }: { label: string; value: number;
         <p className="text-sm font-medium text-foreground">{label}</p>
         <p className="text-2xl font-semibold tracking-tight text-foreground">{value}<span className="text-sm text-muted-foreground">%</span></p>
       </div>
-      <Progress value={value} className="h-2" indicatorClassName={bar} />
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full rounded-full transition-all", bar)} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+      </div>
       {sub && <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
