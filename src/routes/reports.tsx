@@ -1,64 +1,158 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Download, FileBarChart, Share2 } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Download, FileBarChart } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { recommendations, similarityDistribution } from "@/lib/mock-data";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useWorkspaceData } from "@/hooks/use-workspace-data";
 
 export const Route = createFileRoute("/reports")({
-  head: () => ({ meta: [{ title: "Reports — PlagiShield AI" }, { name: "description", content: "Generate, export, and share analysis reports." }] }),
+  head: () => ({
+    meta: [
+      { title: "Reports — PlagiShield AI" },
+      { name: "description", content: "Generate and export integrity reports from real document analysis results." },
+      { property: "og:title", content: "Reports — PlagiShield AI" },
+      { property: "og:description", content: "Generate and export integrity reports from real document analysis results." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    doc: typeof search.doc === "string" ? search.doc : undefined,
+  }),
   component: ReportsPage,
 });
 
+type Results = {
+  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
+  ai_detection?: { confidence?: string; reasoning?: string };
+  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  citations?: { total?: number; verified?: number; issues?: string[] };
+};
+
 function ReportsPage() {
+  const { doc } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const { data, isLoading } = useWorkspaceData();
+
+  const analyses = (data?.analyses ?? []).filter((a) => a.status === "completed");
+  const reportable = (data?.documents ?? []).filter((d) => analyses.some((a) => a.document_id === d.id));
+  const selected = reportable.find((d) => d.id === doc) ?? reportable[0];
+  const analysis = analyses.find((a) => a.document_id === selected?.id);
+  const results = (analysis?.results ?? {}) as Results;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Reports" description="Professional, exportable summaries of every analysis." />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  if (!selected || !analysis) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Reports" description="Professional, exportable summaries of every analysis." />
+        <Card className="p-10 text-center">
+          <FileBarChart className="mx-auto h-6 w-6 text-muted-foreground" />
+          <h3 className="mt-3 text-base font-semibold text-foreground">No reports yet</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Reports are generated automatically once a document has been analyzed.
+          </p>
+          <Button asChild size="sm" className="mt-4"><Link to="/documents">Upload a document</Link></Button>
+        </Card>
+      </div>
+    );
+  }
+
+  const similarity = Math.round(Number(analysis.similarity_score ?? 0));
+  const ai = Math.round(Number(analysis.ai_score ?? 0));
+  const grammar = Math.round(Number(analysis.grammar_score ?? 0));
+  const citation = Math.round(Number(analysis.citation_score ?? 0));
+  const matches = results.plagiarism?.matches ?? [];
+  const grammarIssues = results.grammar?.issues ?? [];
+  const citationIssues = results.citations?.issues ?? [];
+
+  const distribution = (data?.similarityDistribution ?? []);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Reports"
-        description="Professional, exportable summaries of every analysis."
+        description="Professional summaries generated from real analysis results."
         actions={
           <>
-            <Button variant="outline" size="sm"><Share2 className="mr-1.5 h-4 w-4" />Share</Button>
-            <Button variant="outline" size="sm"><Download className="mr-1.5 h-4 w-4" />Export Excel</Button>
-            <Button size="sm"><Download className="mr-1.5 h-4 w-4" />Export PDF</Button>
+            <Select value={selected.id} onValueChange={(v) => navigate({ search: { doc: v } })}>
+              <SelectTrigger className="h-9 w-56"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {reportable.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button size="sm" onClick={() => window.print()}>
+              <Download className="mr-1.5 h-4 w-4" />Export PDF
+            </Button>
           </>
         }
       />
 
       <Card className="overflow-hidden">
         <div className="border-b border-border bg-[image:var(--gradient-subtle)] p-6">
-          <div className="flex items-center gap-2"><FileBarChart className="h-5 w-5 text-primary" /><Badge variant="secondary">Report #RPT-2026-00482</Badge></div>
-          <h2 className="mt-3 text-2xl font-semibold text-foreground">Thesis Integrity Report</h2>
-          <p className="text-sm text-muted-foreground">Generated June 2, 2026 · Aarav Patel · 24 pages</p>
+          <div className="flex items-center gap-2">
+            <FileBarChart className="h-5 w-5 text-primary" />
+            <Badge variant="secondary">Report · {analysis.id.slice(0, 8).toUpperCase()}</Badge>
+          </div>
+          <h2 className="mt-3 text-2xl font-semibold text-foreground">{selected.name}</h2>
+          <p className="text-sm text-muted-foreground">
+            Generated {new Date(analysis.created_at).toLocaleString()} · version {selected.latest_version} · {selected.file_type}
+          </p>
         </div>
 
         <div className="space-y-8 p-6">
           <Section title="Executive Summary">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              The submitted document demonstrates strong originality with an overall similarity of 14%, well below the institutional
-              threshold of 25%. AI-generated content is limited to 6%, and writing quality scores at 92/100. Three citation issues
-              should be addressed before final submission.
+              This document shows {similarity}% similarity against matched sources and {ai}% likelihood of
+              AI-generated content{results.ai_detection?.confidence ? ` (${results.ai_detection.confidence} confidence)` : ""}.
+              Writing quality scores {grammar}/100 and citation completeness {citation}/100.
+              {grammarIssues.length > 0 ? ` ${grammarIssues.length} grammar issue(s)` : " No grammar issues"} and
+              {citationIssues.length > 0 ? ` ${citationIssues.length} citation issue(s)` : " no citation issues"} were detected.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <KPI label="Similarity" value="14%" />
-              <KPI label="AI Detection" value="6%" />
-              <KPI label="Grammar" value="92" />
-              <KPI label="Citation" value="88" />
+              <KPI label="Similarity" value={`${similarity}%`} />
+              <KPI label="AI Detection" value={`${ai}%`} />
+              <KPI label="Grammar" value={String(grammar)} />
+              <KPI label="Citation" value={String(citation)} />
             </div>
           </Section>
 
           <Separator />
 
           <Section title="Similarity Analysis">
-            <div className="h-56">
+            {matches.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No source matches were recorded for this document.</p>
+            ) : (
+              <ul className="space-y-2">
+                {matches.map((m, i) => (
+                  <li key={i} className="rounded-md border border-border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground">{m.source ?? "Unknown source"}</p>
+                      <Badge variant="secondary">{Math.round(Number(m.similarity ?? 0))}%</Badge>
+                    </div>
+                    {m.snippet && <p className="mt-1 text-xs text-muted-foreground">{m.snippet}</p>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-5 h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={similarityDistribution}>
+                <BarChart data={distribution}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis dataKey="range" fontSize={12} stroke="var(--color-muted-foreground)" />
-                  <YAxis fontSize={12} stroke="var(--color-muted-foreground)" />
+                  <YAxis allowDecimals={false} fontSize={12} stroke="var(--color-muted-foreground)" />
                   <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
                   <Bar dataKey="count" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -70,7 +164,7 @@ function ReportsPage() {
 
           <Section title="Recommendations">
             <ul className="space-y-2">
-              {recommendations.map((r, i) => (
+              {buildRecommendations({ similarity, ai, grammar, citation, grammarIssues, citationIssues }).map((r, i) => (
                 <li key={i} className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{r.action}</p>
@@ -85,6 +179,21 @@ function ReportsPage() {
       </Card>
     </div>
   );
+}
+
+function buildRecommendations({
+  similarity, ai, grammar, citation, grammarIssues, citationIssues,
+}: {
+  similarity: number; ai: number; grammar: number; citation: number;
+  grammarIssues: Array<{ type?: string }>; citationIssues: string[];
+}) {
+  const recs: Array<{ group: string; action: string; priority: string; impact: string }> = [];
+  if (similarity >= 25) recs.push({ group: "Originality", action: "Paraphrase or quote the matched passages and cite their sources.", priority: "high", impact: `−${Math.min(similarity, 20)}% similarity` });
+  if (ai >= 50) recs.push({ group: "AI detection", action: "Rewrite flagged sections in your own voice with concrete detail.", priority: "high", impact: `−${Math.min(ai, 30)}% AI likelihood` });
+  if (grammarIssues.length > 0) recs.push({ group: "Grammar", action: `Resolve ${grammarIssues.length} flagged grammar issue(s).`, priority: grammar < 70 ? "high" : "medium", impact: "+ readability" });
+  if (citationIssues.length > 0) recs.push({ group: "Citations", action: `Fix ${citationIssues.length} citation issue(s) and verify every reference.`, priority: citation < 70 ? "high" : "medium", impact: `+${Math.max(100 - citation, 5)} citation score` });
+  if (recs.length === 0) recs.push({ group: "Overall", action: "No action required — this document meets integrity thresholds.", priority: "low", impact: "ready to submit" });
+  return recs;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

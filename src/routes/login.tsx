@@ -21,19 +21,40 @@ function LoginPage() {
   const [password, setPassword] = useState("");
 
   const handleGoogle = async () => {
-    const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-    if (res.error) toast.error(res.error.message ?? "Google sign-in failed");
-    else if (!res.redirected) navigate({ to: "/" });
+    try {
+      const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+      if (res.error) { toast.error(res.error.message || "Google sign-in failed"); return; }
+      if (res.redirected) return;
+      navigate({ to: "/" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Signed in");
-    navigate({ to: "/" });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes("invalid login")) toast.error("Incorrect email or password.");
+        else if (msg.includes("not confirmed")) toast.error("Please confirm your email before signing in.");
+        else if (msg.includes("failed to fetch")) toast.error("Couldn't reach the server. Please try again.");
+        else toast.error(error.message);
+        return;
+      }
+      toast.success("Signed in");
+      navigate({ to: "/" });
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message.includes("fetch")
+          ? "Couldn't reach the server. Please try again in a moment."
+          : err instanceof Error ? err.message : "Sign-in failed",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
