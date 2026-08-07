@@ -210,6 +210,7 @@ function table(
     if (ctx.y + rowH > H - 22) {
       newPage(ctx);
       drawHead();
+      doc.setFont("helvetica", "normal").setFontSize(8.5);
     }
     if (ri % 2 === 0) {
       doc.setFillColor(247, 249, 252);
