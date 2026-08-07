@@ -23,6 +23,7 @@ import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AnalysisRouteImport } from './routes/analysis'
+import { Route as IndexRouteImport } from './routes/index'
 
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -94,8 +95,14 @@ const AnalysisRoute = AnalysisRouteImport.update({
   path: '/analysis',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
@@ -129,6 +137,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
   '/dashboard': typeof DashboardRoute
@@ -147,6 +156,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/analysis'
     | '/analytics'
     | '/dashboard'
@@ -163,6 +173,7 @@ export interface FileRouteTypes {
     | '/verify-email'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/analysis'
     | '/analytics'
     | '/dashboard'
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '/verify-email'
   id:
     | '__root__'
+    | '/'
     | '/analysis'
     | '/analytics'
     | '/dashboard'
@@ -196,6 +208,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AnalysisRoute: typeof AnalysisRoute
   AnalyticsRoute: typeof AnalyticsRoute
   DashboardRoute: typeof DashboardRoute
@@ -312,10 +325,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalysisRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AnalysisRoute: AnalysisRoute,
   AnalyticsRoute: AnalyticsRoute,
   DashboardRoute: DashboardRoute,
@@ -334,13 +355,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -5,7 +5,6 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -28,7 +27,7 @@ function RegisterPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", password: "", role: "student",
+    firstName: "", lastName: "", email: "", password: "",
   });
 
   const onChange = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -39,7 +38,7 @@ function RegisterPage() {
       const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
       if (res.error) { toast.error(res.error.message || "Google sign-in failed"); return; }
       if (res.redirected) return;
-      navigate({ to: "/" });
+      navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
     }
@@ -58,7 +57,6 @@ function RegisterPage() {
           data: {
             first_name: form.firstName.trim(),
             last_name: form.lastName.trim(),
-            role: form.role,
           },
         },
       });
@@ -75,7 +73,7 @@ function RegisterPage() {
       }
       if (data.session) {
         toast.success("Account created");
-        navigate({ to: "/" });
+        navigate({ to: "/dashboard" });
         return;
       }
       toast.success("Account created. Check your email to confirm it.");
@@ -109,17 +107,6 @@ function RegisterPage() {
         </div>
         <div className="space-y-1.5"><Label>Email</Label><Input type="email" placeholder="you@university.edu" required value={form.email} onChange={onChange("email")} /></div>
         <div className="space-y-1.5"><Label>Password</Label><Input type="password" placeholder="At least 8 characters" required minLength={8} value={form.password} onChange={onChange("password")} /></div>
-        <div className="space-y-1.5">
-          <Label>I am a…</Label>
-          <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="student">Student</SelectItem>
-              <SelectItem value="faculty">Faculty</SelectItem>
-              <SelectItem value="institution_admin">Institution Administrator</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
         <Button type="submit" className="w-full" disabled={loading}>{loading ? "Creating…" : "Create account"}</Button>
       </form>
     </AuthShell>

@@ -25,7 +25,7 @@ function LoginPage() {
       const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
       if (res.error) { toast.error(res.error.message || "Google sign-in failed"); return; }
       if (res.redirected) return;
-      navigate({ to: "/" });
+      navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Google sign-in failed. Please try again.");
     }
@@ -45,7 +45,7 @@ function LoginPage() {
         return;
       }
       toast.success("Signed in");
-      navigate({ to: "/" });
+      navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(
         err instanceof Error && err.message.includes("fetch")

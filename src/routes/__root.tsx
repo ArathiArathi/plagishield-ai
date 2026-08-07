@@ -13,7 +13,6 @@ import { AppTopbar } from "@/components/layout/AppTopbar";
 import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { RoleGuard } from "@/components/auth/RoleGuard";
 
 function NotFoundComponent() {
   return (
@@ -24,7 +23,7 @@ function NotFoundComponent() {
         <p className="mt-2 text-sm text-muted-foreground">The page you're looking for doesn't exist.</p>
         <div className="mt-6">
           <Link to="/" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
-            Go to dashboard
+            Go home
           </Link>
         </div>
       </div>
@@ -83,7 +82,7 @@ function RootComponent() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { isAuthenticated, loading } = useAuth();
 
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register") ||
+  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/register") ||
     pathname.startsWith("/forgot-password") || pathname.startsWith("/reset-password") ||
     pathname.startsWith("/verify-email");
 
@@ -97,10 +96,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={ctxClient}>
-      {isAuthRoute ? (
+      {isPublicRoute ? (
         <Outlet />
       ) : !loading && !isAuthenticated ? (
-        <Navigate to="/login" />
+        <Navigate to="/" />
       ) : (
         <SidebarProvider>
           <div className="flex min-h-screen w-full bg-background">
@@ -108,9 +107,7 @@ function RootComponent() {
             <div className="flex flex-1 flex-col min-w-0">
               <AppTopbar />
               <main className="flex-1 p-4 md:p-6 lg:p-8">
-                <RoleGuard pathname={pathname}>
-                  <Outlet />
-                </RoleGuard>
+                <Outlet />
               </main>
             </div>
           </div>
