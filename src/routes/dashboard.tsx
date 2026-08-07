@@ -50,7 +50,7 @@ function DashboardPage() {
         actions={
           <>
             <Button variant="outline" size="sm" asChild>
-              <Link to="/reports"><FileBarChart className="mr-1.5 h-4 w-4" />View reports</Link>
+              <Link to="/reports" search={{ doc: undefined }}><FileBarChart className="mr-1.5 h-4 w-4" />View reports</Link>
             </Button>
             <Button size="sm" asChild>
               <Link to="/documents"><Upload className="mr-1.5 h-4 w-4" />Upload document</Link>

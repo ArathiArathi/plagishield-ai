@@ -288,7 +288,7 @@ function DocumentsPage() {
                     <TableCell className="text-sm text-muted-foreground">{new Date(doc.created_at).toLocaleDateString()}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" asChild title="Open analysis"><Link to="/analysis"><Eye className="h-4 w-4" /></Link></Button>
+                        <Button variant="ghost" size="sm" asChild title="Open analysis"><Link to="/analysis" search={{ doc: doc.id }}><Eye className="h-4 w-4" /></Link></Button>
                         <Button variant="ghost" size="sm" title="Version history" onClick={() => setHistoryOpen(doc)}><History className="h-4 w-4" /></Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
@@ -296,7 +296,7 @@ function DocumentsPage() {
                             <DropdownMenuItem onClick={() => { setVersionTarget(doc.id); versionRef.current?.click(); }}>
                               <Upload className="mr-2 h-4 w-4" />Upload new version
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild><Link to="/analysis"><ScanSearch className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
+                            <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><ScanSearch className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
                             <DropdownMenuItem className="text-destructive" onClick={() => deleteDoc(doc.id)}>
                               <Trash2 className="mr-2 h-4 w-4" />Delete
                             </DropdownMenuItem>
