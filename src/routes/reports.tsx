@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Download, FileBarChart } from "lucide-react";
+import { Bot, Download, FileBarChart, FileSearch, FileStack, Quote, SpellCheck } from "lucide-react";
+import { toast } from "sonner";
+import { downloadReport, type ReportInput, type ReportKind } from "@/lib/report-pdf";
+
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
