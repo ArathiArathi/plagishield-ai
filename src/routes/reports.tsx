@@ -80,6 +80,38 @@ function ReportsPage() {
 
   const distribution = (data?.similarityDistribution ?? []);
 
+  const reportInput: ReportInput = {
+    documentName: selected.name,
+    fileType: selected.file_type,
+    version: selected.latest_version,
+    analysisId: analysis.id,
+    generatedAt: new Date(analysis.created_at).toLocaleString(),
+    similarity, ai, grammar, citation,
+    results: results as ReportInput["results"],
+  };
+
+  const bundle: Array<{ kind: ReportKind; title: string; desc: string; icon: typeof FileSearch; metric: string }> = [
+    { kind: "similarity", title: "Similarity Report", desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`, icon: FileSearch, metric: `${similarity}% similarity` },
+    { kind: "ai", title: "AI Content Report", desc: "AI likelihood, detector confidence, reasoning and flagged passages.", icon: Bot, metric: `${ai}% AI` },
+    { kind: "grammar", title: "Grammar & Language Report", desc: `Readability score with categorised issue breakdown (${grammarIssues.length} issue${grammarIssues.length === 1 ? "" : "s"}).`, icon: SpellCheck, metric: `${grammar}/100` },
+    { kind: "citation", title: "Citation Verification Report", desc: `Reference verification status and formatting issues (${citationIssues.length} issue${citationIssues.length === 1 ? "" : "s"}).`, icon: Quote, metric: `${citation}/100` },
+    { kind: "full", title: "Comprehensive Report", desc: "All four modules combined into a single institutional integrity dossier.", icon: FileStack, metric: "All modules" },
+  ];
+
+  const download = (kind: ReportKind) => {
+    try {
+      downloadReport(kind, reportInput);
+      toast.success(`${bundle.find((b) => b.kind === kind)?.title} downloaded`);
+    } catch {
+      toast.error("Could not generate the PDF. Please try again.");
+    }
+  };
+
+  const downloadAll = () => {
+    bundle.forEach((b, i) => window.setTimeout(() => downloadReport(b.kind, reportInput), i * 350));
+    toast.success("Generating all reports…");
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -93,12 +125,40 @@ function ReportsPage() {
                 {reportable.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={() => window.print()}>
-              <Download className="mr-1.5 h-4 w-4" />Export PDF
+            <Button size="sm" onClick={downloadAll}>
+              <Download className="mr-1.5 h-4 w-4" />Download all PDFs
             </Button>
           </>
         }
       />
+
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-foreground">Report files</h3>
+            <p className="text-sm text-muted-foreground">Each module is exported as its own signed-off PDF file.</p>
+          </div>
+          <Badge variant="secondary">{bundle.length} files available</Badge>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {bundle.map((b) => (
+            <div key={b.kind} className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-4">
+              <div className="rounded-md bg-primary/10 p-2 text-primary"><b.icon className="h-4 w-4" /></div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-foreground">{b.title}</p>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">{b.metric}</Badge>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{b.desc}</p>
+                <Button size="sm" variant="outline" className="mt-3" onClick={() => download(b.kind)}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />Download PDF
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
 
       <Card className="overflow-hidden">
         <div className="border-b border-border bg-[image:var(--gradient-subtle)] p-6">
