@@ -20,6 +20,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as IndexRouteImport } from './routes/index'
@@ -79,6 +80,11 @@ const DocumentsRoute = DocumentsRouteImport.update({
   path: '/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
+  '/dashboard': typeof DashboardRoute
   '/documents': typeof DocumentsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
+  '/dashboard': typeof DashboardRoute
   '/documents': typeof DocumentsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
   '/analytics': typeof AnalyticsRoute
+  '/dashboard': typeof DashboardRoute
   '/documents': typeof DocumentsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analysis'
     | '/analytics'
+    | '/dashboard'
     | '/documents'
     | '/forgot-password'
     | '/login'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analysis'
     | '/analytics'
+    | '/dashboard'
     | '/documents'
     | '/forgot-password'
     | '/login'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/'
     | '/analysis'
     | '/analytics'
+    | '/dashboard'
     | '/documents'
     | '/forgot-password'
     | '/login'
@@ -199,6 +211,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalysisRoute: typeof AnalysisRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  DashboardRoute: typeof DashboardRoute
   DocumentsRoute: typeof DocumentsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
@@ -291,6 +304,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/analytics': {
       id: '/analytics'
       path: '/analytics'
@@ -319,6 +339,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalysisRoute: AnalysisRoute,
   AnalyticsRoute: AnalyticsRoute,
+  DashboardRoute: DashboardRoute,
   DocumentsRoute: DocumentsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,

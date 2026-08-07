@@ -7,11 +7,9 @@ import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
-import { useAuth, type AppRole } from "@/hooks/use-auth";
-import { ROUTE_ROLES } from "@/components/auth/RoleGuard";
 
 const mainItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Documents", url: "/documents", icon: FileText },
   { title: "Analysis", url: "/analysis", icon: ScanSearch },
   { title: "Reports", url: "/reports", icon: FileBarChart },
@@ -25,19 +23,11 @@ const orgItems = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
-function allowed(roles: AppRole[], url: string) {
-  const req = ROUTE_ROLES[url];
-  return !req || roles.some((r) => req.includes(r));
-}
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const { roles } = useAuth();
-  const isActive = (url: string) => url === "/" ? pathname === "/" : pathname.startsWith(url);
-  const visibleMain = mainItems.filter((i) => allowed(roles, i.url));
-  const visibleOrg = orgItems.filter((i) => allowed(roles, i.url));
+  const isActive = (url: string) => pathname.startsWith(url);
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -59,7 +49,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {visibleMain.map((item) => (
+              {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>
@@ -76,7 +66,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Organization</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {visibleOrg.map((item) => (
+              {orgItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
                     <Link to={item.url}>
