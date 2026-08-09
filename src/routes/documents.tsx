@@ -46,6 +46,7 @@ const statusStyles: Record<string, string> = {
 type DocRow = {
   id: string; name: string; file_type: string; size_bytes: number;
   latest_version: number; status: string; created_at: string;
+  doc_type?: string | null; author_name?: string | null; paper_title?: string | null;
 };
 type VersionRow = {
   id: string; version: number; storage_path: string; size_bytes: number; created_at: string;
@@ -55,10 +56,23 @@ type AnalysisRow = {
   similarity_score: number | null; ai_score: number | null;
 };
 
+const DOC_TYPES = [
+  { value: "research", label: "Research paper" },
+  { value: "assignment", label: "Assignment" },
+  { value: "thesis", label: "Thesis / dissertation" },
+  { value: "essay", label: "Essay" },
+  { value: "report", label: "Project report" },
+  { value: "article", label: "Journal article" },
+  { value: "other", label: "Other" },
+];
+
+type UploadMeta = { docType: string; authorName: string; paperTitle: string };
+
 function DocumentsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const runAnalysisFn = useServerFn(runAnalysis);
+  const processQueueFn = useServerFn(processQueue);
   const fileRef = useRef<HTMLInputElement>(null);
   const versionRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -66,6 +80,9 @@ function DocumentsPage() {
   const [query, setQuery] = useState("");
   const [versionTarget, setVersionTarget] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<DocRow | null>(null);
+  const [pending, setPending] = useState<{ file: File; existingDocId?: string } | null>(null);
+  const [meta, setMeta] = useState<UploadMeta>({ docType: "research", authorName: "", paperTitle: "" });
+
 
   const docsQ = useQuery({
     queryKey: ["documents", user?.id],
