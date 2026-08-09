@@ -7,12 +7,14 @@
 
 async function inflate(bytes: Uint8Array, format: "deflate" | "deflate-raw" | "gzip"): Promise<Uint8Array> {
   const ds = new DecompressionStream(format);
+  const copy = new Uint8Array(bytes.length);
+  copy.set(bytes);
   const writer = ds.writable.getWriter();
-  void writer.write(bytes);
+  void writer.write(copy);
   void writer.close();
-  const out = new Uint8Array(await new Response(ds.readable).arrayBuffer());
-  return out;
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
 }
+
 
 function decodeUtf8(bytes: Uint8Array) {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
