@@ -242,10 +242,11 @@ function DocumentsPage() {
     <div className="space-y-6">
       <input ref={fileRef} type="file" className="hidden"
         accept=".pdf,.docx,.txt,.md"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) startUpload(f); e.target.value = ""; }} />
       <input ref={versionRef} type="file" className="hidden"
         accept=".pdf,.docx,.txt,.md"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f && versionTarget) uploadFile(f, versionTarget); e.target.value = ""; setVersionTarget(null); }} />
+        onChange={(e) => { const f = e.target.files?.[0]; if (f && versionTarget) startUpload(f, versionTarget); e.target.value = ""; setVersionTarget(null); }} />
+
 
       <PageHeader
         title="Documents"
