@@ -210,6 +210,44 @@ function DocumentsPage() {
     setPending({ file, existingDocId });
   }, []);
 
+  const reanalyze = useCallback(async (doc: DocRow) => {
+    const { data: ver } = await supabase
+      .from("document_versions")
+      .select("id,storage_path")
+      .eq("document_id", doc.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!ver) { toast.error("No stored version found for this document"); return; }
+
+    const { data: existing } = await supabase
+      .from("analyses")
+      .select("id")
+      .eq("document_id", doc.id)
+      .eq("version_id", ver.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    toast.info(`Re-analyzing ${doc.name}…`);
+    try {
+      if (existing) {
+        const res = (await runAnalysisFn({ data: {
+          analysisId: existing.id, documentId: doc.id, versionId: ver.id, storagePath: ver.storage_path,
+        } })) as { ok: boolean; error?: string };
+        if (!res.ok) toast.error(`Analysis failed: ${res.error}`);
+        else toast.success("Analysis complete");
+        refresh();
+      } else {
+        await supabase.from("analyses").insert({ document_id: doc.id, version_id: ver.id, status: "pending" });
+        await drainQueue();
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Analysis failed");
+      refresh();
+    }
+  }, [runAnalysisFn, refresh, drainQueue]);
+
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
