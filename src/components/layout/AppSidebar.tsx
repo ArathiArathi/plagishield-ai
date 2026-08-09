@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, FileText, ScanSearch, FileBarChart, BarChart3,
-  Database, Users, CreditCard, Settings, ShieldCheck,
+  Database, Users, Settings, ShieldCheck,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -19,9 +19,9 @@ const mainItems = [
 
 const orgItems = [
   { title: "Team", url: "/team", icon: Users },
-  { title: "Subscription", url: "/subscription", icon: CreditCard },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
+
 
 export function AppSidebar() {
   const { state } = useSidebar();

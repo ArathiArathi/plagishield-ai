@@ -19,11 +19,16 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { runAnalysis } from "@/lib/analysis.functions";
+import { processQueue, runAnalysis } from "@/lib/analysis.functions";
+
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/documents")({
@@ -41,6 +46,7 @@ const statusStyles: Record<string, string> = {
 type DocRow = {
   id: string; name: string; file_type: string; size_bytes: number;
   latest_version: number; status: string; created_at: string;
+  doc_type?: string | null; author_name?: string | null; paper_title?: string | null;
 };
 type VersionRow = {
   id: string; version: number; storage_path: string; size_bytes: number; created_at: string;
@@ -50,10 +56,23 @@ type AnalysisRow = {
   similarity_score: number | null; ai_score: number | null;
 };
 
+const DOC_TYPES = [
+  { value: "research", label: "Research paper" },
+  { value: "assignment", label: "Assignment" },
+  { value: "thesis", label: "Thesis / dissertation" },
+  { value: "essay", label: "Essay" },
+  { value: "report", label: "Project report" },
+  { value: "article", label: "Journal article" },
+  { value: "other", label: "Other" },
+];
+
+type UploadMeta = { docType: string; authorName: string; paperTitle: string };
+
 function DocumentsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const runAnalysisFn = useServerFn(runAnalysis);
+  const processQueueFn = useServerFn(processQueue);
   const fileRef = useRef<HTMLInputElement>(null);
   const versionRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -61,6 +80,9 @@ function DocumentsPage() {
   const [query, setQuery] = useState("");
   const [versionTarget, setVersionTarget] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<DocRow | null>(null);
+  const [pending, setPending] = useState<{ file: File; existingDocId?: string } | null>(null);
+  const [meta, setMeta] = useState<UploadMeta>({ docType: "research", authorName: "", paperTitle: "" });
+
 
   const docsQ = useQuery({
     queryKey: ["documents", user?.id],
@@ -94,7 +116,32 @@ function DocumentsPage() {
     },
   });
 
-  const uploadFile = useCallback(async (file: File, existingDocId?: string) => {
+  const refresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["documents"] });
+    qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+    qc.invalidateQueries({ queryKey: ["workspace-data"] });
+  }, [qc]);
+
+  /** Drains the queue one document at a time: only starts a job when idle. */
+  const drainQueue = useCallback(async () => {
+    for (let i = 0; i < 25; i++) {
+      try {
+        const res = (await processQueueFn({ data: undefined })) as
+          | { started: boolean; reason?: string; ok?: boolean; error?: string }
+          | undefined;
+        refresh();
+        if (!res?.started) return;
+        if (res.ok === false && res.error) toast.error(`Analysis failed: ${res.error}`);
+        else toast.success("Analysis complete");
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Queue error");
+        refresh();
+        return;
+      }
+    }
+  }, [processQueueFn, refresh]);
+
+  const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;
     setUploadProgress(5);
     try {
@@ -104,11 +151,19 @@ function DocumentsPage() {
       if (documentId) {
         const { data: doc } = await supabase.from("documents").select("latest_version").eq("id", documentId).single();
         version = (doc?.latest_version ?? 0) + 1;
+        await supabase.from("documents").update({
+          doc_type: info.docType,
+          author_name: info.authorName || null,
+          paper_title: info.paperTitle || null,
+        }).eq("id", documentId);
       } else {
         const { data: inserted, error: insErr } = await supabase.from("documents").insert({
           owner_id: user.id, name: file.name,
           file_type: file.name.split(".").pop()?.toUpperCase() ?? "FILE",
           size_bytes: file.size, latest_version: 1, status: "queued",
+          doc_type: info.docType,
+          author_name: info.authorName || null,
+          paper_title: info.paperTitle || null,
         }).select().single();
         if (insErr) throw insErr;
         documentId = inserted.id;
@@ -131,42 +186,75 @@ function DocumentsPage() {
       }).eq("id", documentId!);
       setUploadProgress(70);
 
-      const { data: analysis, error: aErr } = await supabase.from("analyses").insert({
+      const { error: aErr } = await supabase.from("analyses").insert({
         document_id: documentId!, version_id: ver.id, status: "pending",
       }).select().single();
       if (aErr) throw aErr;
-      setUploadProgress(85);
+      setUploadProgress(90);
 
-      toast.success(`Uploaded ${file.name} (v${version}) — analyzing…`);
-      qc.invalidateQueries({ queryKey: ["documents"] });
-      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-
-      runAnalysisFn({ data: {
-        analysisId: analysis.id, documentId: documentId!,
-        versionId: ver.id, storagePath,
-      }}).then(() => {
-        toast.success(`Analysis complete: ${file.name}`);
-        qc.invalidateQueries({ queryKey: ["documents"] });
-        qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-      }).catch((e) => {
-        toast.error(`Analysis failed: ${e.message ?? e}`);
-        qc.invalidateQueries({ queryKey: ["documents"] });
-      });
-
+      toast.success(`Uploaded ${file.name} (v${version}) — queued for analysis`);
+      refresh();
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(null), 600);
+      void drainQueue();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed";
       toast.error(msg);
       setUploadProgress(null);
     }
-  }, [user, qc, runAnalysisFn]);
+  }, [user, refresh, drainQueue]);
+
+  const startUpload = useCallback((file: File, existingDocId?: string) => {
+    const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+    setMeta((m) => ({ ...m, paperTitle: m.paperTitle || base }));
+    setPending({ file, existingDocId });
+  }, []);
+
+  const reanalyze = useCallback(async (doc: DocRow) => {
+    const { data: ver } = await supabase
+      .from("document_versions")
+      .select("id,storage_path")
+      .eq("document_id", doc.id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!ver) { toast.error("No stored version found for this document"); return; }
+
+    const { data: existing } = await supabase
+      .from("analyses")
+      .select("id")
+      .eq("document_id", doc.id)
+      .eq("version_id", ver.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    toast.info(`Re-analyzing ${doc.name}…`);
+    try {
+      if (existing) {
+        const res = (await runAnalysisFn({ data: {
+          analysisId: existing.id, documentId: doc.id, versionId: ver.id, storagePath: ver.storage_path,
+        } })) as { ok: boolean; error?: string };
+        if (!res.ok) toast.error(`Analysis failed: ${res.error}`);
+        else toast.success("Analysis complete");
+        refresh();
+      } else {
+        await supabase.from("analyses").insert({ document_id: doc.id, version_id: ver.id, status: "pending" });
+        await drainQueue();
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Analysis failed");
+      refresh();
+    }
+  }, [runAnalysisFn, refresh, drainQueue]);
+
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files?.[0];
-    if (f) uploadFile(f);
-  }, [uploadFile]);
+    if (f) startUpload(f);
+  }, [startUpload]);
+
 
   const deleteDoc = async (id: string) => {
     if (!confirm("Delete this document and all versions?")) return;
@@ -192,10 +280,11 @@ function DocumentsPage() {
     <div className="space-y-6">
       <input ref={fileRef} type="file" className="hidden"
         accept=".pdf,.docx,.txt,.md"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) startUpload(f); e.target.value = ""; }} />
       <input ref={versionRef} type="file" className="hidden"
         accept=".pdf,.docx,.txt,.md"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f && versionTarget) uploadFile(f, versionTarget); e.target.value = ""; setVersionTarget(null); }} />
+        onChange={(e) => { const f = e.target.files?.[0]; if (f && versionTarget) startUpload(f, versionTarget); e.target.value = ""; setVersionTarget(null); }} />
+
 
       <PageHeader
         title="Documents"
@@ -296,7 +385,11 @@ function DocumentsPage() {
                             <DropdownMenuItem onClick={() => { setVersionTarget(doc.id); versionRef.current?.click(); }}>
                               <Upload className="mr-2 h-4 w-4" />Upload new version
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><ScanSearch className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => reanalyze(doc)}>
+                              <ScanSearch className="mr-2 h-4 w-4" />Re-analyze
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><Eye className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
+
                             <DropdownMenuItem className="text-destructive" onClick={() => deleteDoc(doc.id)}>
                               <Trash2 className="mr-2 h-4 w-4" />Delete
                             </DropdownMenuItem>
@@ -345,7 +438,59 @@ function DocumentsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Submission details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              These details appear on the cover page of every generated report.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Document type</Label>
+              <Select value={meta.docType} onValueChange={(v) => setMeta((m) => ({ ...m, docType: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  {DOC_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="paper-title">Title of the paper</Label>
+              <Input id="paper-title" value={meta.paperTitle} maxLength={200}
+                onChange={(e) => setMeta((m) => ({ ...m, paperTitle: e.target.value }))}
+                placeholder="e.g. Deep learning for climate modelling" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="author-name">Author name</Label>
+              <Input id="author-name" value={meta.authorName} maxLength={120}
+                onChange={(e) => setMeta((m) => ({ ...m, authorName: e.target.value }))}
+                placeholder="e.g. Jane Doe" />
+            </div>
+            <p className="text-xs text-muted-foreground truncate">File: {pending?.file.name}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPending(null)}>Cancel</Button>
+            <Button
+              disabled={!meta.paperTitle.trim() || !meta.authorName.trim()}
+              onClick={() => {
+                const p = pending;
+                setPending(null);
+                if (p) void uploadFile(p.file, {
+                  docType: meta.docType,
+                  authorName: meta.authorName.trim(),
+                  paperTitle: meta.paperTitle.trim(),
+                }, p.existingDocId);
+              }}
+            >
+              Upload & analyze
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
 

@@ -21,7 +21,6 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RepositoryRouteImport } from './routes/repository'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as SubscriptionRouteImport } from './routes/subscription'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 
@@ -85,11 +84,6 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SubscriptionRoute = SubscriptionRouteImport.update({
-  id: '/subscription',
-  path: '/subscription',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -114,7 +108,6 @@ export interface FileRoutesByFullPath {
   '/repository': typeof RepositoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
-  '/subscription': typeof SubscriptionRoute
   '/team': typeof TeamRoute
   '/verify-email': typeof VerifyEmailRoute
 }
@@ -131,7 +124,6 @@ export interface FileRoutesByTo {
   '/repository': typeof RepositoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
-  '/subscription': typeof SubscriptionRoute
   '/team': typeof TeamRoute
   '/verify-email': typeof VerifyEmailRoute
 }
@@ -149,7 +141,6 @@ export interface FileRoutesById {
   '/repository': typeof RepositoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
-  '/subscription': typeof SubscriptionRoute
   '/team': typeof TeamRoute
   '/verify-email': typeof VerifyEmailRoute
 }
@@ -168,7 +159,6 @@ export interface FileRouteTypes {
     | '/repository'
     | '/reset-password'
     | '/settings'
-    | '/subscription'
     | '/team'
     | '/verify-email'
   fileRoutesByTo: FileRoutesByTo
@@ -185,7 +175,6 @@ export interface FileRouteTypes {
     | '/repository'
     | '/reset-password'
     | '/settings'
-    | '/subscription'
     | '/team'
     | '/verify-email'
   id:
@@ -202,7 +191,6 @@ export interface FileRouteTypes {
     | '/repository'
     | '/reset-password'
     | '/settings'
-    | '/subscription'
     | '/team'
     | '/verify-email'
   fileRoutesById: FileRoutesById
@@ -220,7 +208,6 @@ export interface RootRouteChildren {
   RepositoryRoute: typeof RepositoryRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
-  SubscriptionRoute: typeof SubscriptionRoute
   TeamRoute: typeof TeamRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
 }
@@ -311,13 +298,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/subscription': {
-      id: '/subscription'
-      path: '/subscription'
-      fullPath: '/subscription'
-      preLoaderRoute: typeof SubscriptionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/team': {
       id: '/team'
       path: '/team'
@@ -348,7 +328,6 @@ const rootRouteChildren: RootRouteChildren = {
   RepositoryRoute: RepositoryRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
-  SubscriptionRoute: SubscriptionRoute,
   TeamRoute: TeamRoute,
   VerifyEmailRoute: VerifyEmailRoute,
 }

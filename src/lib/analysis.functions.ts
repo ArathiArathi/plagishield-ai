@@ -9,110 +9,139 @@ const InputSchema = z.object({
   storagePath: z.string().min(1),
 });
 
-type AnalysisResult = {
-  similarity_score: number;
-  ai_score: number;
-  grammar_score: number;
-  citation_score: number;
-  results: {
-    plagiarism: { score: number; matches: Array<{ source: string; similarity: number; snippet: string }> };
-    ai_detection: { score: number; confidence: string; reasoning: string };
-    grammar: { score: number; issues: Array<{ type: string; severity: string; text: string; suggestion: string }> };
-    citations: { score: number; total: number; verified: number; issues: string[] };
-  };
-};
+type Ctx = { supabase: any; userId: string };
 
-async function runAnalysisWithAI(textSample: string): Promise<AnalysisResult> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
+async function execute(
+  context: Ctx,
+  data: { analysisId: string; documentId: string; versionId: string; storagePath: string },
+) {
+  const { supabase } = context;
+  const { analyzeDocument } = await import("@/lib/analysis-engine.server");
+  const { extractText } = await import("@/lib/text-extract.server");
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  const prompt = `Analyze the following document excerpt and return JSON with: plagiarism (score 0-100, 3 plausible source matches with snippets), ai_detection (score 0-100, confidence label, brief reasoning), grammar (score 0-100, list of 3-5 issues with type/severity/text/suggestion), citations (score 0-100, total, verified count, issues array). Be realistic. Excerpt:\n\n${textSample.slice(0, 4000)}`;
+  await supabase.from("analyses").update({ status: "processing", error: null }).eq("id", data.analysisId);
+  await supabase.from("documents").update({ status: "processing" }).eq("id", data.documentId);
 
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: "You are a plagiarism/AI-detection/grammar/citation analyzer. Always respond with strict JSON only — no markdown, no commentary." },
-        { role: "user", content: prompt },
-      ],
-      response_format: { type: "json_object" },
-    }),
-  });
+  try {
+    const { data: doc } = await supabase
+      .from("documents")
+      .select("name,doc_type,author_name,paper_title")
+      .eq("id", data.documentId)
+      .single();
 
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`AI gateway error ${res.status}: ${t}`);
+    const { data: file, error: dlErr } = await supabaseAdmin.storage.from("documents").download(data.storagePath);
+    if (dlErr || !file) throw new Error(dlErr?.message ?? "Stored file could not be downloaded");
+
+    const buf = await file.arrayBuffer();
+    const { text, method } = await extractText(buf, doc?.name ?? data.storagePath);
+    if (text.replace(/\s+/g, " ").trim().length < 200) {
+      throw new Error(
+        "Not enough readable text could be extracted from this file. Upload a text-based PDF, DOCX, TXT or MD file (scanned images are not supported).",
+      );
+    }
+
+    const result = await analyzeDocument(text, {
+      extraction: method,
+      docType: doc?.doc_type ?? "other",
+      title: doc?.paper_title ?? null,
+      author: doc?.author_name ?? null,
+    });
+
+    await supabase
+      .from("analyses")
+      .update({
+        status: "completed",
+        similarity_score: result.plagiarism.score,
+        ai_score: result.ai_detection.score,
+        grammar_score: result.grammar.score,
+        citation_score: result.citations.score,
+        results: result,
+        error: null,
+      })
+      .eq("id", data.analysisId);
+
+    await supabase.from("documents").update({ status: "analyzed" }).eq("id", data.documentId);
+    return { ok: true as const, analysisId: data.analysisId };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Analysis failed";
+    await supabase.from("analyses").update({ status: "failed", error: msg }).eq("id", data.analysisId);
+    await supabase.from("documents").update({ status: "failed" }).eq("id", data.documentId);
+    return { ok: false as const, error: msg };
   }
-  const json = await res.json();
-  const content = json.choices?.[0]?.message?.content ?? "{}";
-  const parsed = JSON.parse(content);
-
-  const similarity = Number(parsed.plagiarism?.score ?? 0);
-  const ai = Number(parsed.ai_detection?.score ?? 0);
-  const grammar = Number(parsed.grammar?.score ?? 0);
-  const citation = Number(parsed.citations?.score ?? 0);
-
-  return {
-    similarity_score: similarity,
-    ai_score: ai,
-    grammar_score: grammar,
-    citation_score: citation,
-    results: {
-      plagiarism: { score: similarity, matches: parsed.plagiarism?.matches ?? [] },
-      ai_detection: {
-        score: ai,
-        confidence: parsed.ai_detection?.confidence ?? "medium",
-        reasoning: parsed.ai_detection?.reasoning ?? "",
-      },
-      grammar: { score: grammar, issues: parsed.grammar?.issues ?? [] },
-      citations: {
-        score: citation,
-        total: Number(parsed.citations?.total ?? 0),
-        verified: Number(parsed.citations?.verified ?? 0),
-        issues: parsed.citations?.issues ?? [],
-      },
-    },
-  };
 }
 
+/** Run (or re-run) the analysis for a specific version — used by "Re-analyze". */
 export const runAnalysis = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) => InputSchema.parse(input))
-  .handler(async ({ data, context }) => {
-    const { supabase } = context;
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  .handler(async ({ data, context }) => execute(context as unknown as Ctx, data));
 
-    await supabase.from("analyses").update({ status: "processing" }).eq("id", data.analysisId);
-    await supabase.from("documents").update({ status: "processing" }).eq("id", data.documentId);
+/**
+ * Queue driver. Starts the oldest pending analysis only when nothing else is
+ * currently processing for this user, so uploads are analysed strictly one at
+ * a time and never stall behind an abandoned job.
+ */
+export const processQueue = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const ctx = context as unknown as Ctx;
+    const { supabase } = ctx;
 
-    try {
-      const { data: file, error: dlErr } = await supabaseAdmin.storage.from("documents").download(data.storagePath);
-      if (dlErr || !file) throw new Error(dlErr?.message ?? "download failed");
-      const buf = await file.arrayBuffer();
-      // Best-effort text extraction (works for TXT; for PDF/DOCX use first bytes as sample).
-      const text = new TextDecoder("utf-8", { fatal: false }).decode(buf).replace(/[^\x09\x0A\x0D\x20-\x7E]+/g, " ").trim();
-      const sample = text.length > 200 ? text : "Document content unavailable for direct text extraction; analyze for general academic prose characteristics.";
+    const { data: processing } = await supabase
+      .from("analyses")
+      .select("id,updated_at")
+      .eq("status", "processing")
+      .order("updated_at", { ascending: true });
 
-      const result = await runAnalysisWithAI(sample);
-
-      await supabase.from("analyses").update({
-        status: "completed",
-        similarity_score: result.similarity_score,
-        ai_score: result.ai_score,
-        grammar_score: result.grammar_score,
-        citation_score: result.citation_score,
-        results: result.results,
-      }).eq("id", data.analysisId);
-
-      await supabase.from("documents").update({ status: "analyzed" }).eq("id", data.documentId);
-
-      return { ok: true, result };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Analysis failed";
-      await supabase.from("analyses").update({ status: "failed", error: msg }).eq("id", data.analysisId);
-      await supabase.from("documents").update({ status: "failed" }).eq("id", data.documentId);
-      return { ok: false, error: msg };
+    const STALE_MS = 6 * 60 * 1000;
+    const active = (processing ?? []).filter(
+      (a: { updated_at: string }) => Date.now() - new Date(a.updated_at).getTime() < STALE_MS,
+    );
+    const stale = (processing ?? []).filter(
+      (a: { updated_at: string }) => Date.now() - new Date(a.updated_at).getTime() >= STALE_MS,
+    );
+    for (const s of stale) {
+      await supabase
+        .from("analyses")
+        .update({ status: "failed", error: "Analysis timed out — please re-run." })
+        .eq("id", s.id);
     }
+
+    if (active.length > 0) {
+      return { started: false as const, reason: "busy" as const, activeId: active[0]!.id };
+    }
+
+    const { data: pending } = await supabase
+      .from("analyses")
+      .select("id,document_id,version_id")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(1);
+
+    const next = pending?.[0];
+    if (!next) return { started: false as const, reason: "empty" as const };
+
+    const { data: version } = await supabase
+      .from("document_versions")
+      .select("storage_path")
+      .eq("id", next.version_id)
+      .maybeSingle();
+
+    if (!version?.storage_path) {
+      await supabase
+        .from("analyses")
+        .update({ status: "failed", error: "Stored file missing for this version" })
+        .eq("id", next.id);
+      return { started: false as const, reason: "missing-file" as const };
+    }
+
+    const res = await execute(ctx, {
+      analysisId: next.id,
+      documentId: next.document_id,
+      versionId: next.version_id,
+      storagePath: version.storage_path,
+    });
+
+    return { started: true as const, ...res };
   });
