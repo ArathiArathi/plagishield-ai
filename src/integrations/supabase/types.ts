@@ -114,34 +114,43 @@ export type Database = {
       }
       documents: {
         Row: {
+          author_name: string | null
           created_at: string
+          doc_type: string
           file_type: string
           id: string
           latest_version: number
           name: string
           owner_id: string
+          paper_title: string | null
           size_bytes: number
           status: string
           updated_at: string
         }
         Insert: {
+          author_name?: string | null
           created_at?: string
+          doc_type?: string
           file_type: string
           id?: string
           latest_version?: number
           name: string
           owner_id: string
+          paper_title?: string | null
           size_bytes?: number
           status?: string
           updated_at?: string
         }
         Update: {
+          author_name?: string | null
           created_at?: string
+          doc_type?: string
           file_type?: string
           id?: string
           latest_version?: number
           name?: string
           owner_id?: string
+          paper_title?: string | null
           size_bytes?: number
           status?: string
           updated_at?: string
