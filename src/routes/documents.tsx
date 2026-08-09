@@ -347,7 +347,11 @@ function DocumentsPage() {
                             <DropdownMenuItem onClick={() => { setVersionTarget(doc.id); versionRef.current?.click(); }}>
                               <Upload className="mr-2 h-4 w-4" />Upload new version
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><ScanSearch className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => reanalyze(doc)}>
+                              <ScanSearch className="mr-2 h-4 w-4" />Re-analyze
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><Eye className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
+
                             <DropdownMenuItem className="text-destructive" onClick={() => deleteDoc(doc.id)}>
                               <Trash2 className="mr-2 h-4 w-4" />Delete
                             </DropdownMenuItem>
