@@ -116,7 +116,32 @@ function DocumentsPage() {
     },
   });
 
-  const uploadFile = useCallback(async (file: File, existingDocId?: string) => {
+  const refresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["documents"] });
+    qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+    qc.invalidateQueries({ queryKey: ["workspace-data"] });
+  }, [qc]);
+
+  /** Drains the queue one document at a time: only starts a job when idle. */
+  const drainQueue = useCallback(async () => {
+    for (let i = 0; i < 25; i++) {
+      try {
+        const res = (await processQueueFn({ data: undefined })) as
+          | { started: boolean; reason?: string; ok?: boolean; error?: string }
+          | undefined;
+        refresh();
+        if (!res?.started) return;
+        if (res.ok === false && res.error) toast.error(`Analysis failed: ${res.error}`);
+        else toast.success("Analysis complete");
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Queue error");
+        refresh();
+        return;
+      }
+    }
+  }, [processQueueFn, refresh]);
+
+  const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;
     setUploadProgress(5);
     try {
@@ -126,11 +151,19 @@ function DocumentsPage() {
       if (documentId) {
         const { data: doc } = await supabase.from("documents").select("latest_version").eq("id", documentId).single();
         version = (doc?.latest_version ?? 0) + 1;
+        await supabase.from("documents").update({
+          doc_type: info.docType,
+          author_name: info.authorName || null,
+          paper_title: info.paperTitle || null,
+        }).eq("id", documentId);
       } else {
         const { data: inserted, error: insErr } = await supabase.from("documents").insert({
           owner_id: user.id, name: file.name,
           file_type: file.name.split(".").pop()?.toUpperCase() ?? "FILE",
           size_bytes: file.size, latest_version: 1, status: "queued",
+          doc_type: info.docType,
+          author_name: info.authorName || null,
+          paper_title: info.paperTitle || null,
         }).select().single();
         if (insErr) throw insErr;
         documentId = inserted.id;
@@ -153,36 +186,30 @@ function DocumentsPage() {
       }).eq("id", documentId!);
       setUploadProgress(70);
 
-      const { data: analysis, error: aErr } = await supabase.from("analyses").insert({
+      const { error: aErr } = await supabase.from("analyses").insert({
         document_id: documentId!, version_id: ver.id, status: "pending",
       }).select().single();
       if (aErr) throw aErr;
-      setUploadProgress(85);
+      setUploadProgress(90);
 
-      toast.success(`Uploaded ${file.name} (v${version}) — analyzing…`);
-      qc.invalidateQueries({ queryKey: ["documents"] });
-      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-
-      runAnalysisFn({ data: {
-        analysisId: analysis.id, documentId: documentId!,
-        versionId: ver.id, storagePath,
-      }}).then(() => {
-        toast.success(`Analysis complete: ${file.name}`);
-        qc.invalidateQueries({ queryKey: ["documents"] });
-        qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-      }).catch((e) => {
-        toast.error(`Analysis failed: ${e.message ?? e}`);
-        qc.invalidateQueries({ queryKey: ["documents"] });
-      });
-
+      toast.success(`Uploaded ${file.name} (v${version}) — queued for analysis`);
+      refresh();
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(null), 600);
+      void drainQueue();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed";
       toast.error(msg);
       setUploadProgress(null);
     }
-  }, [user, qc, runAnalysisFn]);
+  }, [user, refresh, drainQueue]);
+
+  const startUpload = useCallback((file: File, existingDocId?: string) => {
+    const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+    setMeta((m) => ({ ...m, paperTitle: m.paperTitle || base }));
+    setPending({ file, existingDocId });
+  }, []);
+
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
