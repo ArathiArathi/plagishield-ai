@@ -438,7 +438,59 @@ function DocumentsPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Submission details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              These details appear on the cover page of every generated report.
+            </p>
+            <div className="space-y-1.5">
+              <Label>Document type</Label>
+              <Select value={meta.docType} onValueChange={(v) => setMeta((m) => ({ ...m, docType: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  {DOC_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="paper-title">Title of the paper</Label>
+              <Input id="paper-title" value={meta.paperTitle} maxLength={200}
+                onChange={(e) => setMeta((m) => ({ ...m, paperTitle: e.target.value }))}
+                placeholder="e.g. Deep learning for climate modelling" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="author-name">Author name</Label>
+              <Input id="author-name" value={meta.authorName} maxLength={120}
+                onChange={(e) => setMeta((m) => ({ ...m, authorName: e.target.value }))}
+                placeholder="e.g. Jane Doe" />
+            </div>
+            <p className="text-xs text-muted-foreground truncate">File: {pending?.file.name}</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPending(null)}>Cancel</Button>
+            <Button
+              disabled={!meta.paperTitle.trim() || !meta.authorName.trim()}
+              onClick={() => {
+                const p = pending;
+                setPending(null);
+                if (p) void uploadFile(p.file, {
+                  docType: meta.docType,
+                  authorName: meta.authorName.trim(),
+                  paperTitle: meta.paperTitle.trim(),
+                }, p.existingDocId);
+              }}
+            >
+              Upload & analyze
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
 
