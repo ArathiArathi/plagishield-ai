@@ -214,8 +214,9 @@ function DocumentsPage() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files?.[0];
-    if (f) uploadFile(f);
-  }, [uploadFile]);
+    if (f) startUpload(f);
+  }, [startUpload]);
+
 
   const deleteDoc = async (id: string) => {
     if (!confirm("Delete this document and all versions?")) return;
