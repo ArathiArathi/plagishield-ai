@@ -91,15 +91,28 @@ function ReportsPage() {
 
   const distribution = (data?.similarityDistribution ?? []);
 
+  const meta = selected as unknown as { doc_type?: string | null; author_name?: string | null; paper_title?: string | null };
+  const composition = results.composition ?? [];
+  const engineIssues = results.issues ?? [];
+  const allHighlights: Highlight[] = [
+    ...(results.plagiarism?.highlights ?? []),
+    ...(results.ai_detection?.highlights ?? []),
+    ...(results.grammar?.highlights ?? []),
+  ];
+
   const reportInput: ReportInput = {
     documentName: selected.name,
     fileType: selected.file_type,
     version: selected.latest_version,
     analysisId: analysis.id,
     generatedAt: new Date(analysis.created_at).toLocaleString(),
+    docType: meta.doc_type ?? null,
+    authorName: meta.author_name ?? null,
+    paperTitle: meta.paper_title ?? null,
     similarity, ai, grammar, citation,
     results: results as ReportInput["results"],
   };
+
 
   const bundle: Array<{ kind: ReportKind; title: string; desc: string; icon: typeof FileSearch; metric: string }> = [
     { kind: "similarity", title: "Similarity Report", desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`, icon: FileSearch, metric: `${similarity}% similarity` },
