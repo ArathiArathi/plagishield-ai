@@ -143,6 +143,15 @@ function AnalysisPage() {
   const matches = results.plagiarism?.matches ?? [];
   const grammarIssues = results.grammar?.issues ?? [];
   const citationIssues = results.citations?.issues ?? [];
+  const excerpt = results.text_excerpt ?? "";
+  const composition = results.composition ?? [];
+  const engineIssues = results.issues ?? [];
+  const allHighlights: Highlight[] = [
+    ...(results.plagiarism?.highlights ?? []),
+    ...(results.ai_detection?.highlights ?? []),
+    ...(results.grammar?.highlights ?? []),
+  ];
+
 
   const aiSplit = [
     { label: "Human", value: Math.max(0, 100 - aiScore), tone: "success" as const },
@@ -204,17 +213,37 @@ function AnalysisPage() {
             <Legend color="warning" label="Needs review" />
             <Legend color="destructive" label="High risk" />
           </div>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Content composition</h3>
+            <CompositionChart data={composition} />
+          </div>
         </Card>
+
 
         <Card className="p-5">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid h-auto w-full grid-cols-5">
+            <TabsList className="grid h-auto w-full grid-cols-4 sm:grid-cols-7">
+              <TabsTrigger value="highlights" className="flex-col gap-1 py-2 text-[11px]"><Highlighter className="h-4 w-4" />Highlights</TabsTrigger>
+              <TabsTrigger value="issues" className="flex-col gap-1 py-2 text-[11px]"><ListChecks className="h-4 w-4" />Issues</TabsTrigger>
               <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Plagiarism</TabsTrigger>
               <TabsTrigger value="ai" className="flex-col gap-1 py-2 text-[11px]"><Sparkles className="h-4 w-4" />AI Detection</TabsTrigger>
               <TabsTrigger value="grammar" className="flex-col gap-1 py-2 text-[11px]"><Check className="h-4 w-4" />Grammar</TabsTrigger>
               <TabsTrigger value="citation" className="flex-col gap-1 py-2 text-[11px]"><BookOpen className="h-4 w-4" />Citation</TabsTrigger>
               <TabsTrigger value="recs" className="flex-col gap-1 py-2 text-[11px]"><Lightbulb className="h-4 w-4" />Recs</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="highlights" className="mt-5 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Plagiarised, AI-generated and language-issue passages are highlighted directly in the submitted text.
+              </p>
+              <HighlightedDocument text={excerpt} highlights={allHighlights} />
+            </TabsContent>
+
+            <TabsContent value="issues" className="mt-5">
+              <IssueList issues={engineIssues} />
+            </TabsContent>
+
 
             <TabsContent value="plagiarism" className="mt-5 space-y-5">
               <ScoreBlock label="Overall similarity" value={similarity} tone={tone(similarity, true)} sub={`${matches.length} source matches`} />
