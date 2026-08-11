@@ -18,7 +18,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { runAnalysis } from "@/lib/analysis.functions";
+import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
+import { CompositionChart } from "@/components/analysis/CompositionChart";
+import { IssueList } from "@/components/analysis/IssueList";
+import type { CompositionSlice, Highlight, IssueItem } from "@/components/analysis/analysis-shared";
 import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/analysis")({
   head: () => ({
@@ -38,11 +43,15 @@ export const Route = createFileRoute("/analysis")({
 });
 
 type Results = {
-  plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
-  ai_detection?: { score?: number; confidence?: string; reasoning?: string };
-  grammar?: { score?: number; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  text_excerpt?: string;
+  plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
+  ai_detection?: { score?: number; confidence?: string; reasoning?: string; highlights?: Highlight[] };
+  grammar?: { score?: number; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
   citations?: { score?: number; total?: number; verified?: number; issues?: string[] };
+  composition?: CompositionSlice[];
+  issues?: IssueItem[];
 };
+
 
 function tone(score: number, invert = false) {
   const s = invert ? 100 - score : score;
