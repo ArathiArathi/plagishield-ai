@@ -215,6 +215,26 @@ function ReportsPage() {
 
           <Separator />
 
+          <Section title="Content Composition">
+            <CompositionChart data={composition} />
+          </Section>
+
+          <Separator />
+
+          <Section title="Highlighted Submission Text">
+            <HighlightedDocument text={results.text_excerpt ?? ""} highlights={allHighlights} />
+          </Section>
+
+          <Separator />
+
+          <Section title="Issue Log">
+            <IssueList issues={engineIssues} />
+          </Section>
+
+          <Separator />
+
+
+
           <Section title="Similarity Analysis">
             {matches.length === 0 ? (
               <p className="text-sm text-muted-foreground">No source matches were recorded for this document.</p>
