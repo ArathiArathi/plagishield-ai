@@ -2,11 +2,35 @@ import { jsPDF } from "jspdf";
 
 /* ------------------------------------------------------------------ types */
 
+export type PdfHighlight = {
+  start?: number;
+  end?: number;
+  text?: string;
+  category?: string;
+  score?: number;
+  source?: string;
+  url?: string;
+  note?: string;
+};
+
+export type PdfCompositionSlice = { category: string; percent: number; words: number };
+
+export type PdfIssue = {
+  category?: string;
+  severity?: string;
+  title?: string;
+  detail?: string;
+  excerpt?: string;
+};
+
 export type ReportResults = {
-  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
-  ai_detection?: { confidence?: string; reasoning?: string; matches?: Array<{ text?: string; strength?: string }> };
-  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  text_excerpt?: string;
+  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: PdfHighlight[] };
+  ai_detection?: { confidence?: string; reasoning?: string; matches?: Array<{ text?: string; strength?: string }>; highlights?: PdfHighlight[] };
+  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
+  composition?: PdfCompositionSlice[];
+  issues?: PdfIssue[];
 };
 
 export type ReportInput = {
@@ -15,12 +39,16 @@ export type ReportInput = {
   version: number | string;
   analysisId: string;
   generatedAt: string;
+  docType?: string | null;
+  authorName?: string | null;
+  paperTitle?: string | null;
   similarity: number;
   ai: number;
   grammar: number;
   citation: number;
   results: ReportResults;
 };
+
 
 export type ReportKind = "similarity" | "ai" | "grammar" | "citation" | "full";
 
