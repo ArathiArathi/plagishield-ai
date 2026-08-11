@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { buildSegments, type Highlight } from "@/components/analysis/analysis-shared";
 
 /* ------------------------------------------------------------------ types */
 
