@@ -12,6 +12,10 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
+import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
+import { CompositionChart } from "@/components/analysis/CompositionChart";
+import { IssueList } from "@/components/analysis/IssueList";
+import type { CompositionSlice, Highlight, IssueItem } from "@/components/analysis/analysis-shared";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -31,11 +35,15 @@ export const Route = createFileRoute("/reports")({
 });
 
 type Results = {
-  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
-  ai_detection?: { confidence?: string; reasoning?: string };
-  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  text_excerpt?: string;
+  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
+  ai_detection?: { confidence?: string; reasoning?: string; highlights?: Highlight[] };
+  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
+  composition?: CompositionSlice[];
+  issues?: IssueItem[];
 };
+
 
 function ReportsPage() {
   const { doc } = Route.useSearch();
@@ -83,15 +91,28 @@ function ReportsPage() {
 
   const distribution = (data?.similarityDistribution ?? []);
 
+  const meta = selected as unknown as { doc_type?: string | null; author_name?: string | null; paper_title?: string | null };
+  const composition = results.composition ?? [];
+  const engineIssues = results.issues ?? [];
+  const allHighlights: Highlight[] = [
+    ...(results.plagiarism?.highlights ?? []),
+    ...(results.ai_detection?.highlights ?? []),
+    ...(results.grammar?.highlights ?? []),
+  ];
+
   const reportInput: ReportInput = {
     documentName: selected.name,
     fileType: selected.file_type,
     version: selected.latest_version,
     analysisId: analysis.id,
     generatedAt: new Date(analysis.created_at).toLocaleString(),
+    docType: meta.doc_type ?? null,
+    authorName: meta.author_name ?? null,
+    paperTitle: meta.paper_title ?? null,
     similarity, ai, grammar, citation,
     results: results as ReportInput["results"],
   };
+
 
   const bundle: Array<{ kind: ReportKind; title: string; desc: string; icon: typeof FileSearch; metric: string }> = [
     { kind: "similarity", title: "Similarity Report", desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`, icon: FileSearch, metric: `${similarity}% similarity` },
@@ -193,6 +214,26 @@ function ReportsPage() {
           </Section>
 
           <Separator />
+
+          <Section title="Content Composition">
+            <CompositionChart data={composition} />
+          </Section>
+
+          <Separator />
+
+          <Section title="Highlighted Submission Text">
+            <HighlightedDocument text={results.text_excerpt ?? ""} highlights={allHighlights} />
+          </Section>
+
+          <Separator />
+
+          <Section title="Issue Log">
+            <IssueList issues={engineIssues} />
+          </Section>
+
+          <Separator />
+
+
 
           <Section title="Similarity Analysis">
             {matches.length === 0 ? (

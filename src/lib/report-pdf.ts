@@ -1,12 +1,37 @@
 import { jsPDF } from "jspdf";
+import { buildSegments, type Highlight } from "@/components/analysis/analysis-shared";
 
 /* ------------------------------------------------------------------ types */
 
+export type PdfHighlight = {
+  start?: number;
+  end?: number;
+  text?: string;
+  category?: string;
+  score?: number;
+  source?: string;
+  url?: string;
+  note?: string;
+};
+
+export type PdfCompositionSlice = { category: string; percent: number; words: number };
+
+export type PdfIssue = {
+  category?: string;
+  severity?: string;
+  title?: string;
+  detail?: string;
+  excerpt?: string;
+};
+
 export type ReportResults = {
-  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
-  ai_detection?: { confidence?: string; reasoning?: string; matches?: Array<{ text?: string; strength?: string }> };
-  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  text_excerpt?: string;
+  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: PdfHighlight[] };
+  ai_detection?: { confidence?: string; reasoning?: string; matches?: Array<{ text?: string; strength?: string }>; highlights?: PdfHighlight[] };
+  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
+  composition?: PdfCompositionSlice[];
+  issues?: PdfIssue[];
 };
 
 export type ReportInput = {
@@ -15,12 +40,16 @@ export type ReportInput = {
   version: number | string;
   analysisId: string;
   generatedAt: string;
+  docType?: string | null;
+  authorName?: string | null;
+  paperTitle?: string | null;
   similarity: number;
   ai: number;
   grammar: number;
   citation: number;
   results: ReportResults;
 };
+
 
 export type ReportKind = "similarity" | "ai" | "grammar" | "citation" | "full";
 
@@ -249,14 +278,201 @@ function verdictBox(ctx: Ctx, verdict: string, tone: [number, number, number], d
 }
 
 function documentBlock(ctx: Ctx, input: ReportInput) {
-  metaTable(ctx, [
-    ["Document", input.documentName],
+  const rows: Array<[string, string]> = [["Document", input.documentName]];
+  if (input.paperTitle) rows.push(["Paper title", input.paperTitle]);
+  if (input.authorName) rows.push(["Author", input.authorName]);
+  if (input.docType) rows.push(["Submission type", titleCase(input.docType)]);
+  rows.push(
     ["File type", String(input.fileType || "—").toUpperCase()],
     ["Version", `v${input.version}`],
     ["Analysis reference", input.analysisId.slice(0, 8).toUpperCase()],
     ["Report generated", input.generatedAt],
-  ]);
+  );
+  metaTable(ctx, rows);
 }
+
+function titleCase(v: string) {
+  return v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/* ------------------------------------------- composition, highlights, issues */
+
+const CATEGORY_FILL: Record<string, [number, number, number]> = {
+  plagiarism: [255, 214, 214],
+  ai: [255, 235, 186],
+  grammar: [214, 231, 255],
+  citation: [212, 236, 224],
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  plagiarism: "Plagiarised / matched text",
+  ai: "AI generated text",
+  grammar: "Language issue",
+  citation: "Citation",
+};
+
+const SLICE_COLOR: Record<string, [number, number, number]> = {
+  "Plagiarised / matched": BAD,
+  "AI generated": WARN,
+  "Quoted & attributed": ACCENT,
+  "Language issues": [120, 90, 200],
+  "Original human writing": OK,
+};
+
+function compositionSection(ctx: Ctx, input: ReportInput) {
+  const slices = (input.results.composition ?? []).filter((s) => s && s.percent > 0);
+  sectionTitle(ctx, "Content Composition");
+  if (slices.length === 0) {
+    paragraph(ctx, "No content composition data is stored for this analysis.");
+    return;
+  }
+
+  const { doc } = ctx;
+  // Stacked 100% bar
+  ensure(ctx, 30);
+  const barW = W - 2 * M;
+  const totalPct = slices.reduce((s, x) => s + x.percent, 0) || 100;
+  let x = M;
+  slices.forEach((s) => {
+    const w = (barW * s.percent) / totalPct;
+    doc.setFillColor(...(SLICE_COLOR[s.category] ?? MUTED));
+    doc.rect(x, ctx.y, w, 9, "F");
+    x += w;
+  });
+  doc.setDrawColor(...LINE);
+  doc.rect(M, ctx.y, barW, 9);
+  ctx.y += 15;
+
+  table(
+    ctx,
+    [
+      { header: "Category", width: 74 },
+      { header: "Share of document", width: 40, align: "right" },
+      { header: "Words", width: 26, align: "right" },
+    ],
+    slices.map((s) => [s.category, `${s.percent}%`, String(s.words)]),
+  );
+}
+
+function legendRow(ctx: Ctx, categories: string[]) {
+  const { doc } = ctx;
+  ensure(ctx, 10);
+  let x = M;
+  doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED);
+  categories.forEach((c) => {
+    doc.setFillColor(...(CATEGORY_FILL[c] ?? [230, 230, 230]));
+    doc.rect(x, ctx.y - 3, 4, 4, "F");
+    doc.setDrawColor(...LINE);
+    doc.rect(x, ctx.y - 3, 4, 4);
+    const label = CATEGORY_LABEL[c] ?? c;
+    doc.text(label, x + 5.5, ctx.y);
+    x += 6 + doc.getTextWidth(label) + 6;
+  });
+  ctx.y += 7;
+}
+
+const MAX_BODY_CHARS = 14000;
+
+/** DrillBit-style annotated body: the submission text with flagged passages
+ *  highlighted in place, colour coded by category. */
+function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
+  const raw = input.results.text_excerpt ?? "";
+  const highlights = ([] as PdfHighlight[])
+    .concat(input.results.plagiarism?.highlights ?? [])
+    .concat(input.results.ai_detection?.highlights ?? [])
+    .concat(input.results.grammar?.highlights ?? [])
+    .filter((h) => categories.includes(String(h.category)));
+
+  sectionTitle(ctx, "Highlighted Submission Text");
+  if (!raw.trim()) {
+    paragraph(ctx, "The extracted submission text is not stored for this analysis, so in-text highlighting is unavailable. Re-analyze the document to include it.");
+    return;
+  }
+
+  legendRow(ctx, categories);
+
+  const text = raw.slice(0, MAX_BODY_CHARS);
+  const segments = buildSegments(text, highlights as unknown as Highlight[]);
+
+  const { doc } = ctx;
+  const lineH = 4.5;
+  const setBody = () => doc.setFont("helvetica", "normal").setFontSize(8.5);
+  setBody();
+  let x = M;
+  ensure(ctx, 12);
+
+  for (const seg of segments) {
+    const tokens = seg.text.split(/(\s+)/).filter((t) => t !== "");
+    for (const tk of tokens) {
+      if (/\n/.test(tk)) {
+        x = M;
+        ctx.y += lineH;
+        if (ctx.y > H - 24) { newPage(ctx); setBody(); }
+        continue;
+      }
+      const w = doc.getTextWidth(tk);
+      if (x + w > W - M) {
+        x = M;
+        ctx.y += lineH;
+        if (ctx.y > H - 24) { newPage(ctx); setBody(); }
+      }
+      if (/^\s+$/.test(tk)) {
+        if (x > M) x += w;
+        continue;
+      }
+      if (seg.highlight) {
+        doc.setFillColor(...(CATEGORY_FILL[String(seg.highlight.category)] ?? [235, 235, 235]));
+        doc.rect(x - 0.4, ctx.y - 3.1, w + 0.8, 4.3, "F");
+      }
+      doc.setTextColor(40, 50, 65);
+      doc.text(tk, x, ctx.y);
+      x += w;
+    }
+  }
+  ctx.y += lineH + 4;
+  if (raw.length > MAX_BODY_CHARS) {
+    paragraph(ctx, `Body text truncated at ${MAX_BODY_CHARS.toLocaleString()} characters for this report.`, { size: 7.5, color: MUTED });
+  }
+}
+
+function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
+  const all = input.results.issues ?? [];
+  const issues = categories ? all.filter((i) => categories.includes(String(i.category))) : all;
+  sectionTitle(ctx, "Issue Log");
+  if (issues.length === 0) {
+    paragraph(ctx, "No issues were recorded for this submission.");
+    return;
+  }
+  const bySeverity = issues.reduce<Record<string, number>>((acc, i) => {
+    const k = (i.severity ?? "low").toLowerCase();
+    acc[k] = (acc[k] ?? 0) + 1;
+    return acc;
+  }, {});
+  scoreCards(ctx, [
+    { label: "Total issues", value: String(issues.length), tone: ACCENT },
+    { label: "High", value: String(bySeverity.high ?? 0), tone: (bySeverity.high ?? 0) > 0 ? BAD : OK },
+    { label: "Medium", value: String(bySeverity.medium ?? 0), tone: (bySeverity.medium ?? 0) > 0 ? WARN : OK },
+    { label: "Low", value: String(bySeverity.low ?? 0), tone: OK },
+  ]);
+  table(
+    ctx,
+    [
+      { header: "#", width: 8 },
+      { header: "Category", width: 26 },
+      { header: "Sev.", width: 14 },
+      { header: "Issue", width: 52 },
+      { header: "Detail / excerpt", width: 66 },
+    ],
+    issues.map((i, n) => [
+      String(n + 1),
+      i.category ?? "—",
+      (i.severity ?? "low").toUpperCase(),
+      i.title ?? "—",
+      [i.detail, i.excerpt ? `“${i.excerpt}”` : ""].filter(Boolean).join(" "),
+    ]),
+  );
+}
+
 
 /* ------------------------------------------------------------- report body */
 
@@ -450,16 +666,37 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
     ]);
   }
 
-  if (kind === "similarity") similaritySection(ctx, input);
-  if (kind === "ai") aiSection(ctx, input);
-  if (kind === "grammar") grammarSection(ctx, input);
-  if (kind === "citation") citationSection(ctx, input);
+  if (kind === "similarity") {
+    similaritySection(ctx, input);
+    compositionSection(ctx, input);
+    highlightedBody(ctx, input, ["plagiarism"]);
+    issuesSection(ctx, input, ["Plagiarism"]);
+  }
+  if (kind === "ai") {
+    aiSection(ctx, input);
+    compositionSection(ctx, input);
+    highlightedBody(ctx, input, ["ai"]);
+    issuesSection(ctx, input, ["AI content"]);
+  }
+  if (kind === "grammar") {
+    grammarSection(ctx, input);
+    highlightedBody(ctx, input, ["grammar"]);
+    issuesSection(ctx, input, ["Grammar"]);
+  }
+  if (kind === "citation") {
+    citationSection(ctx, input);
+    issuesSection(ctx, input, ["Citation"]);
+  }
   if (kind === "full") {
+    compositionSection(ctx, input);
     similaritySection(ctx, input);
     aiSection(ctx, input);
     grammarSection(ctx, input);
     citationSection(ctx, input);
+    highlightedBody(ctx, input, ["plagiarism", "ai", "grammar"]);
+    issuesSection(ctx, input);
   }
+
 
   sectionTitle(ctx, "Recommendations");
   table(

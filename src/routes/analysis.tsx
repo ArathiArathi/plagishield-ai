@@ -6,8 +6,9 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Lightbulb, Loader2, Sparkles,
+  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Sparkles,
 } from "lucide-react";
+
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { runAnalysis } from "@/lib/analysis.functions";
+import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
+import { CompositionChart } from "@/components/analysis/CompositionChart";
+import { IssueList } from "@/components/analysis/IssueList";
+import type { CompositionSlice, Highlight, IssueItem } from "@/components/analysis/analysis-shared";
 import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/analysis")({
   head: () => ({
@@ -38,11 +44,15 @@ export const Route = createFileRoute("/analysis")({
 });
 
 type Results = {
-  plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
-  ai_detection?: { score?: number; confidence?: string; reasoning?: string };
-  grammar?: { score?: number; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  text_excerpt?: string;
+  plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
+  ai_detection?: { score?: number; confidence?: string; reasoning?: string; highlights?: Highlight[] };
+  grammar?: { score?: number; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
   citations?: { score?: number; total?: number; verified?: number; issues?: string[] };
+  composition?: CompositionSlice[];
+  issues?: IssueItem[];
 };
+
 
 function tone(score: number, invert = false) {
   const s = invert ? 100 - score : score;
@@ -54,7 +64,7 @@ function AnalysisPage() {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const { data, isPending } = useWorkspaceData();
-  const [tab, setTab] = useState("plagiarism");
+  const [tab, setTab] = useState("highlights");
   const [rerunning, setRerunning] = useState(false);
 
   const documents = data?.documents ?? [];
@@ -134,6 +144,15 @@ function AnalysisPage() {
   const matches = results.plagiarism?.matches ?? [];
   const grammarIssues = results.grammar?.issues ?? [];
   const citationIssues = results.citations?.issues ?? [];
+  const excerpt = results.text_excerpt ?? "";
+  const composition = results.composition ?? [];
+  const engineIssues = results.issues ?? [];
+  const allHighlights: Highlight[] = [
+    ...(results.plagiarism?.highlights ?? []),
+    ...(results.ai_detection?.highlights ?? []),
+    ...(results.grammar?.highlights ?? []),
+  ];
+
 
   const aiSplit = [
     { label: "Human", value: Math.max(0, 100 - aiScore), tone: "success" as const },
@@ -195,17 +214,37 @@ function AnalysisPage() {
             <Legend color="warning" label="Needs review" />
             <Legend color="destructive" label="High risk" />
           </div>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Content composition</h3>
+            <CompositionChart data={composition} />
+          </div>
         </Card>
+
 
         <Card className="p-5">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid h-auto w-full grid-cols-5">
+            <TabsList className="grid h-auto w-full grid-cols-4 sm:grid-cols-7">
+              <TabsTrigger value="highlights" className="flex-col gap-1 py-2 text-[11px]"><Highlighter className="h-4 w-4" />Highlights</TabsTrigger>
+              <TabsTrigger value="issues" className="flex-col gap-1 py-2 text-[11px]"><ListChecks className="h-4 w-4" />Issues</TabsTrigger>
               <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Plagiarism</TabsTrigger>
               <TabsTrigger value="ai" className="flex-col gap-1 py-2 text-[11px]"><Sparkles className="h-4 w-4" />AI Detection</TabsTrigger>
               <TabsTrigger value="grammar" className="flex-col gap-1 py-2 text-[11px]"><Check className="h-4 w-4" />Grammar</TabsTrigger>
               <TabsTrigger value="citation" className="flex-col gap-1 py-2 text-[11px]"><BookOpen className="h-4 w-4" />Citation</TabsTrigger>
               <TabsTrigger value="recs" className="flex-col gap-1 py-2 text-[11px]"><Lightbulb className="h-4 w-4" />Recs</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="highlights" className="mt-5 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Plagiarised, AI-generated and language-issue passages are highlighted directly in the submitted text.
+              </p>
+              <HighlightedDocument text={excerpt} highlights={allHighlights} />
+            </TabsContent>
+
+            <TabsContent value="issues" className="mt-5">
+              <IssueList issues={engineIssues} />
+            </TabsContent>
+
 
             <TabsContent value="plagiarism" className="mt-5 space-y-5">
               <ScoreBlock label="Overall similarity" value={similarity} tone={tone(similarity, true)} sub={`${matches.length} source matches`} />
