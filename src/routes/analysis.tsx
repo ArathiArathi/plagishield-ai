@@ -64,7 +64,7 @@ function AnalysisPage() {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const { data, isPending } = useWorkspaceData();
-  const [tab, setTab] = useState("plagiarism");
+  const [tab, setTab] = useState("highlights");
   const [rerunning, setRerunning] = useState(false);
 
   const documents = data?.documents ?? [];
