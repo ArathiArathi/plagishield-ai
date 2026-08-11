@@ -12,6 +12,10 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
+import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
+import { CompositionChart } from "@/components/analysis/CompositionChart";
+import { IssueList } from "@/components/analysis/IssueList";
+import type { CompositionSlice, Highlight, IssueItem } from "@/components/analysis/analysis-shared";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -31,11 +35,15 @@ export const Route = createFileRoute("/reports")({
 });
 
 type Results = {
-  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }> };
-  ai_detection?: { confidence?: string; reasoning?: string };
-  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }> };
+  text_excerpt?: string;
+  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
+  ai_detection?: { confidence?: string; reasoning?: string; highlights?: Highlight[] };
+  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
+  composition?: CompositionSlice[];
+  issues?: IssueItem[];
 };
+
 
 function ReportsPage() {
   const { doc } = Route.useSearch();
