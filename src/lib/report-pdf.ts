@@ -666,16 +666,37 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
     ]);
   }
 
-  if (kind === "similarity") similaritySection(ctx, input);
-  if (kind === "ai") aiSection(ctx, input);
-  if (kind === "grammar") grammarSection(ctx, input);
-  if (kind === "citation") citationSection(ctx, input);
+  if (kind === "similarity") {
+    similaritySection(ctx, input);
+    compositionSection(ctx, input);
+    highlightedBody(ctx, input, ["plagiarism"]);
+    issuesSection(ctx, input, ["Plagiarism"]);
+  }
+  if (kind === "ai") {
+    aiSection(ctx, input);
+    compositionSection(ctx, input);
+    highlightedBody(ctx, input, ["ai"]);
+    issuesSection(ctx, input, ["AI content"]);
+  }
+  if (kind === "grammar") {
+    grammarSection(ctx, input);
+    highlightedBody(ctx, input, ["grammar"]);
+    issuesSection(ctx, input, ["Grammar"]);
+  }
+  if (kind === "citation") {
+    citationSection(ctx, input);
+    issuesSection(ctx, input, ["Citation"]);
+  }
   if (kind === "full") {
+    compositionSection(ctx, input);
     similaritySection(ctx, input);
     aiSection(ctx, input);
     grammarSection(ctx, input);
     citationSection(ctx, input);
+    highlightedBody(ctx, input, ["plagiarism", "ai", "grammar"]);
+    issuesSection(ctx, input);
   }
+
 
   sectionTitle(ctx, "Recommendations");
   table(
