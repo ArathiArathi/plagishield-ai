@@ -6,8 +6,9 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Lightbulb, Loader2, Sparkles,
+  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Sparkles,
 } from "lucide-react";
+
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
