@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { processQueue, runAnalysis } from "@/lib/analysis.functions";
+import { runAnalysis } from "@/lib/analysis.functions";
+import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
 
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,6 @@ function DocumentsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const runAnalysisFn = useServerFn(runAnalysis);
-  const processQueueFn = useServerFn(processQueue);
   const fileRef = useRef<HTMLInputElement>(null);
   const versionRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
