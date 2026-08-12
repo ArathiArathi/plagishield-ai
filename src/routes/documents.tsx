@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { processQueue, runAnalysis } from "@/lib/analysis.functions";
+import { runAnalysis } from "@/lib/analysis.functions";
+import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
 
 import { cn } from "@/lib/utils";
 
@@ -72,7 +73,6 @@ function DocumentsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const runAnalysisFn = useServerFn(runAnalysis);
-  const processQueueFn = useServerFn(processQueue);
   const fileRef = useRef<HTMLInputElement>(null);
   const versionRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -116,30 +116,12 @@ function DocumentsPage() {
     },
   });
 
-  const refresh = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["documents"] });
-    qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-    qc.invalidateQueries({ queryKey: ["workspace-data"] });
-  }, [qc]);
+  const { drain: drainQueue, refresh: refreshQueue } = useAnalysisQueue();
 
-  /** Drains the queue one document at a time: only starts a job when idle. */
-  const drainQueue = useCallback(async () => {
-    for (let i = 0; i < 25; i++) {
-      try {
-        const res = (await processQueueFn({ data: undefined })) as
-          | { started: boolean; reason?: string; ok?: boolean; error?: string }
-          | undefined;
-        refresh();
-        if (!res?.started) return;
-        if (res.ok === false && res.error) toast.error(`Analysis failed: ${res.error}`);
-        else toast.success("Analysis complete");
-      } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "Queue error");
-        refresh();
-        return;
-      }
-    }
-  }, [processQueueFn, refresh]);
+  const refresh = useCallback(() => {
+    refreshQueue();
+  }, [refreshQueue]);
+
 
   const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;

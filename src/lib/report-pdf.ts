@@ -116,7 +116,9 @@ function ensure(ctx: Ctx, needed: number) {
 }
 
 function sectionTitle(ctx: Ctx, text: string) {
-  ensure(ctx, 16);
+  // reserve room for the heading plus the first rows of its content so a title
+  // never sits orphaned at the very bottom of a page
+  ensure(ctx, 34);
   const { doc } = ctx;
   doc.setFillColor(...ACCENT);
   doc.rect(M, ctx.y - 3.5, 2.4, 5.5, "F");
@@ -459,9 +461,9 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
     [
       { header: "#", width: 8 },
       { header: "Category", width: 26 },
-      { header: "Sev.", width: 14 },
-      { header: "Issue", width: 52 },
-      { header: "Detail / excerpt", width: 66 },
+      { header: "Sev.", width: 18 },
+      { header: "Issue", width: 50 },
+      { header: "Detail / excerpt", width: 64 },
     ],
     issues.map((i, n) => [
       String(n + 1),
