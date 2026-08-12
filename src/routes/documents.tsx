@@ -116,30 +116,12 @@ function DocumentsPage() {
     },
   });
 
-  const refresh = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["documents"] });
-    qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-    qc.invalidateQueries({ queryKey: ["workspace-data"] });
-  }, [qc]);
+  const { drain: drainQueue, refresh: refreshQueue } = useAnalysisQueue();
 
-  /** Drains the queue one document at a time: only starts a job when idle. */
-  const drainQueue = useCallback(async () => {
-    for (let i = 0; i < 25; i++) {
-      try {
-        const res = (await processQueueFn({ data: undefined })) as
-          | { started: boolean; reason?: string; ok?: boolean; error?: string }
-          | undefined;
-        refresh();
-        if (!res?.started) return;
-        if (res.ok === false && res.error) toast.error(`Analysis failed: ${res.error}`);
-        else toast.success("Analysis complete");
-      } catch (e: unknown) {
-        toast.error(e instanceof Error ? e.message : "Queue error");
-        refresh();
-        return;
-      }
-    }
-  }, [processQueueFn, refresh]);
+  const refresh = useCallback(() => {
+    refreshQueue();
+  }, [refreshQueue]);
+
 
   const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;
