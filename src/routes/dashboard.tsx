@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
+import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -33,6 +34,7 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardPage() {
   const { user } = useAuth();
   const { data, isPending } = useWorkspaceData();
+  useAnalysisQueue();
 
   const firstName =
     (user?.user_metadata?.first_name as string | undefined) ||
