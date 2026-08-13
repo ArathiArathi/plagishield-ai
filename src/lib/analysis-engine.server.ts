@@ -683,7 +683,9 @@ export async function analyzeDocument(
     { category: "Original human writing", percent: pct(humanWords), words: humanWords },
   ];
 
+  const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
   const issues: IssueItem[] = [];
+
   for (const h of plag.highlights.slice(0, 20)) {
     issues.push({
       category: "Plagiarism",
