@@ -693,7 +693,7 @@ export async function analyzeDocument(
       excerpt: h.text.slice(0, 260),
     });
   }
-  for (const h of (modelScore !== null || sty.score >= 50 ? aiHighlights(sentences, aiScore) : []).slice(0, 12)) {
+  for (const h of aiHl.slice(0, 12)) {
     issues.push({
       category: "AI content",
       severity: h.score >= 75 ? "high" : "medium",
