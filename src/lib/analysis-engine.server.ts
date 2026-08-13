@@ -715,7 +715,7 @@ export async function analyzeDocument(
     issues.push({ category: "Citation", severity: "medium", title: "Citation issue", detail: c });
   }
 
-  const aiHl = aiHighlights(sentences, aiScore);
+  const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
 
   return {
     meta: {
