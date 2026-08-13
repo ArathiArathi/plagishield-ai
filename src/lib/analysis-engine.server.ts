@@ -148,8 +148,19 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 type Candidate = { title: string; url?: string; text: string; kind: string };
 
+/** OpenAlex stores abstracts as an inverted index — rebuild the plain text. */
+function openAlexAbstract(inverted: Record<string, number[]> | null | undefined): string {
+  if (!inverted) return "";
+  const slots: string[] = [];
+  for (const [word, positions] of Object.entries(inverted)) {
+    for (const p of positions) slots[p] = word;
+  }
+  return slots.filter(Boolean).join(" ");
+}
+
 /** Cache of retrieved source documents for the current analysis run. */
 type SourceCache = Map<string, Candidate | null>;
+
 
 async function wikiSearch(query: string): Promise<string[]> {
   const data = await getJson(
