@@ -152,7 +152,9 @@ function DocumentsPage() {
       }
       setUploadProgress(25);
 
-      const storagePath = `${user.id}/${documentId}/v${version}-${Date.now()}-${file.name}`;
+      const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80) || "upload";
+      const storagePath = `${user.id}/${documentId}/v${version}-${Date.now()}-${safeName}`;
+
       const { error: upErr } = await supabase.storage.from("documents").upload(storagePath, file, { upsert: false });
       if (upErr) throw upErr;
       setUploadProgress(55);

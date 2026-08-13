@@ -148,35 +148,71 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 type Candidate = { title: string; url?: string; text: string; kind: string };
 
-async function wikipediaCandidates(phrase: string): Promise<Candidate[]> {
-  const q = encodeURIComponent(`"${phrase.slice(0, 220)}"`);
-  const search = await getJson(
-    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&srlimit=2&format=json&origin=*`,
-  );
-  const hits: Array<{ title: string }> = search?.query?.search ?? [];
-  if (hits.length === 0) return [];
-  const titles = hits.map((h) => h.title).slice(0, 2);
-  const extract = await getJson(
-    `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&origin=*&titles=${encodeURIComponent(titles.join("|"))}`,
-  );
-  const pages: Record<string, { title: string; extract?: string }> = extract?.query?.pages ?? {};
-  return Object.values(pages)
-    .filter((p) => p.extract)
-    .map((p) => ({
-      title: `Wikipedia — ${p.title}`,
-      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`,
-      text: p.extract!.slice(0, 60000),
-      kind: "Encyclopaedia",
-    }));
-}
-
-function openAlexAbstract(inverted: Record<string, number[]> | null | undefined) {
+/** OpenAlex stores abstracts as an inverted index — rebuild the plain text. */
+function openAlexAbstract(inverted: Record<string, number[]> | null | undefined): string {
   if (!inverted) return "";
   const slots: string[] = [];
   for (const [word, positions] of Object.entries(inverted)) {
     for (const p of positions) slots[p] = word;
   }
   return slots.filter(Boolean).join(" ");
+}
+
+/** Cache of retrieved source documents for the current analysis run. */
+type SourceCache = Map<string, Candidate | null>;
+
+
+async function wikiSearch(query: string): Promise<string[]> {
+  const data = await getJson(
+    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&srwhat=text&format=json`,
+  );
+  return ((data?.query?.search ?? []) as Array<{ title: string }>).map((h) => h.title);
+}
+
+async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate | null> {
+  const key = `wiki:${title}`;
+  if (cache.has(key)) return cache.get(key)!;
+  const data = await getJson(
+    `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&titles=${encodeURIComponent(title)}`,
+  );
+  const pages: Record<string, { title: string; extract?: string }> = data?.query?.pages ?? {};
+  const page = Object.values(pages)[0];
+  const candidate: Candidate | null = page?.extract
+    ? {
+        title: `Wikipedia — ${page.title}`,
+        url: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
+        text: page.extract.slice(0, 120000),
+        kind: "Encyclopaedia",
+      }
+    : null;
+  cache.set(key, candidate);
+  return candidate;
+}
+
+/**
+ * Build several search queries per sentence. Long quoted sentences return zero
+ * hits on full-text search engines, so we use short quoted windows (verbatim
+ * copy detection) plus a keyword query (paraphrase / topical detection).
+ */
+function searchQueries(sentence: string): string[] {
+  const words = sentence.match(/[A-Za-z0-9'’-]+/g) ?? [];
+  if (words.length < 8) return [];
+  const win = (i: number, n = 9) => words.slice(i, i + n).join(" ");
+  const queries = [`"${win(0)}"`];
+  if (words.length >= 20) queries.push(`"${win(Math.max(0, Math.floor(words.length / 2) - 4))}"`);
+  const keywords = words.filter((w) => w.length > 4).slice(0, 12).join(" ");
+  if (keywords.split(" ").length >= 4) queries.push(keywords);
+  return queries;
+}
+
+async function wikipediaCandidates(sentence: string, cache: SourceCache): Promise<Candidate[]> {
+  const titles = new Set<string>();
+  for (const q of searchQueries(sentence)) {
+    for (const t of await wikiSearch(q)) titles.add(t);
+    if (titles.size >= 3) break;
+  }
+  const found = await mapLimit([...titles].slice(0, 3), 3, (t) => wikiExtract(t, cache));
+  return found.filter(Boolean) as Candidate[];
 }
 
 async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
@@ -201,26 +237,29 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
 
 async function detectPlagiarism(text: string, sentences: Sentence[]) {
   const totalWords = tokenize(text).length || 1;
-  const candidates = sentences
-    .filter((s) => s.words.length >= 9 && s.words.length <= 60)
-    .sort((a, b) => b.words.length - a.words.length)
-    .slice(0, 24)
-    .sort((a, b) => a.start - b.start)
-    .filter((_, i) => i % 2 === 0 || true)
-    .slice(0, 14);
+  const usable = sentences.filter((s) => s.words.length >= 8 && s.words.length <= 80);
+  // Even sampling across the whole document (not just the longest sentences)
+  const target = Math.min(18, usable.length);
+  const step = usable.length > target ? usable.length / target : 1;
+  const candidates: Sentence[] = [];
+  for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
+    candidates.push(usable[Math.floor(i * step)]!);
+  }
 
+  const cache: SourceCache = new Map();
   let queried = 0;
   const found = await mapLimit(candidates, 4, async (s) => {
-    const [wiki, alex] = await Promise.all([wikipediaCandidates(s.text), openAlexCandidates(s.text)]);
+    const [wiki, alex] = await Promise.all([wikipediaCandidates(s.text, cache), openAlexCandidates(s.text)]);
     const pool = [...wiki, ...alex];
     queried += pool.length;
     let best: { c: Candidate; score: number } | null = null;
     for (const c of pool) {
-      const score = containment(s.words, c.text, 4);
+      // 4-gram containment catches verbatim copies, 3-gram catches light edits.
+      const score = Math.max(containment(s.words, c.text, 4), Math.round(containment(s.words, c.text, 3) * 0.85));
       if (score > (best?.score ?? 0)) best = { c, score };
     }
-    if (!best || best.score < 32) return null;
-    return { sentence: s, source: best.c, similarity: best.score };
+    if (!best || best.score < 28) return null;
+    return { sentence: s, source: best.c, similarity: Math.min(100, best.score) };
   });
 
   const hits = found.filter(Boolean) as Array<{ sentence: Sentence; source: Candidate; similarity: number }>;
@@ -266,6 +305,7 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     queried,
   };
 }
+
 
 /* --------------------------------------------- 2. AI content detection */
 
@@ -326,66 +366,126 @@ function stylometry(text: string, sentences: Sentence[]) {
   };
 }
 
-function aiHighlights(sentences: Sentence[], baseline: number): Highlight[] {
-  const scored = sentences.map((s) => {
+export type SentenceVerdict = { p: number; why: string };
+
+/**
+ * Sentence-level AI highlights. When the language model returned per-sentence
+ * verdicts those win; otherwise we fall back to the stylometric heuristic.
+ */
+function aiHighlights(
+  sentences: Sentence[],
+  baseline: number,
+  model?: Map<number, SentenceVerdict>,
+): Highlight[] {
+  const scored = sentences.map((s, i) => {
     const lower = s.text.toLowerCase();
     const markers = AI_MARKERS.filter((m) => lower.includes(m)).length;
     const ttr = new Set(s.words).size / Math.max(1, s.words.length);
     const long = s.words.length > 24 ? 1 : 0;
-    const local = Math.min(100, baseline + markers * 18 + (ttr < 0.62 ? 14 : 0) + long * 8);
-    return { s, local, markers };
+    const heuristic = Math.min(100, baseline + markers * 18 + (ttr < 0.62 ? 14 : 0) + long * 8);
+    const verdict = model?.get(i);
+    const local = verdict ? Math.round(verdict.p * 0.75 + heuristic * 0.25) : heuristic;
+    return { s, local, markers, why: verdict?.why, fromModel: Boolean(verdict) };
   });
   return scored
-    .filter((x) => x.local >= 55 && (x.markers > 0 || baseline >= 50))
+    .filter((x) => x.local >= 55 && (x.fromModel || x.markers > 0 || baseline >= 50))
     .sort((a, b) => b.local - a.local)
-    .slice(0, 12)
+    .slice(0, 14)
     .map((x) => ({
       start: x.s.start,
       end: x.s.end,
       text: x.s.text,
       category: "ai" as const,
       score: Math.round(x.local),
-      note: x.markers > 0 ? "Formulaic LLM phrasing" : "Low lexical variation",
+      note: x.why || (x.markers > 0 ? "Formulaic LLM phrasing" : "Low lexical variation"),
     }));
 }
 
-async function llmJudgement(sample: string, docType: string) {
+const AI_MODEL = "google/gemini-3.5-flash";
+
+async function callGateway(body: unknown, timeoutMs = 45000): Promise<any | null> {
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) return null;
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Lovable-API-Key": apiKey, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
-      body: JSON.stringify({
-        model: "google/gemini-3.5-flash",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a forensic academic-integrity examiner. Judge whether prose was machine generated and summarise the evidence. Respond with strict JSON only.",
-          },
-          {
-            role: "user",
-            content: `Document type: ${docType}. Return JSON {"ai_probability": 0-100, "confidence": "low|medium|high", "reasoning": "3-4 sentences of concrete stylistic evidence", "summary": "2 sentence integrity summary"}.\n\nExcerpt:\n${sample.slice(0, 6000)}`,
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(45000),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("[engine] AI gateway error", res.status, (await res.text()).slice(0, 300));
+      return null;
+    }
     const json: any = await res.json();
-    const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
-    return {
-      probability: Math.max(0, Math.min(100, Number(parsed.ai_probability ?? 0))),
-      confidence: String(parsed.confidence ?? "medium"),
-      reasoning: String(parsed.reasoning ?? ""),
-      summary: String(parsed.summary ?? ""),
-    };
-  } catch {
+    return JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
+  } catch (e) {
+    console.error("[engine] AI gateway call failed", e);
     return null;
   }
 }
+
+/** Per-sentence machine-generation verdicts from the language model. */
+async function llmSentenceScores(sentences: Sentence[]): Promise<Map<number, SentenceVerdict>> {
+  const out = new Map<number, SentenceVerdict>();
+  const indexed = sentences.map((s, i) => ({ s, i })).filter((x) => x.s.words.length >= 10);
+  if (indexed.length === 0) return out;
+  const limit = Math.min(30, indexed.length);
+  const step = indexed.length / limit;
+  const picked = Array.from({ length: limit }, (_, k) => indexed[Math.floor(k * step)]!);
+
+  const parsed = await callGateway({
+    model: AI_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an AI-text forensics classifier. For each numbered sentence, estimate the probability (0-100) that it was generated by a large language model rather than written by a human student. Reply with strict JSON only.",
+      },
+      {
+        role: "user",
+        content:
+          'Return {"items":[{"i":<id>,"p":<0-100>,"why":"<max 12 words of evidence>"}]} for every sentence.\n\n' +
+          picked.map((x) => `${x.i}: ${x.s.text.slice(0, 400)}`).join("\n"),
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  for (const item of (parsed?.items ?? []) as Array<{ i: number; p: number; why?: string }>) {
+    const p = Number(item.p);
+    if (!Number.isFinite(p) || !sentences[Number(item.i)]) continue;
+    out.set(Number(item.i), { p: Math.max(0, Math.min(100, p)), why: String(item.why ?? "").slice(0, 90) });
+  }
+  return out;
+}
+
+
+async function llmJudgement(sample: string, docType: string) {
+  const parsed = await callGateway({
+    model: AI_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a forensic academic-integrity examiner. Judge whether prose was machine generated and summarise the evidence. Respond with strict JSON only.",
+      },
+      {
+        role: "user",
+        content: `Document type: ${docType}. Return JSON {"ai_probability": 0-100, "confidence": "low|medium|high", "reasoning": "3-4 sentences of concrete stylistic evidence", "summary": "2 sentence integrity summary"}.\n\nExcerpt:\n${sample.slice(0, 6000)}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
+  if (!parsed) return null;
+  return {
+    probability: Math.max(0, Math.min(100, Number(parsed.ai_probability ?? 0))),
+    confidence: String(parsed.confidence ?? "medium"),
+    reasoning: String(parsed.reasoning ?? ""),
+    summary: String(parsed.summary ?? ""),
+  };
+}
+
 
 /* ------------------------------------------------------- 3. grammar (LT) */
 
@@ -537,18 +637,26 @@ export async function analyzeDocument(
   const sentences = splitSentences(text);
   const words = tokenize(text);
 
-  const [plag, grammar, citations, judgement] = await Promise.all([
+  const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
     detectPlagiarism(text, sentences),
     checkGrammar(text),
     verifyCitations(text),
     llmJudgement(text, meta.docType),
+    llmSentenceScores(sentences),
   ]);
 
   const sty = stylometry(text, sentences);
   const modelScore = judgement?.probability ?? null;
-  const aiScore = Math.round(modelScore === null ? sty.score : sty.score * 0.45 + modelScore * 0.55);
+  const sentenceMean =
+    sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
+  const aiScore = Math.round(
+    modelScore === null && sentenceMean === null
+      ? sty.score
+      : sty.score * 0.35 + (modelScore ?? sentenceMean!) * 0.4 + (sentenceMean ?? modelScore!) * 0.25,
+  );
   const confidence =
     judgement?.confidence ?? (Math.abs(aiScore - 50) > 25 ? "high" : Math.abs(aiScore - 50) > 12 ? "medium" : "low");
+
 
   const totalWords = words.length || 1;
   const plagWords = Math.min(totalWords, plag.matched_words);
@@ -575,7 +683,9 @@ export async function analyzeDocument(
     { category: "Original human writing", percent: pct(humanWords), words: humanWords },
   ];
 
+  const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
   const issues: IssueItem[] = [];
+
   for (const h of plag.highlights.slice(0, 20)) {
     issues.push({
       category: "Plagiarism",
@@ -585,7 +695,7 @@ export async function analyzeDocument(
       excerpt: h.text.slice(0, 260),
     });
   }
-  for (const h of (modelScore !== null || sty.score >= 50 ? aiHighlights(sentences, aiScore) : []).slice(0, 12)) {
+  for (const h of aiHl.slice(0, 12)) {
     issues.push({
       category: "AI content",
       severity: h.score >= 75 ? "high" : "medium",
@@ -607,7 +717,7 @@ export async function analyzeDocument(
     issues.push({ category: "Citation", severity: "medium", title: "Citation issue", detail: c });
   }
 
-  const aiHl = aiHighlights(sentences, aiScore);
+
 
   return {
     meta: {
