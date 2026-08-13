@@ -637,18 +637,26 @@ export async function analyzeDocument(
   const sentences = splitSentences(text);
   const words = tokenize(text);
 
-  const [plag, grammar, citations, judgement] = await Promise.all([
+  const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
     detectPlagiarism(text, sentences),
     checkGrammar(text),
     verifyCitations(text),
     llmJudgement(text, meta.docType),
+    llmSentenceScores(sentences),
   ]);
 
   const sty = stylometry(text, sentences);
   const modelScore = judgement?.probability ?? null;
-  const aiScore = Math.round(modelScore === null ? sty.score : sty.score * 0.45 + modelScore * 0.55);
+  const sentenceMean =
+    sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
+  const aiScore = Math.round(
+    modelScore === null && sentenceMean === null
+      ? sty.score
+      : sty.score * 0.35 + (modelScore ?? sentenceMean!) * 0.4 + (sentenceMean ?? modelScore!) * 0.25,
+  );
   const confidence =
     judgement?.confidence ?? (Math.abs(aiScore - 50) > 25 ? "high" : Math.abs(aiScore - 50) > 12 ? "medium" : "low");
+
 
   const totalWords = words.length || 1;
   const plagWords = Math.min(totalWords, plag.matched_words);
