@@ -462,42 +462,30 @@ async function llmSentenceScores(sentences: Sentence[]): Promise<Map<number, Sen
 
 
 async function llmJudgement(sample: string, docType: string) {
-  const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) return null;
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Lovable-API-Key": apiKey, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
-      body: JSON.stringify({
-        model: "google/gemini-3.5-flash",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a forensic academic-integrity examiner. Judge whether prose was machine generated and summarise the evidence. Respond with strict JSON only.",
-          },
-          {
-            role: "user",
-            content: `Document type: ${docType}. Return JSON {"ai_probability": 0-100, "confidence": "low|medium|high", "reasoning": "3-4 sentences of concrete stylistic evidence", "summary": "2 sentence integrity summary"}.\n\nExcerpt:\n${sample.slice(0, 6000)}`,
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (!res.ok) return null;
-    const json: any = await res.json();
-    const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
-    return {
-      probability: Math.max(0, Math.min(100, Number(parsed.ai_probability ?? 0))),
-      confidence: String(parsed.confidence ?? "medium"),
-      reasoning: String(parsed.reasoning ?? ""),
-      summary: String(parsed.summary ?? ""),
-    };
-  } catch {
-    return null;
-  }
+  const parsed = await callGateway({
+    model: AI_MODEL,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a forensic academic-integrity examiner. Judge whether prose was machine generated and summarise the evidence. Respond with strict JSON only.",
+      },
+      {
+        role: "user",
+        content: `Document type: ${docType}. Return JSON {"ai_probability": 0-100, "confidence": "low|medium|high", "reasoning": "3-4 sentences of concrete stylistic evidence", "summary": "2 sentence integrity summary"}.\n\nExcerpt:\n${sample.slice(0, 6000)}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+  });
+  if (!parsed) return null;
+  return {
+    probability: Math.max(0, Math.min(100, Number(parsed.ai_probability ?? 0))),
+    confidence: String(parsed.confidence ?? "medium"),
+    reasoning: String(parsed.reasoning ?? ""),
+    summary: String(parsed.summary ?? ""),
+  };
 }
+
 
 /* ------------------------------------------------------- 3. grammar (LT) */
 
