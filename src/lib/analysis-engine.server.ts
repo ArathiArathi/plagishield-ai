@@ -148,35 +148,60 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 type Candidate = { title: string; url?: string; text: string; kind: string };
 
-async function wikipediaCandidates(phrase: string): Promise<Candidate[]> {
-  const q = encodeURIComponent(`"${phrase.slice(0, 220)}"`);
-  const search = await getJson(
-    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${q}&srlimit=2&format=json&origin=*`,
+/** Cache of retrieved source documents for the current analysis run. */
+type SourceCache = Map<string, Candidate | null>;
+
+async function wikiSearch(query: string): Promise<string[]> {
+  const data = await getJson(
+    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&srwhat=text&format=json`,
   );
-  const hits: Array<{ title: string }> = search?.query?.search ?? [];
-  if (hits.length === 0) return [];
-  const titles = hits.map((h) => h.title).slice(0, 2);
-  const extract = await getJson(
-    `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&origin=*&titles=${encodeURIComponent(titles.join("|"))}`,
-  );
-  const pages: Record<string, { title: string; extract?: string }> = extract?.query?.pages ?? {};
-  return Object.values(pages)
-    .filter((p) => p.extract)
-    .map((p) => ({
-      title: `Wikipedia — ${p.title}`,
-      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`,
-      text: p.extract!.slice(0, 60000),
-      kind: "Encyclopaedia",
-    }));
+  return ((data?.query?.search ?? []) as Array<{ title: string }>).map((h) => h.title);
 }
 
-function openAlexAbstract(inverted: Record<string, number[]> | null | undefined) {
-  if (!inverted) return "";
-  const slots: string[] = [];
-  for (const [word, positions] of Object.entries(inverted)) {
-    for (const p of positions) slots[p] = word;
+async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate | null> {
+  const key = `wiki:${title}`;
+  if (cache.has(key)) return cache.get(key)!;
+  const data = await getJson(
+    `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&format=json&titles=${encodeURIComponent(title)}`,
+  );
+  const pages: Record<string, { title: string; extract?: string }> = data?.query?.pages ?? {};
+  const page = Object.values(pages)[0];
+  const candidate: Candidate | null = page?.extract
+    ? {
+        title: `Wikipedia — ${page.title}`,
+        url: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
+        text: page.extract.slice(0, 120000),
+        kind: "Encyclopaedia",
+      }
+    : null;
+  cache.set(key, candidate);
+  return candidate;
+}
+
+/**
+ * Build several search queries per sentence. Long quoted sentences return zero
+ * hits on full-text search engines, so we use short quoted windows (verbatim
+ * copy detection) plus a keyword query (paraphrase / topical detection).
+ */
+function searchQueries(sentence: string): string[] {
+  const words = sentence.match(/[A-Za-z0-9'’-]+/g) ?? [];
+  if (words.length < 8) return [];
+  const win = (i: number, n = 9) => words.slice(i, i + n).join(" ");
+  const queries = [`"${win(0)}"`];
+  if (words.length >= 20) queries.push(`"${win(Math.max(0, Math.floor(words.length / 2) - 4))}"`);
+  const keywords = words.filter((w) => w.length > 4).slice(0, 12).join(" ");
+  if (keywords.split(" ").length >= 4) queries.push(keywords);
+  return queries;
+}
+
+async function wikipediaCandidates(sentence: string, cache: SourceCache): Promise<Candidate[]> {
+  const titles = new Set<string>();
+  for (const q of searchQueries(sentence)) {
+    for (const t of await wikiSearch(q)) titles.add(t);
+    if (titles.size >= 3) break;
   }
-  return slots.filter(Boolean).join(" ");
+  const found = await mapLimit([...titles].slice(0, 3), 3, (t) => wikiExtract(t, cache));
+  return found.filter(Boolean) as Candidate[];
 }
 
 async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
@@ -201,26 +226,29 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
 
 async function detectPlagiarism(text: string, sentences: Sentence[]) {
   const totalWords = tokenize(text).length || 1;
-  const candidates = sentences
-    .filter((s) => s.words.length >= 9 && s.words.length <= 60)
-    .sort((a, b) => b.words.length - a.words.length)
-    .slice(0, 24)
-    .sort((a, b) => a.start - b.start)
-    .filter((_, i) => i % 2 === 0 || true)
-    .slice(0, 14);
+  const usable = sentences.filter((s) => s.words.length >= 8 && s.words.length <= 80);
+  // Even sampling across the whole document (not just the longest sentences)
+  const target = Math.min(18, usable.length);
+  const step = usable.length > target ? usable.length / target : 1;
+  const candidates: Sentence[] = [];
+  for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
+    candidates.push(usable[Math.floor(i * step)]!);
+  }
 
+  const cache: SourceCache = new Map();
   let queried = 0;
   const found = await mapLimit(candidates, 4, async (s) => {
-    const [wiki, alex] = await Promise.all([wikipediaCandidates(s.text), openAlexCandidates(s.text)]);
+    const [wiki, alex] = await Promise.all([wikipediaCandidates(s.text, cache), openAlexCandidates(s.text)]);
     const pool = [...wiki, ...alex];
     queried += pool.length;
     let best: { c: Candidate; score: number } | null = null;
     for (const c of pool) {
-      const score = containment(s.words, c.text, 4);
+      // 4-gram containment catches verbatim copies, 3-gram catches light edits.
+      const score = Math.max(containment(s.words, c.text, 4), Math.round(containment(s.words, c.text, 3) * 0.85));
       if (score > (best?.score ?? 0)) best = { c, score };
     }
-    if (!best || best.score < 32) return null;
-    return { sentence: s, source: best.c, similarity: best.score };
+    if (!best || best.score < 28) return null;
+    return { sentence: s, source: best.c, similarity: Math.min(100, best.score) };
   });
 
   const hits = found.filter(Boolean) as Array<{ sentence: Sentence; source: Candidate; similarity: number }>;
@@ -266,6 +294,7 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     queried,
   };
 }
+
 
 /* --------------------------------------------- 2. AI content detection */
 
