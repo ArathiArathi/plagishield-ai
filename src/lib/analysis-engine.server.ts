@@ -686,14 +686,31 @@ async function verifyCitations(text: string) {
 
 /* --------------------------------------------------------- orchestration */
 
+export type AnalysisStage = "extracting" | "retrieving" | "scoring" | "rendering";
+
 export async function analyzeDocument(
   rawText: string,
-  meta: { extraction: string; docType: string; title?: string | null; author?: string | null },
+  meta: {
+    extraction: string;
+    docType: string;
+    title?: string | null;
+    author?: string | null;
+    onStage?: (stage: AnalysisStage) => void | Promise<void>;
+  },
 ): Promise<AnalysisResults> {
+  const stage = async (s: AnalysisStage) => {
+    try {
+      await meta.onStage?.(s);
+    } catch {
+      /* progress reporting must never break the analysis */
+    }
+  };
+
   const text = rawText.replace(/\r/g, "").slice(0, 120000);
   const sentences = splitSentences(text);
   const words = tokenize(text);
 
+  await stage("retrieving");
   const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
     detectPlagiarism(text, sentences),
     checkGrammar(text),
@@ -702,7 +719,9 @@ export async function analyzeDocument(
     llmSentenceScores(sentences),
   ]);
 
+  await stage("scoring");
   const sty = stylometry(text, sentences);
+
   const modelScore = judgement?.probability ?? null;
   const sentenceMean =
     sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
