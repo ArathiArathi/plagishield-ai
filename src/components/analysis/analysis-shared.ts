@@ -12,7 +12,13 @@ export type Highlight = {
   source?: string;
   url?: string;
   note?: string;
+  /** Verbatim passage from the retrieved source that matched this segment. */
+  matched_snippet?: string;
+  /** Retrieval provider / detector that produced this evidence. */
+  provider?: string;
+  confidence?: "high" | "medium" | "low";
 };
+
 
 export type CompositionSlice = { category: string; percent: number; words: number };
 
