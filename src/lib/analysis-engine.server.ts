@@ -24,7 +24,14 @@ export type Highlight = {
   source?: string;
   url?: string;
   note?: string;
+  /** Verbatim passage from the retrieved source that matched this segment. */
+  matched_snippet?: string;
+  /** Which retrieval provider / detector produced this evidence. */
+  provider?: string;
+  /** Human-readable confidence label for this individual segment. */
+  confidence?: "high" | "medium" | "low";
 };
+
 
 export type IssueItem = {
   category: "Plagiarism" | "AI content" | "Grammar" | "Citation";
@@ -50,7 +57,7 @@ export type AnalysisResults = {
   plagiarism: {
     score: number;
     matched_words: number;
-    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string }>;
+    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string }>;
     highlights: Highlight[];
   };
   ai_detection: {
