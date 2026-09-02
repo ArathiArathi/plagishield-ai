@@ -20,7 +20,23 @@ async function execute(
   const { extractText } = await import("@/lib/text-extract.server");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  await supabase.from("analyses").update({ status: "processing", error: null }).eq("id", data.analysisId);
+  const STAGE_PCT: Record<string, number> = {
+    extracting: 15,
+    retrieving: 45,
+    scoring: 75,
+    rendering: 90,
+  };
+  const setStage = async (stage: string) => {
+    await supabase
+      .from("analyses")
+      .update({ stage, stage_pct: STAGE_PCT[stage] ?? 0 })
+      .eq("id", data.analysisId);
+  };
+
+  await supabase
+    .from("analyses")
+    .update({ status: "processing", error: null, stage: "extracting", stage_pct: STAGE_PCT.extracting })
+    .eq("id", data.analysisId);
   await supabase.from("documents").update({ status: "processing" }).eq("id", data.documentId);
 
   try {
@@ -46,7 +62,9 @@ async function execute(
       docType: doc?.doc_type ?? "other",
       title: doc?.paper_title ?? null,
       author: doc?.author_name ?? null,
+      onStage: (stage) => setStage(stage),
     });
+
 
     await supabase
       .from("analyses")
