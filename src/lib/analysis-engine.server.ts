@@ -759,7 +759,9 @@ export async function analyzeDocument(
     { category: "Original human writing", percent: pct(humanWords), words: humanWords },
   ];
 
+  await stage("rendering");
   const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
+
   const issues: IssueItem[] = [];
 
   for (const h of plag.highlights.slice(0, 20)) {
