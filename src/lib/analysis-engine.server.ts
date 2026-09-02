@@ -449,7 +449,10 @@ function aiHighlights(
       category: "ai" as const,
       score: Math.round(x.local),
       note: x.why || (x.markers > 0 ? "Formulaic LLM phrasing" : "Low lexical variation"),
+      provider: x.fromModel ? `Language-model sentence classifier (${AI_MODEL})` : "Stylometric classifier",
+      confidence: (x.local >= 75 ? "high" : x.local >= 62 ? "medium" : "low") as "high" | "medium" | "low",
     }));
+
 }
 
 const AI_MODEL = "google/gemini-3.5-flash";
@@ -603,7 +606,10 @@ async function checkGrammar(text: string) {
         category: "grammar",
         score: 100,
         note: String(m.message ?? "").slice(0, 160),
+        provider: "LanguageTool API",
+        confidence: "high",
       });
+
     }
   }
   if (ok === 0) provider = "Stylometric fallback (LanguageTool unavailable)";
