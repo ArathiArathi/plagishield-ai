@@ -211,6 +211,8 @@ async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate
         url: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
         text: page.extract.slice(0, 120000),
         kind: "Encyclopaedia",
+        provider: "Wikipedia REST/API",
+
       }
     : null;
   cache.set(key, candidate);
@@ -258,6 +260,8 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
         url: w.doi ?? w.primary_location?.landing_page_url ?? w.id,
         text: body,
         kind: "Scholarly publication",
+        provider: "OpenAlex works API",
+
       };
     })
     .filter((c) => c.text.length > 120);
