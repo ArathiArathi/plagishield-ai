@@ -153,7 +153,28 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 /* ------------------------------------------------- 1. source retrieval */
 
-type Candidate = { title: string; url?: string; text: string; kind: string };
+type Candidate = { title: string; url?: string; text: string; kind: string; provider?: string };
+
+/**
+ * Return the passage of `sourceText` that shares the most n-grams with the
+ * sentence — this is the verbatim evidence shown in report evidence panels.
+ */
+function bestWindow(sentence: string[], sourceText: string, n = 4): string {
+  const srcWords = sourceText.split(/\s+/).filter(Boolean);
+  if (srcWords.length === 0) return "";
+  const grams = ngrams(sentence, n);
+  if (grams.size === 0) return srcWords.slice(0, 45).join(" ");
+  const size = Math.max(20, Math.min(60, sentence.length + 10));
+  let best = { i: 0, hits: -1 };
+  for (let i = 0; i < srcWords.length; i += Math.max(4, Math.floor(size / 4))) {
+    const windowWords = tokenize(srcWords.slice(i, i + size).join(" "));
+    let hits = 0;
+    for (const g of ngrams(windowWords, n)) if (grams.has(g)) hits++;
+    if (hits > best.hits) best = { i, hits };
+  }
+  return srcWords.slice(best.i, best.i + size).join(" ").trim();
+}
+
 
 /** OpenAlex stores abstracts as an inverted index — rebuild the plain text. */
 function openAlexAbstract(inverted: Record<string, number[]> | null | undefined): string {
