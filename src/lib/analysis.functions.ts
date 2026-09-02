@@ -20,7 +20,23 @@ async function execute(
   const { extractText } = await import("@/lib/text-extract.server");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  await supabase.from("analyses").update({ status: "processing", error: null }).eq("id", data.analysisId);
+  const STAGE_PCT: Record<string, number> = {
+    extracting: 15,
+    retrieving: 45,
+    scoring: 75,
+    rendering: 90,
+  };
+  const setStage = async (stage: string) => {
+    await supabase
+      .from("analyses")
+      .update({ stage, stage_pct: STAGE_PCT[stage] ?? 0 })
+      .eq("id", data.analysisId);
+  };
+
+  await supabase
+    .from("analyses")
+    .update({ status: "processing", error: null, stage: "extracting", stage_pct: STAGE_PCT.extracting })
+    .eq("id", data.analysisId);
   await supabase.from("documents").update({ status: "processing" }).eq("id", data.documentId);
 
   try {
@@ -46,7 +62,9 @@ async function execute(
       docType: doc?.doc_type ?? "other",
       title: doc?.paper_title ?? null,
       author: doc?.author_name ?? null,
+      onStage: (stage) => setStage(stage),
     });
+
 
     await supabase
       .from("analyses")
@@ -58,6 +76,8 @@ async function execute(
         citation_score: result.citations.score,
         results: result,
         error: null,
+        stage: "completed",
+        stage_pct: 100,
       })
       .eq("id", data.analysisId);
 
@@ -65,7 +85,8 @@ async function execute(
     return { ok: true as const, analysisId: data.analysisId };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Analysis failed";
-    await supabase.from("analyses").update({ status: "failed", error: msg }).eq("id", data.analysisId);
+    await supabase.from("analyses").update({ status: "failed", error: msg, stage: "failed" }).eq("id", data.analysisId);
+
     await supabase.from("documents").update({ status: "failed" }).eq("id", data.documentId);
     return { ok: false as const, error: msg };
   }

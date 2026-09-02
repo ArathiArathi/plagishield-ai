@@ -24,7 +24,14 @@ export type Highlight = {
   source?: string;
   url?: string;
   note?: string;
+  /** Verbatim passage from the retrieved source that matched this segment. */
+  matched_snippet?: string;
+  /** Which retrieval provider / detector produced this evidence. */
+  provider?: string;
+  /** Human-readable confidence label for this individual segment. */
+  confidence?: "high" | "medium" | "low";
 };
+
 
 export type IssueItem = {
   category: "Plagiarism" | "AI content" | "Grammar" | "Citation";
@@ -50,7 +57,7 @@ export type AnalysisResults = {
   plagiarism: {
     score: number;
     matched_words: number;
-    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string }>;
+    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string }>;
     highlights: Highlight[];
   };
   ai_detection: {
@@ -146,7 +153,28 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 /* ------------------------------------------------- 1. source retrieval */
 
-type Candidate = { title: string; url?: string; text: string; kind: string };
+type Candidate = { title: string; url?: string; text: string; kind: string; provider?: string };
+
+/**
+ * Return the passage of `sourceText` that shares the most n-grams with the
+ * sentence — this is the verbatim evidence shown in report evidence panels.
+ */
+function bestWindow(sentence: string[], sourceText: string, n = 4): string {
+  const srcWords = sourceText.split(/\s+/).filter(Boolean);
+  if (srcWords.length === 0) return "";
+  const grams = ngrams(sentence, n);
+  if (grams.size === 0) return srcWords.slice(0, 45).join(" ");
+  const size = Math.max(20, Math.min(60, sentence.length + 10));
+  let best = { i: 0, hits: -1 };
+  for (let i = 0; i < srcWords.length; i += Math.max(4, Math.floor(size / 4))) {
+    const windowWords = tokenize(srcWords.slice(i, i + size).join(" "));
+    let hits = 0;
+    for (const g of ngrams(windowWords, n)) if (grams.has(g)) hits++;
+    if (hits > best.hits) best = { i, hits };
+  }
+  return srcWords.slice(best.i, best.i + size).join(" ").trim();
+}
+
 
 /** OpenAlex stores abstracts as an inverted index — rebuild the plain text. */
 function openAlexAbstract(inverted: Record<string, number[]> | null | undefined): string {
@@ -183,6 +211,8 @@ async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate
         url: `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
         text: page.extract.slice(0, 120000),
         kind: "Encyclopaedia",
+        provider: "Wikipedia REST/API",
+
       }
     : null;
   cache.set(key, candidate);
@@ -230,6 +260,8 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
         url: w.doi ?? w.primary_location?.landing_page_url ?? w.id,
         text: body,
         kind: "Scholarly publication",
+        provider: "OpenAlex works API",
+
       };
     })
     .filter((c) => c.text.length > 120);
@@ -259,10 +291,20 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
       if (score > (best?.score ?? 0)) best = { c, score };
     }
     if (!best || best.score < 28) return null;
-    return { sentence: s, source: best.c, similarity: Math.min(100, best.score) };
+    return {
+      sentence: s,
+      source: best.c,
+      similarity: Math.min(100, best.score),
+      matched_snippet: bestWindow(s.words, best.c.text),
+    };
   });
 
-  const hits = found.filter(Boolean) as Array<{ sentence: Sentence; source: Candidate; similarity: number }>;
+  const hits = found.filter(Boolean) as Array<{
+    sentence: Sentence;
+    source: Candidate;
+    similarity: number;
+    matched_snippet: string;
+  }>;
 
   const highlights: Highlight[] = hits.map((h) => ({
     start: h.sentence.start,
@@ -273,6 +315,9 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     source: h.source.title,
     url: h.source.url,
     note: h.source.kind,
+    matched_snippet: h.matched_snippet.slice(0, 600),
+    provider: h.source.provider ?? "Open web retrieval",
+    confidence: h.similarity >= 65 ? "high" : h.similarity >= 45 ? "medium" : "low",
   }));
 
   const matchedWords = hits.reduce((sum, h) => sum + Math.round((h.sentence.words.length * h.similarity) / 100), 0);
@@ -282,7 +327,10 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
   const rawScore = (matchedWords / Math.max(1, sampledWords)) * 100 * (0.55 + 0.45 * coverage);
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
-  const bySource = new Map<string, { source: string; url?: string; similarity: number; snippet: string; type: string }>();
+  const bySource = new Map<
+    string,
+    { source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string }
+  >();
   for (const h of hits) {
     const key = h.source.title;
     const prev = bySource.get(key);
@@ -293,9 +341,12 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
         similarity: h.similarity,
         snippet: h.sentence.text.slice(0, 320),
         type: h.source.kind,
+        matched_snippet: h.matched_snippet.slice(0, 600),
+        provider: h.source.provider ?? "Open web retrieval",
       });
     }
   }
+
 
   return {
     score,
@@ -398,7 +449,10 @@ function aiHighlights(
       category: "ai" as const,
       score: Math.round(x.local),
       note: x.why || (x.markers > 0 ? "Formulaic LLM phrasing" : "Low lexical variation"),
+      provider: x.fromModel ? `Language-model sentence classifier (${AI_MODEL})` : "Stylometric classifier",
+      confidence: (x.local >= 75 ? "high" : x.local >= 62 ? "medium" : "low") as "high" | "medium" | "low",
     }));
+
 }
 
 const AI_MODEL = "google/gemini-3.5-flash";
@@ -552,7 +606,10 @@ async function checkGrammar(text: string) {
         category: "grammar",
         score: 100,
         note: String(m.message ?? "").slice(0, 160),
+        provider: "LanguageTool API",
+        confidence: "high",
       });
+
     }
   }
   if (ok === 0) provider = "Stylometric fallback (LanguageTool unavailable)";
@@ -629,14 +686,31 @@ async function verifyCitations(text: string) {
 
 /* --------------------------------------------------------- orchestration */
 
+export type AnalysisStage = "extracting" | "retrieving" | "scoring" | "rendering";
+
 export async function analyzeDocument(
   rawText: string,
-  meta: { extraction: string; docType: string; title?: string | null; author?: string | null },
+  meta: {
+    extraction: string;
+    docType: string;
+    title?: string | null;
+    author?: string | null;
+    onStage?: (stage: AnalysisStage) => void | Promise<void>;
+  },
 ): Promise<AnalysisResults> {
+  const stage = async (s: AnalysisStage) => {
+    try {
+      await meta.onStage?.(s);
+    } catch {
+      /* progress reporting must never break the analysis */
+    }
+  };
+
   const text = rawText.replace(/\r/g, "").slice(0, 120000);
   const sentences = splitSentences(text);
   const words = tokenize(text);
 
+  await stage("retrieving");
   const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
     detectPlagiarism(text, sentences),
     checkGrammar(text),
@@ -645,7 +719,9 @@ export async function analyzeDocument(
     llmSentenceScores(sentences),
   ]);
 
+  await stage("scoring");
   const sty = stylometry(text, sentences);
+
   const modelScore = judgement?.probability ?? null;
   const sentenceMean =
     sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
@@ -683,7 +759,9 @@ export async function analyzeDocument(
     { category: "Original human writing", percent: pct(humanWords), words: humanWords },
   ];
 
+  await stage("rendering");
   const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
+
   const issues: IssueItem[] = [];
 
   for (const h of plag.highlights.slice(0, 20)) {

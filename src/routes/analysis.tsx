@@ -6,8 +6,9 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Sparkles,
+  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
 } from "lucide-react";
+
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -22,6 +23,8 @@ import { runAnalysis } from "@/lib/analysis.functions";
 import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
 import { CompositionChart } from "@/components/analysis/CompositionChart";
 import { IssueList } from "@/components/analysis/IssueList";
+import { EvidencePanel } from "@/components/analysis/EvidencePanel";
+
 import type { CompositionSlice, Highlight, IssueItem } from "@/components/analysis/analysis-shared";
 import { cn } from "@/lib/utils";
 
@@ -224,8 +227,9 @@ function AnalysisPage() {
 
         <Card className="p-5">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid h-auto w-full grid-cols-4 sm:grid-cols-7">
+            <TabsList className="grid h-auto w-full grid-cols-4 sm:grid-cols-8">
               <TabsTrigger value="highlights" className="flex-col gap-1 py-2 text-[11px]"><Highlighter className="h-4 w-4" />Highlights</TabsTrigger>
+              <TabsTrigger value="evidence" className="flex-col gap-1 py-2 text-[11px]"><Quote className="h-4 w-4" />Evidence</TabsTrigger>
               <TabsTrigger value="issues" className="flex-col gap-1 py-2 text-[11px]"><ListChecks className="h-4 w-4" />Issues</TabsTrigger>
               <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Plagiarism</TabsTrigger>
               <TabsTrigger value="ai" className="flex-col gap-1 py-2 text-[11px]"><Sparkles className="h-4 w-4" />AI Detection</TabsTrigger>
@@ -241,9 +245,17 @@ function AnalysisPage() {
               <HighlightedDocument text={excerpt} highlights={allHighlights} />
             </TabsContent>
 
+            <TabsContent value="evidence" className="mt-5 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Every flagged segment with its matched source snippet, retrieval provider and confidence.
+              </p>
+              <EvidencePanel highlights={allHighlights} />
+            </TabsContent>
+
             <TabsContent value="issues" className="mt-5">
               <IssueList issues={engineIssues} />
             </TabsContent>
+
 
 
             <TabsContent value="plagiarism" className="mt-5 space-y-5">
