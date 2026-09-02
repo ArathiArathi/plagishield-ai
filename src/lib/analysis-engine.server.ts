@@ -291,10 +291,20 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
       if (score > (best?.score ?? 0)) best = { c, score };
     }
     if (!best || best.score < 28) return null;
-    return { sentence: s, source: best.c, similarity: Math.min(100, best.score) };
+    return {
+      sentence: s,
+      source: best.c,
+      similarity: Math.min(100, best.score),
+      matched_snippet: bestWindow(s.words, best.c.text),
+    };
   });
 
-  const hits = found.filter(Boolean) as Array<{ sentence: Sentence; source: Candidate; similarity: number }>;
+  const hits = found.filter(Boolean) as Array<{
+    sentence: Sentence;
+    source: Candidate;
+    similarity: number;
+    matched_snippet: string;
+  }>;
 
   const highlights: Highlight[] = hits.map((h) => ({
     start: h.sentence.start,
@@ -305,6 +315,9 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     source: h.source.title,
     url: h.source.url,
     note: h.source.kind,
+    matched_snippet: h.matched_snippet.slice(0, 600),
+    provider: h.source.provider ?? "Open web retrieval",
+    confidence: h.similarity >= 65 ? "high" : h.similarity >= 45 ? "medium" : "low",
   }));
 
   const matchedWords = hits.reduce((sum, h) => sum + Math.round((h.sentence.words.length * h.similarity) / 100), 0);
@@ -314,7 +327,10 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
   const rawScore = (matchedWords / Math.max(1, sampledWords)) * 100 * (0.55 + 0.45 * coverage);
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
-  const bySource = new Map<string, { source: string; url?: string; similarity: number; snippet: string; type: string }>();
+  const bySource = new Map<
+    string,
+    { source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string }
+  >();
   for (const h of hits) {
     const key = h.source.title;
     const prev = bySource.get(key);
@@ -325,9 +341,12 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
         similarity: h.similarity,
         snippet: h.sentence.text.slice(0, 320),
         type: h.source.kind,
+        matched_snippet: h.matched_snippet.slice(0, 600),
+        provider: h.source.provider ?? "Open web retrieval",
       });
     }
   }
+
 
   return {
     score,
