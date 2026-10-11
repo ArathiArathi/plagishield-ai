@@ -1,0 +1,4 @@
+- [ ] Inspect Phase 7 requirements and existing document, analysis, and authentication flows.
+- [ ] Add an isolated public-submission schema with full-text public read and owner-only submission writes.
+- [ ] Implement the public submission, live analysis status, search, score, and full-document view.
+- [ ] Update Phase 7 documentation and verify the affected build and public/private boundaries.
