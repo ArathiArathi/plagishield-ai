@@ -36,21 +36,25 @@ const avg = (nums: number[]) =>
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function useWorkspaceData() {
-  const queryClient = useQueryClient();
+let activeChannel: ReturnType<typeof supabase.channel> | null = null;
+const activeClients = new Set<ReturnType<typeof useQueryClient>>();
 
-  // Real-time Supabase subscription for instant live updates
-  useEffect(() => {
-    const channel = supabase
-      .channel("workspace-realtime-sync")
+function attachRealtimeListener(queryClient: ReturnType<typeof useQueryClient>) {
+  activeClients.add(queryClient);
+
+  if (!activeChannel) {
+    activeChannel = supabase
+      .channel(`workspace-sync-${Date.now()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "analyses" },
         async () => {
           await secureUserCache.invalidateByTag("analyses");
           await secureUserCache.invalidateByTag("workspace");
-          queryClient.invalidateQueries({ queryKey: ["workspace-data"] });
-          queryClient.invalidateQueries({ queryKey: ["analyses-latest"] });
+          activeClients.forEach((qc) => {
+            qc.invalidateQueries({ queryKey: ["workspace-data"] });
+            qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+          });
         },
       )
       .on(
@@ -59,15 +63,34 @@ export function useWorkspaceData() {
         async () => {
           await secureUserCache.invalidateByTag("documents");
           await secureUserCache.invalidateByTag("workspace");
-          queryClient.invalidateQueries({ queryKey: ["workspace-data"] });
-          queryClient.invalidateQueries({ queryKey: ["documents"] });
+          activeClients.forEach((qc) => {
+            qc.invalidateQueries({ queryKey: ["workspace-data"] });
+            qc.invalidateQueries({ queryKey: ["documents"] });
+          });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          console.warn("[Realtime] Subscription error on workspace sync channel");
+        }
+      });
+  }
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+  return () => {
+    activeClients.delete(queryClient);
+    if (activeClients.size === 0 && activeChannel) {
+      supabase.removeChannel(activeChannel);
+      activeChannel = null;
+    }
+  };
+}
+
+export function useWorkspaceData() {
+  const queryClient = useQueryClient();
+
+  // Real-time Supabase subscription with safe ref-counted channel management
+  useEffect(() => {
+    return attachRealtimeListener(queryClient);
   }, [queryClient]);
 
   return useQuery({
