@@ -6,7 +6,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  AlertTriangle, BookOpen, Check, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
+  AlertTriangle, BookOpen, Check, FileDown, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
 } from "lucide-react";
 
 
@@ -219,6 +219,14 @@ function AnalysisPage() {
                 "Run Analysis"
               )}
             </Button>
+            {status === "completed" && (
+              <Button asChild size="sm" variant="outline" className="gap-1.5">
+                <Link to="/reports" search={{ doc: selectedDoc.id }}>
+                  <FileDown className="h-4 w-4 text-primary" />
+                  PDF Report
+                </Link>
+              </Button>
+            )}
           </>
         }
       />

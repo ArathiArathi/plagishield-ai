@@ -22,8 +22,12 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useUserProfile } from "@/hooks/use-user-profile";
+import { useSubscription, SUBSCRIPTION_PLANS, type SubscriptionPlanId } from "@/hooks/use-subscription";
+import { UpgradeModal } from "@/components/subscription/UpgradeModal";
 import { secureUserCache, type CacheStats } from "@/lib/cache/secure-cache";
+import { Sparkles, CheckCircle, CreditCard, Check } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -37,6 +41,8 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { profile, fullName, role, updateProfile, isUpdating } = useUserProfile();
+  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent, changePlan } = useSubscription();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const [form, setForm] = useState({
     firstName: "",
@@ -99,17 +105,142 @@ function SettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Settings"
-        description="Manage your profile, security, encrypted cache memory, and integrations."
+        description="Manage your profile, subscription, security, encrypted cache memory, and integrations."
       />
 
       <Tabs defaultValue="profile">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full max-w-2xl">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto p-1 gap-1">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="cache">Cache Memory</TabsTrigger>
+          <TabsTrigger value="subscription" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Subscription
+          </TabsTrigger>
+          <TabsTrigger value="cache">Secure Cache</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="api">API</TabsTrigger>
         </TabsList>
+
+        {/* Subscription Tab */}
+        <TabsContent value="subscription" className="mt-5 space-y-6">
+          <Card className="p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-foreground">Current Subscription</h3>
+                  <Badge variant="outline" className="border-primary/40 text-primary font-semibold">
+                    {plan.name}
+                  </Badge>
+                  {plan.badge && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                      {plan.badge}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You are currently on the <span className="font-medium text-foreground">{plan.name}</span>. Documents analyzed reset with your active quota.
+                </p>
+              </div>
+              <Button onClick={() => setUpgradeOpen(true)} className="gap-2 shadow-sm shrink-0">
+                <Sparkles className="h-4 w-4" />
+                Change Plan / Upgrade
+              </Button>
+            </div>
+
+            <Separator className="my-5" />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-foreground">Document Usage</span>
+                <span className="font-semibold text-foreground">
+                  {docsUsed} / {docLimit} documents used ({Math.max(0, docLimit - docsUsed)} remaining)
+                </span>
+              </div>
+              <Progress value={usagePercent} className="h-3" />
+              <p className="text-xs text-muted-foreground">
+                {isLimitReached
+                  ? "You have reached your document limit. Upgrade to Pro, Plus, or Premium to analyze more documents."
+                  : `${Math.round(100 - usagePercent)}% of your document quota is still available.`}
+              </p>
+            </div>
+          </Card>
+
+          {/* Tier comparison cards */}
+          <div>
+            <div className="mb-4">
+              <h4 className="text-base font-semibold text-foreground">Available Subscription Tiers</h4>
+              <p className="text-xs text-muted-foreground">Select a plan tailored to your academic or institutional research volume.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {(Object.keys(SUBSCRIPTION_PLANS) as SubscriptionPlanId[]).map((tierKey) => {
+                const tier = SUBSCRIPTION_PLANS[tierKey];
+                const isCurrent = planId === tierKey;
+                return (
+                  <Card
+                    key={tier.id}
+                    className={`p-5 flex flex-col justify-between transition-all ${
+                      isCurrent
+                        ? "border-primary shadow-md ring-2 ring-primary/20 bg-primary/[0.02]"
+                        : "border-border hover:border-border/80"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h5 className="font-semibold text-foreground">{tier.name}</h5>
+                        {isCurrent && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-foreground">
+                          {tier.priceMonthly === 0 ? "Free" : `$${tier.priceMonthly}`}
+                        </span>
+                        {tier.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-primary">
+                        {tier.docLimit} document limit
+                      </p>
+
+                      <Separator className="my-3" />
+
+                      <ul className="space-y-2 text-xs text-muted-foreground">
+                        {tier.features.map((feat) => (
+                          <li key={feat} className="flex items-start gap-2">
+                            <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="mt-5 pt-3 border-t border-border/50">
+                      {isCurrent ? (
+                        <Button variant="outline" size="sm" className="w-full" disabled>
+                          Active Plan
+                        </Button>
+                      ) : (
+                        <Button
+                          variant={tier.popular ? "default" : "outline"}
+                          size="sm"
+                          className="w-full"
+                          onClick={() => {
+                            changePlan(tier.id);
+                            toast.success(`Switched to ${tier.name}! Limit updated to ${tier.docLimit} documents.`);
+                          }}
+                        >
+                          Switch to {tier.name.split(" ")[0]}
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </TabsContent>
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="mt-5">
@@ -378,6 +509,8 @@ function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />
     </div>
   );
 }

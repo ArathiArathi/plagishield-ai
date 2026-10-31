@@ -58,6 +58,10 @@ type AnalysisRow = {
   similarity_score: number | null; ai_score: number | null;
 };
 
+import { useSubscription } from "@/hooks/use-subscription";
+import { UpgradeModal } from "@/components/subscription/UpgradeModal";
+import { Sparkles, AlertCircle } from "lucide-react";
+
 const DOC_TYPES = [
   { value: "research", label: "Research paper" },
   { value: "assignment", label: "Assignment" },
@@ -83,6 +87,8 @@ function DocumentsPage() {
   const [historyOpen, setHistoryOpen] = useState<DocRow | null>(null);
   const [pending, setPending] = useState<{ file: File; existingDocId?: string } | null>(null);
   const [meta, setMeta] = useState<UploadMeta>({ docType: "research", authorName: "", paperTitle: "" });
+  const { plan, docsUsed, docLimit, isLimitReached } = useSubscription();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
 
   const docsQ = useQuery({
@@ -139,6 +145,11 @@ function DocumentsPage() {
 
   const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;
+    if (!existingDocId && isLimitReached) {
+      toast.error(`${plan.name} limit of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium.`);
+      setUpgradeOpen(true);
+      return;
+    }
     setUploadProgress(5);
     try {
       let documentId = existingDocId;
@@ -208,13 +219,18 @@ function DocumentsPage() {
       toast.error(msg);
       setUploadProgress(null);
     }
-  }, [user, refresh, drainQueue, qc]);
+  }, [user, refresh, drainQueue, qc, isLimitReached, plan.name, docLimit]);
 
   const startUpload = useCallback((file: File, existingDocId?: string) => {
+    if (!existingDocId && isLimitReached) {
+      toast.error(`${plan.name} limit of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium to upload more.`);
+      setUpgradeOpen(true);
+      return;
+    }
     const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
     setMeta((m) => ({ ...m, paperTitle: m.paperTitle || base }));
     setPending({ file, existingDocId });
-  }, []);
+  }, [isLimitReached, plan.name, docLimit]);
 
   const reanalyze = useCallback(async (doc: DocRow) => {
     const { data: ver } = await supabase
@@ -317,11 +333,47 @@ function DocumentsPage() {
         title="Documents"
         description="Upload, version, and analyze your documents."
         actions={
-          <Button size="sm" onClick={() => fileRef.current?.click()}>
-            <Upload className="mr-1.5 h-4 w-4" />Upload
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground hover:bg-muted transition-colors"
+            >
+              <span className="font-medium">{docsUsed} / {docLimit} docs</span>
+              <span className="text-primary font-semibold">({plan.name})</span>
+              <Sparkles className="h-3 w-3 text-primary" />
+            </button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (isLimitReached) {
+                  toast.error(`${plan.name} limit of ${docLimit} documents reached. Upgrade your plan to upload more.`);
+                  setUpgradeOpen(true);
+                } else {
+                  fileRef.current?.click();
+                }
+              }}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />Upload
+            </Button>
+          </div>
         }
       />
+
+      {isLimitReached && (
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-warning/40 bg-warning/10 p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-warning shrink-0" />
+            <div className="text-xs">
+              <p className="font-semibold text-foreground">Document limit reached for {plan.name} ({docLimit} documents)</p>
+              <p className="text-muted-foreground mt-0.5">Upgrade to Pro (15 docs), Plus (25 docs), or Premium (35 docs) to continue uploading.</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setUpgradeOpen(true)} className="shrink-0 text-xs">
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />Upgrade plan
+          </Button>
+        </Card>
+      )}
 
       <Card
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -516,8 +568,8 @@ function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />
     </div>
-
   );
 }
 
