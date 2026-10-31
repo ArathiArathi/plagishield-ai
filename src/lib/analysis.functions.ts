@@ -11,59 +11,76 @@ const InputSchema = z.object({
 
 type Ctx = { supabase: any; userId: string };
 
+const STAGE_PCT: Record<string, number> = {
+  extracting: 15,
+  retrieving: 45,
+  scoring: 75,
+  rendering: 90,
+};
+
 async function execute(
   context: Ctx,
   data: { analysisId: string; documentId: string; versionId: string; storagePath: string },
 ) {
-  const { supabase } = context;
   const { analyzeDocument } = await import("@/lib/analysis-engine.server");
   const { extractText } = await import("@/lib/text-extract.server");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  const STAGE_PCT: Record<string, number> = {
-    extracting: 15,
-    retrieving: 45,
-    scoring: 75,
-    rendering: 90,
-  };
+  // Track progress in results JSON so it doesn't fail on tables without separate stage columns
   const setStage = async (stage: string) => {
-    const { error } = await supabase
-      .from("analyses")
-      .update({ stage, stage_pct: STAGE_PCT[stage] ?? 0 })
-      .eq("id", data.analysisId);
-    if (error) throw error;
+    try {
+      await supabaseAdmin
+        .from("analyses")
+        .update({
+          results: { stage, stage_pct: STAGE_PCT[stage] ?? 0 },
+        })
+        .eq("id", data.analysisId);
+    } catch {
+      // Progress reporting must not interrupt the analysis pipeline
+    }
   };
 
   try {
-    const { error: analysisUpdateError } = await supabase
+    // 1. Mark analysis & document as processing
+    const { error: analysisUpdateError } = await supabaseAdmin
       .from("analyses")
-      .update({ status: "processing", error: null, stage: "extracting", stage_pct: STAGE_PCT.extracting })
+      .update({
+        status: "processing",
+        error: null,
+        results: { stage: "extracting", stage_pct: STAGE_PCT.extracting },
+      })
       .eq("id", data.analysisId);
     if (analysisUpdateError) throw analysisUpdateError;
 
-    const { error: documentUpdateError } = await supabase
+    const { error: documentUpdateError } = await supabaseAdmin
       .from("documents")
       .update({ status: "processing" })
       .eq("id", data.documentId);
     if (documentUpdateError) throw documentUpdateError;
 
-    const { data: doc } = await supabase
+    // 2. Fetch document metadata
+    const { data: doc } = await supabaseAdmin
       .from("documents")
       .select("name,doc_type,author_name,paper_title")
       .eq("id", data.documentId)
       .single();
 
-    const { data: file, error: dlErr } = await supabaseAdmin.storage.from("documents").download(data.storagePath);
+    // 3. Download uploaded file from private storage
+    const { data: file, error: dlErr } = await supabaseAdmin.storage
+      .from("documents")
+      .download(data.storagePath);
     if (dlErr || !file) throw new Error(dlErr?.message ?? "Stored file could not be downloaded");
 
     const buf = await file.arrayBuffer();
     const { text, method } = await extractText(buf, doc?.name ?? data.storagePath);
-    if (text.replace(/\s+/g, " ").trim().length < 200) {
+
+    if (text.replace(/\s+/g, " ").trim().length < 50) {
       throw new Error(
         "Not enough readable text could be extracted from this file. Upload a text-based PDF, DOCX, TXT or MD file (scanned images are not supported).",
       );
     }
 
+    // 4. Run the multi-dimensional analysis engine
     const result = await analyzeDocument(text, {
       extraction: method,
       docType: doc?.doc_type ?? "other",
@@ -72,8 +89,8 @@ async function execute(
       onStage: (stage) => setStage(stage),
     });
 
-
-    const { error: analysisSaveError } = await supabase
+    // 5. Save completed results
+    const { error: analysisSaveError } = await supabaseAdmin
       .from("analyses")
       .update({
         status: "completed",
@@ -81,25 +98,45 @@ async function execute(
         ai_score: result.ai_detection.score,
         grammar_score: result.grammar.score,
         citation_score: result.citations.score,
-        results: result,
+        results: {
+          ...result,
+          stage: "completed",
+          stage_pct: 100,
+        },
         error: null,
-        stage: "completed",
-        stage_pct: 100,
       })
       .eq("id", data.analysisId);
     if (analysisSaveError) throw analysisSaveError;
 
-    const { error: documentSaveError } = await supabase
+    const { error: documentSaveError } = await supabaseAdmin
       .from("documents")
       .update({ status: "analyzed" })
       .eq("id", data.documentId);
     if (documentSaveError) throw documentSaveError;
+
     return { ok: true as const, analysisId: data.analysisId };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Analysis failed";
-    await supabase.from("analyses").update({ status: "failed", error: msg, stage: "failed" }).eq("id", data.analysisId);
+    console.error(`[Analysis Worker] Error analyzing document ${data.documentId}:`, msg);
 
-    await supabase.from("documents").update({ status: "failed" }).eq("id", data.documentId);
+    try {
+      await supabaseAdmin
+        .from("analyses")
+        .update({
+          status: "failed",
+          error: msg,
+          results: { stage: "failed", error: msg },
+        })
+        .eq("id", data.analysisId);
+
+      await supabaseAdmin
+        .from("documents")
+        .update({ status: "failed" })
+        .eq("id", data.documentId);
+    } catch (saveErr) {
+      console.error("[Analysis Worker] Failed updating error status:", saveErr);
+    }
+
     return { ok: false as const, error: msg };
   }
 }
@@ -107,7 +144,7 @@ async function execute(
 /** Run (or re-run) the analysis for a specific version — used by "Re-analyze". */
 export const runAnalysis = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input) => InputSchema.parse(input))
+  .validator((input) => InputSchema.parse(input))
   .handler(async ({ data, context }) => execute(context as unknown as Ctx, data));
 
 /**
@@ -119,44 +156,58 @@ export const processQueue = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
-    const { supabase } = ctx;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: processing, error: processingError } = await supabase
+    // Check for running analyses for this user
+    const { data: processing, error: processingError } = await supabaseAdmin
       .from("analyses")
-      .select("id,document_id,updated_at")
+      .select("id,document_id,updated_at,documents!inner(owner_id)")
       .eq("status", "processing")
+      .eq("documents.owner_id", ctx.userId)
       .order("updated_at", { ascending: true });
     if (processingError) throw processingError;
 
-    const STALE_MS = 6 * 60 * 1000;
+    const STALE_MS = 6 * 60 * 1000; // 6 minutes
+    const now = Date.now();
+
     const active = (processing ?? []).filter(
-      (a: { updated_at: string }) => Date.now() - new Date(a.updated_at).getTime() < STALE_MS,
+      (a: { updated_at: string }) => now - new Date(a.updated_at).getTime() < STALE_MS,
     );
     const stale = (processing ?? []).filter(
-      (a: { updated_at: string }) => Date.now() - new Date(a.updated_at).getTime() >= STALE_MS,
+      (a: { updated_at: string }) => now - new Date(a.updated_at).getTime() >= STALE_MS,
     );
-    for (const s of stale) {
-      const { error: staleAnalysisError } = await supabase
-        .from("analyses")
-        .update({ status: "failed", error: "Analysis timed out — please re-run.", stage: "failed" })
-        .eq("id", s.id);
-      if (staleAnalysisError) throw staleAnalysisError;
 
-      const { error: staleDocumentError } = await supabase
-        .from("documents")
-        .update({ status: "failed" })
-        .eq("id", s.document_id);
-      if (staleDocumentError) throw staleDocumentError;
+    // Timeout stale jobs for this user
+    for (const s of stale) {
+      try {
+        await supabaseAdmin
+          .from("analyses")
+          .update({
+            status: "failed",
+            error: "Analysis timed out — please re-run.",
+            results: { stage: "failed", error: "Analysis timed out" },
+          })
+          .eq("id", s.id);
+
+        await supabaseAdmin
+          .from("documents")
+          .update({ status: "failed" })
+          .eq("id", s.document_id);
+      } catch (err) {
+        console.warn("[processQueue] Error cleaning stale job:", err);
+      }
     }
 
     if (active.length > 0) {
       return { started: false as const, reason: "busy" as const, activeId: active[0]!.id };
     }
 
-    const { data: pending, error: pendingError } = await supabase
+    // Pick the oldest pending analysis for this user
+    const { data: pending, error: pendingError } = await supabaseAdmin
       .from("analyses")
-      .select("id,document_id,version_id")
+      .select("id,document_id,version_id,documents!inner(owner_id)")
       .eq("status", "pending")
+      .eq("documents.owner_id", ctx.userId)
       .order("created_at", { ascending: true })
       .limit(1);
     if (pendingError) throw pendingError;
@@ -164,7 +215,7 @@ export const processQueue = createServerFn({ method: "POST" })
     const next = pending?.[0];
     if (!next) return { started: false as const, reason: "empty" as const };
 
-    const { data: version, error: versionError } = await supabase
+    const { data: version, error: versionError } = await supabaseAdmin
       .from("document_versions")
       .select("storage_path")
       .eq("id", next.version_id)
@@ -172,16 +223,20 @@ export const processQueue = createServerFn({ method: "POST" })
     if (versionError) throw versionError;
 
     if (!version?.storage_path) {
-      const { error: failedAnalysisError } = await supabase
+      await supabaseAdmin
         .from("analyses")
-        .update({ status: "failed", error: "Stored file missing for this version", stage: "failed" })
+        .update({
+          status: "failed",
+          error: "Stored file missing for this version",
+          results: { stage: "failed" },
+        })
         .eq("id", next.id);
-      if (failedAnalysisError) throw failedAnalysisError;
-      const { error: failedDocumentError } = await supabase
+
+      await supabaseAdmin
         .from("documents")
         .update({ status: "failed" })
         .eq("id", next.document_id);
-      if (failedDocumentError) throw failedDocumentError;
+
       return {
         started: true as const,
         ok: false as const,
@@ -189,9 +244,14 @@ export const processQueue = createServerFn({ method: "POST" })
       };
     }
 
-    const { data: claimed, error: claimError } = await supabase
+    // Atomically claim the pending job
+    const { data: claimed, error: claimError } = await supabaseAdmin
       .from("analyses")
-      .update({ status: "processing", error: null, stage: "extracting", stage_pct: 15 })
+      .update({
+        status: "processing",
+        error: null,
+        results: { stage: "extracting", stage_pct: 15 },
+      })
       .eq("id", next.id)
       .eq("status", "pending")
       .select("id")
@@ -199,6 +259,7 @@ export const processQueue = createServerFn({ method: "POST" })
     if (claimError) throw claimError;
     if (!claimed) return { started: false as const, reason: "claimed" as const };
 
+    // Execute the analysis pipeline
     const res = await execute(ctx, {
       analysisId: next.id,
       documentId: next.document_id,

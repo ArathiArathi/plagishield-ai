@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
+import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
+import { secureUserCache } from "@/lib/cache/secure-cache";
 import { runAnalysis } from "@/lib/analysis.functions";
 import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
 import { CompositionChart } from "@/components/analysis/CompositionChart";
@@ -67,6 +69,7 @@ function AnalysisPage() {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const { data, isPending } = useWorkspaceData();
+  const { drain: drainQueue } = useAnalysisQueue({ autoStart: true });
   const [tab, setTab] = useState("highlights");
   const [rerunning, setRerunning] = useState(false);
 
@@ -82,32 +85,56 @@ function AnalysisPage() {
   const results = (analysis?.results ?? {}) as Results;
 
   const handleRerun = async () => {
-    if (!selectedDoc || !analysis) return;
+    if (!selectedDoc) return;
     setRerunning(true);
     try {
-      const { data: version, error } = await supabase
+      // Find the latest version of this document
+      const { data: version, error: vErr } = await supabase
         .from("document_versions")
-        .select("storage_path")
-        .eq("id", analysis.version_id)
+        .select("id, storage_path")
+        .eq("document_id", selectedDoc.id)
+        .order("version", { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (error) throw error;
-      if (!version?.storage_path) throw new Error("Stored file not found for this version");
+      if (vErr) throw vErr;
+      if (!version?.storage_path) throw new Error("Stored file not found for this document");
+
+      let targetAnalysisId = analysis?.id;
+      if (!targetAnalysisId) {
+        // Create an analysis record if one doesn't exist yet
+        const { data: newAnalysis, error: aErr } = await supabase
+          .from("analyses")
+          .insert({
+            document_id: selectedDoc.id,
+            version_id: version.id,
+            status: "pending",
+          })
+          .select("id")
+          .single();
+        if (aErr) throw aErr;
+        targetAnalysisId = newAnalysis.id;
+      }
 
       const res = await runAnalysis({
         data: {
-          analysisId: analysis.id,
-          documentId: analysis.document_id,
-          versionId: analysis.version_id,
+          analysisId: targetAnalysisId,
+          documentId: selectedDoc.id,
+          versionId: version.id,
           storagePath: version.storage_path,
         },
       });
       if (!res.ok) throw new Error(res.error ?? "Analysis failed");
-      toast.success("Analysis refreshed");
+      toast.success("Analysis complete");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not re-run analysis");
+      toast.error(e instanceof Error ? e.message : "Could not run analysis");
     } finally {
       setRerunning(false);
+      await secureUserCache.invalidateByTag("analyses");
+      await secureUserCache.invalidateByTag("workspace");
+      await secureUserCache.invalidateByTag("documents");
       await queryClient.invalidateQueries({ queryKey: ["workspace-data"] });
+      await queryClient.invalidateQueries({ queryKey: ["analyses-latest"] });
+      await queryClient.invalidateQueries({ queryKey: ["documents"] });
     }
   };
 
@@ -183,23 +210,44 @@ function AnalysisPage() {
                 {documents.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Button size="sm" onClick={handleRerun} disabled={rerunning || !analysis}>
-              {rerunning ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Re-analyzing…</> : "Re-analyze"}
+            <Button size="sm" onClick={handleRerun} disabled={rerunning || status === "processing"}>
+              {rerunning || status === "processing" ? (
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Analyzing…</>
+              ) : analysis ? (
+                "Re-analyze"
+              ) : (
+                "Run Analysis"
+              )}
             </Button>
           </>
         }
       />
 
       {status !== "completed" && (
-        <Card className="flex items-center gap-3 p-4">
-          {status === "processing" ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <AlertTriangle className="h-4 w-4 text-warning" />}
-          <p className="text-sm text-muted-foreground">
-            {status === "processing"
-              ? "Analysis is running — results will appear here once it completes."
-              : status === "failed"
-                ? `Analysis failed: ${analysis?.error ?? "unknown error"}`
-                : "This document has not been analyzed yet."}
-          </p>
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4">
+          <div className="flex items-center gap-3">
+            {status === "processing" ? (
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            ) : status === "pending" ? (
+              <Loader2 className="h-4 w-4 animate-pulse text-warning" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-warning" />
+            )}
+            <p className="text-sm text-muted-foreground">
+              {status === "processing"
+                ? "Analysis is currently processing — results will display automatically once complete."
+                : status === "pending"
+                  ? "This document is queued for analysis."
+                  : status === "failed"
+                    ? `Analysis failed: ${analysis?.error ?? "unknown error"}`
+                    : "This document has not been analyzed yet."}
+            </p>
+          </div>
+          {status === "pending" && (
+            <Button size="sm" variant="outline" onClick={() => void drainQueue()}>
+              Process queue now
+            </Button>
+          )}
         </Card>
       )}
 

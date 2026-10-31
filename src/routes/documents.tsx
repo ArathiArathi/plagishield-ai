@@ -270,19 +270,27 @@ function DocumentsPage() {
 
   const deleteDoc = async (id: string) => {
     if (!confirm("Delete this document and all versions?")) return;
-    const { data: versions } = await supabase.from("document_versions").select("storage_path").eq("document_id", id);
-    const paths = (versions ?? []).map((v) => v.storage_path);
-    if (paths.length) await supabase.storage.from("documents").remove(paths);
-    await supabase.from("documents").delete().eq("id", id);
-    if (user?.id) {
-      await secureUserCache.invalidateByTag("documents", { userId: user.id });
-      await secureUserCache.invalidateByTag("analyses", { userId: user.id });
-      await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+    try {
+      const { data: versions } = await supabase.from("document_versions").select("storage_path").eq("document_id", id);
+      const paths = (versions ?? []).map((v) => v.storage_path).filter(Boolean);
+      if (paths.length) {
+        await supabase.storage.from("documents").remove(paths);
+      }
+      const { error: delErr } = await supabase.from("documents").delete().eq("id", id);
+      if (delErr) throw delErr;
+
+      if (user?.id) {
+        await secureUserCache.invalidateByTag("documents", { userId: user.id });
+        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+      }
+      toast.success("Document deleted");
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+      qc.invalidateQueries({ queryKey: ["workspace-data"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete document");
     }
-    toast.success("Document deleted");
-    qc.invalidateQueries({ queryKey: ["documents"] });
-    qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-    qc.invalidateQueries({ queryKey: ["workspace-data"] });
   };
 
   const downloadVersion = async (storagePath: string, name: string) => {
