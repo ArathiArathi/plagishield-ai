@@ -1,13 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  Activity, AlertTriangle, BookOpen, Check, Cpu, FileDown, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
+  Activity, AlertTriangle, BookOpen, Check, Cpu, Download, FileDown, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
 } from "lucide-react";
+import { downloadReport, type ReportInput } from "@/lib/report-pdf";
 
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -71,6 +73,7 @@ function AnalysisPage() {
   const { doc } = Route.useSearch();
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
+  const runAnalysisFn = useServerFn(runAnalysis);
   const { data, isPending } = useWorkspaceData();
   const { drain: drainQueue } = useAnalysisQueue({ autoStart: true });
   const [tab, setTab] = useState("highlights");
@@ -86,6 +89,32 @@ function AnalysisPage() {
     [data?.analyses, selectedDoc?.id],
   );
   const results = (analysis?.results ?? {}) as Results;
+
+  const handleDownloadPdf = () => {
+    if (!selectedDoc || !analysis) return;
+    try {
+      const reportInput: ReportInput = {
+        documentName: selectedDoc.name,
+        fileType: selectedDoc.file_type,
+        version: selectedDoc.latest_version,
+        analysisId: analysis.id,
+        generatedAt: new Date(analysis.created_at).toLocaleString(),
+        docType: selectedDoc.doc_type,
+        authorName: selectedDoc.author_name,
+        paperTitle: selectedDoc.paper_title,
+        similarity: Math.round(Number(analysis.similarity_score ?? 0)),
+        ai: Math.round(Number(analysis.ai_score ?? 0)),
+        grammar: Math.round(Number(analysis.grammar_score ?? 0)),
+        citation: Math.round(Number(analysis.citation_score ?? 0)),
+        results: results as ReportInput["results"],
+      };
+      downloadReport("full", reportInput);
+      toast.success(`Comprehensive PDF report for "${selectedDoc.name}" downloaded`);
+    } catch (e: unknown) {
+      console.error("PDF download error:", e);
+      toast.error("Could not generate PDF report. Please try again.");
+    }
+  };
 
   const handleRerun = async () => {
     if (!selectedDoc) return;
@@ -132,14 +161,14 @@ function AnalysisPage() {
       await secureUserCache.invalidateByTag("workspace");
       queryClient.invalidateQueries({ queryKey: ["workspace-data"] });
 
-      const res = await runAnalysis({
+      const res = (await runAnalysisFn({
         data: {
           analysisId: targetAnalysisId,
           documentId: selectedDoc.id,
           versionId: version.id,
           storagePath: version.storage_path,
         },
-      });
+      })) as { ok: boolean; error?: string; retryAfter?: number };
       if (!res.ok) throw new Error(res.error ?? "Analysis failed");
       toast.success("Analysis complete");
     } catch (e) {
@@ -241,12 +270,18 @@ function AnalysisPage() {
               )}
             </Button>
             {status === "completed" && !rerunning && (
-              <Button asChild size="sm" variant="outline" className="gap-1.5">
-                <Link to="/reports" search={{ doc: selectedDoc.id }}>
-                  <FileDown className="h-4 w-4 text-primary" />
-                  PDF Report
-                </Link>
-              </Button>
+              <>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={handleDownloadPdf}>
+                  <Download className="h-4 w-4 text-primary" />
+                  Download PDF
+                </Button>
+                <Button asChild size="sm" variant="ghost" className="gap-1.5">
+                  <Link to="/reports" search={{ doc: selectedDoc.id }}>
+                    <FileDown className="h-4 w-4" />
+                    All Reports
+                  </Link>
+                </Button>
+              </>
             )}
           </>
         }

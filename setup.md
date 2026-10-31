@@ -178,6 +178,7 @@ You will see the public welcome page with **Login** and **Register** buttons in 
 | Blank page / hydration error on load | Client env vars absent | Ensure the `VITE_`-prefixed variables are set |
 | Upload fails with storage error | `documents` bucket missing or policies not applied | Re-run migrations; verify the private `documents` bucket exists |
 | "Unsupported provider" on Google sign-in | Google provider not configured | Enable the Google provider (section 7) |
+| Vercel asks visitors to log in / "Team owners emailed. After they approve your request..." | Vercel Deployment Protection (Vercel Authentication) is enabled on preview deployments | Turn off **Vercel Authentication** in Vercel Dashboard → Project Settings → **Deployment Protection** (or add domain to Exceptions) |
 | Analysis stuck at 0% | Queue jammed or stale job | Wait ~20s (the queue self-recovers and fails jobs older than 6 minutes) or reload the page |
 | Analysis fails immediately | `LOVABLE_API_KEY` missing/invalid or file has < 200 extractable characters | Verify the gateway key; try a plain-text-heavy document |
 | Migrations error out | Running combined statements where separate ones are required | Run each migration file individually |

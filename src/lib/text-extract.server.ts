@@ -10,8 +10,15 @@ async function inflate(bytes: Uint8Array, format: "deflate" | "deflate-raw" | "g
   const copy = new Uint8Array(bytes.length);
   copy.set(bytes);
   const writer = ds.writable.getWriter();
-  void writer.write(copy);
-  void writer.close();
+  const writeAndClose = async () => {
+    try {
+      await writer.write(copy);
+      await writer.close();
+    } catch {
+      // Stream error will be caught by reader Response
+    }
+  };
+  void writeAndClose();
   return new Uint8Array(await new Response(ds.readable).arrayBuffer());
 }
 
@@ -92,6 +99,18 @@ function latin1(bytes: Uint8Array) {
   return s;
 }
 
+function trimStreamBytes(bytes: Uint8Array): Uint8Array {
+  let start = 0;
+  let end = bytes.length;
+  while (start < end && (bytes[start] === 0x0a || bytes[start] === 0x0d || bytes[start] === 0x20)) {
+    start++;
+  }
+  while (end > start && (bytes[end - 1] === 0x0a || bytes[end - 1] === 0x0d || bytes[end - 1] === 0x20)) {
+    end--;
+  }
+  return bytes.subarray(start, end);
+}
+
 function pdfUnescape(value: string) {
   return value
     .replace(/\\([nrtbf])/g, (_, c) => ({ n: "\n", r: "\n", t: "\t", b: "", f: "" }[c as string] ?? ""))
@@ -99,16 +118,55 @@ function pdfUnescape(value: string) {
     .replace(/\\(.)/g, "$1");
 }
 
+function decodeHexPdf(hex: string): string {
+  const clean = hex.replace(/[^0-9a-fA-F]/g, "");
+  if (clean.length < 2) return "";
+  const len = Math.floor(clean.length / 2);
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
+  }
+
+  // Check if UTF-16BE (starts with 0xFEFF or has null high bytes like 00 41 00 42)
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder("utf-16be", { fatal: false }).decode(bytes.subarray(2));
+  }
+  let nullCount = 0;
+  for (let i = 0; i < bytes.length; i += 2) {
+    if (bytes[i] === 0x00 && bytes[i + 1] !== 0x00) nullCount++;
+  }
+  if (nullCount >= Math.floor(bytes.length / 4) && bytes.length >= 4) {
+    return new TextDecoder("utf-16be", { fatal: false }).decode(bytes);
+  }
+
+  // Fallback to utf-8 / latin1
+  return decodeUtf8(bytes);
+}
+
 function pdfTextFromContent(content: string): string {
   let out = "";
-  // (text) Tj   |   [(a) -2 (b)] TJ
-  const re = /\((?:\\.|[^\\()])*\)/g;
+  // Match both literal strings (...) and hex strings <...>
+  // Also handle TJ array patterns: [(text) -100 (more)] TJ or [<0041> 5 <0042>] TJ
   const blocks = content.split(/(?:\bET\b|\bTd\b|\bTD\b|\bT\*\b)/);
   for (const block of blocks) {
-    const parts = block.match(re);
-    if (!parts) continue;
-    const line = parts.map((p) => pdfUnescape(p.slice(1, -1))).join("");
-    if (line.trim()) out += line + "\n";
+    const tokenRe = /\((?:\\.|[^\\()])*\)|<[0-9a-fA-F\s]+>|(-?\d+(?:\.\d+)?)/g;
+    let m: RegExpExecArray | null;
+    let line = "";
+    while ((m = tokenRe.exec(block)) !== null) {
+      const match = m[0];
+      if (match.startsWith("(") && match.endsWith(")")) {
+        line += pdfUnescape(match.slice(1, -1));
+      } else if (match.startsWith("<") && match.endsWith(">")) {
+        line += decodeHexPdf(match.slice(1, -1));
+      } else {
+        // Kerning number: large negative spacing represents word gap
+        const num = parseFloat(match);
+        if (num < -120 && line.length > 0 && !line.endsWith(" ")) {
+          line += " ";
+        }
+      }
+    }
+    if (line.trim()) out += line.trim() + "\n";
   }
   return out;
 }
@@ -119,27 +177,49 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
   const streamRe = /stream\r?\n?/g;
   let m: RegExpExecArray | null;
   let extracted = 0;
-  while ((m = streamRe.exec(raw)) !== null && extracted < 400) {
+
+  while ((m = streamRe.exec(raw)) !== null && extracted < 500) {
     const start = m.index + m[0].length;
     const end = raw.indexOf("endstream", start);
     if (end < 0) break;
     streamRe.lastIndex = end;
-    const slice = bytes.subarray(start, end);
+    const slice = trimStreamBytes(bytes.subarray(start, end));
     extracted += 1;
     let content = "";
-    if (slice[0] === 0x78) {
+
+    // 1. Try zlib inflate
+    try {
+      content = decodeUtf8(await inflate(slice, "deflate"));
+    } catch {
+      // 2. Try raw deflate
       try {
-        content = decodeUtf8(await inflate(slice, "deflate"));
+        content = decodeUtf8(await inflate(slice, "deflate-raw"));
       } catch {
-        content = "";
+        content = latin1(slice);
       }
-    } else {
-      content = latin1(slice);
     }
+
     if (!content) continue;
-    if (!/(Tj|TJ)/.test(content)) continue;
-    text += pdfTextFromContent(content);
+    if (/(Tj|TJ|'|")/.test(content)) {
+      text += pdfTextFromContent(content) + "\n";
+    }
   }
+
+  // Fallback: If content streams didn't extract enough words, scan uncompressed PDF text blocks
+  if (text.replace(/\s+/g, " ").trim().length < 50) {
+    // Scan for all (literal text) occurrences across readable parts of the PDF
+    const literalMatches = raw.match(/\((?:\\.|[^\\()]){4,}\)\s*(?:Tj|'|")/g) ?? [];
+    if (literalMatches.length > 0) {
+      const fallbackLines = literalMatches
+        .map((lm) => {
+          const inner = lm.match(/\((?:\\.|[^\\()])*\)/)?.[0];
+          return inner ? pdfUnescape(inner.slice(1, -1)) : "";
+        })
+        .filter((l) => l.trim().length > 2);
+      text += "\n" + fallbackLines.join(" ");
+    }
+  }
+
   return text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 

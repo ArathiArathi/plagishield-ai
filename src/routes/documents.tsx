@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Download, Eye, FileText, History, MoreHorizontal, ScanSearch, Trash2, Upload,
+  Download, Eye, FileDown, FileText, History, MoreHorizontal, ScanSearch, Trash2, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -477,6 +477,7 @@ function DocumentsPage() {
                               <ScanSearch className="mr-2 h-4 w-4" />Re-analyze
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><Eye className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
+                            <DropdownMenuItem asChild><Link to="/reports" search={{ doc: doc.id }}><FileDown className="mr-2 h-4 w-4" />Reports & PDF</Link></DropdownMenuItem>
 
                             <DropdownMenuItem className="text-destructive" onClick={() => deleteDoc(doc.id)}>
                               <Trash2 className="mr-2 h-4 w-4" />Delete

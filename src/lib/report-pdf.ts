@@ -68,6 +68,22 @@ const H = 297;
 
 type Ctx = { doc: jsPDF; y: number; title: string; input: ReportInput; page: number };
 
+export function sanitizePdfText(str: unknown): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/[\u201C\u201D\u201E\u201F\u00AB\u00BB]/g, '"')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u2014]/g, " -- ")
+    .replace(/[\u2013]/g, "-")
+    .replace(/[\u2026]/g, "...")
+    .replace(/[\u2022]/g, "* ")
+    .replace(/[\u00B7]/g, "|")
+    .replace(/[\u2212]/g, "-")
+    .replace(/\u00A0/g, " ")
+    .replace(/\0/g, "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
+
 function toneFor(kind: ReportKind, value: number): [number, number, number] {
   const inverted = kind === "similarity" || kind === "ai";
   const good = inverted ? value <= 15 : value >= 80;
@@ -96,10 +112,11 @@ function header(ctx: Ctx) {
 
   doc.setFont("helvetica", "bold").setFontSize(10);
   doc.setTextColor(255, 255, 255);
-  doc.text(ctx.title, W - M, 12, { align: "right" });
+  doc.text(sanitizePdfText(ctx.title), W - M, 12, { align: "right" });
   doc.setFont("helvetica", "normal").setFontSize(8);
   doc.setTextColor(200, 214, 235);
-  doc.text(`Ref ${ctx.input.analysisId.slice(0, 8).toUpperCase()}`, W - M, 17.5, { align: "right" });
+  const refId = String(ctx.input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
+  doc.text(`Ref ${refId}`, W - M, 17.5, { align: "right" });
   ctx.y = 30;
 }
 
@@ -109,7 +126,9 @@ function footer(ctx: Ctx) {
   doc.setLineWidth(0.3);
   doc.line(M, H - 16, W - M, H - 16);
   doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED);
-  doc.text(`${ctx.input.documentName} · generated ${ctx.input.generatedAt}`, M, H - 11);
+  const docName = sanitizePdfText(ctx.input.documentName || "document");
+  const genAt = sanitizePdfText(ctx.input.generatedAt || new Date().toLocaleString());
+  doc.text(`${docName} · generated ${genAt}`, M, H - 11);
   doc.text(`Page ${ctx.page}`, W - M, H - 11, { align: "right" });
 }
 
@@ -130,7 +149,7 @@ function sectionTitle(ctx: Ctx, text: string) {
   doc.setFillColor(...ACCENT);
   doc.rect(M, ctx.y - 3.5, 2.5, 5.5, "F");
   doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...NAVY);
-  doc.text(text, M + 5, ctx.y);
+  doc.text(sanitizePdfText(text), M + 5, ctx.y);
   ctx.y += 5;
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
@@ -140,8 +159,9 @@ function sectionTitle(ctx: Ctx, text: string) {
 
 function paragraph(ctx: Ctx, text: string, opts: { size?: number; color?: [number, number, number] } = {}) {
   const { doc } = ctx;
+  const safeText = sanitizePdfText(text);
   doc.setFont("helvetica", "normal").setFontSize(opts.size ?? 9.5).setTextColor(...(opts.color ?? [60, 70, 85]));
-  const lines = doc.splitTextToSize(text, W - 2 * M) as string[];
+  const lines = doc.splitTextToSize(safeText, W - 2 * M) as string[];
   for (const line of lines) {
     ensure(ctx, 6);
     doc.text(line, M, ctx.y);
@@ -162,9 +182,10 @@ function metaTable(ctx: Ctx, rows: Array<[string, string]>) {
       doc.rect(M, y - 4.5, W - 2 * M, rowH, "F");
     }
     doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...NAVY);
-    doc.text(k, M + 3, y);
+    doc.text(sanitizePdfText(k), M + 3, y);
     doc.setFont("helvetica", "normal").setTextColor(60, 70, 85);
-    const val = doc.splitTextToSize(v, W - 2 * M - 68)[0] as string;
+    const splitV = doc.splitTextToSize(sanitizePdfText(v), W - 2 * M - 68) as string[];
+    const val = splitV[0] ?? "";
     doc.text(val, M + 65, y);
   });
   doc.setDrawColor(...LINE);
@@ -224,9 +245,9 @@ function table(
   rows: string[][],
 ) {
   const { doc } = ctx;
-  const total = columns.reduce((s, c) => s + c.width, 0);
+  const total = columns.reduce((s, c) => s + c.width, 0) || 1;
   const scale = (W - 2 * M) / total;
-  const widths = columns.map((c) => c.width * scale);
+  const widths = columns.map((c) => Math.max(12, c.width * scale));
 
   const drawHead = () => {
     ensure(ctx, 12);
@@ -236,7 +257,8 @@ function table(
     let x = M;
     columns.forEach((c, i) => {
       const right = c.align === "right";
-      doc.text(c.header, right ? x + widths[i]! - 3 : x + 3, ctx.y + 5, { align: right ? "right" : "left" });
+      const headerText = sanitizePdfText(c.header);
+      doc.text(headerText, right ? x + widths[i]! - 3 : x + 3, ctx.y + 5, { align: right ? "right" : "left" });
       x += widths[i]!;
     });
     ctx.y += 7.5;
@@ -246,8 +268,13 @@ function table(
 
   rows.forEach((row, ri) => {
     doc.setFont("helvetica", "normal").setFontSize(8);
-    const cellLines = row.map((cell, i) => doc.splitTextToSize(cell, widths[i]! - 6) as string[]);
-    const rowH = Math.max(7, Math.max(...cellLines.map((l) => l.length)) * 3.8 + 3);
+    const cellLines = row.map((cell, i) => {
+      const colWidth = Math.max(10, (widths[i] ?? 20) - 6);
+      const safeText = sanitizePdfText(cell ?? "");
+      return doc.splitTextToSize(safeText, colWidth) as string[];
+    });
+    const maxLineCount = Math.max(1, ...cellLines.map((l) => l.length));
+    const rowH = Math.max(7, maxLineCount * 3.8 + 3);
     if (ctx.y + rowH > H - 22) {
       newPage(ctx);
       drawHead();
@@ -262,7 +289,7 @@ function table(
     doc.line(M, ctx.y + rowH, W - M, ctx.y + rowH);
     let x = M;
     cellLines.forEach((lines, i) => {
-      const right = columns[i]!.align === "right";
+      const right = columns[i]?.align === "right";
       doc.setTextColor(50, 60, 75);
       lines.forEach((l, li) => {
         doc.text(l, right ? x + widths[i]! - 3 : x + 3, ctx.y + 4.8 + li * 3.8, { align: right ? "right" : "left" });
@@ -303,27 +330,31 @@ function academicPaperHeader(ctx: Ctx, input: ReportInput) {
   const { doc } = ctx;
   ensure(ctx, 70);
 
+  const rawDocName = input.documentName || "document";
   const isUploadedPaper =
-    input.documentName.toLowerCase().includes("intrusion") ||
-    input.documentName.toLowerCase().includes("federated") ||
+    rawDocName.toLowerCase().includes("intrusion") ||
+    rawDocName.toLowerCase().includes("federated") ||
     (input.paperTitle && input.paperTitle.toLowerCase().includes("intrusion"));
 
-  const paperTitle =
+  const paperTitle = sanitizePdfText(
     input.paperTitle ||
     (isUploadedPaper
       ? "Toward Trustworthy Intrusion Detection via Federated Learning, Explainable SOC Analytics, and Blockchain Audit Logging"
-      : input.documentName.replace(/\.[a-z0-9]+$/i, ""));
+      : rawDocName.replace(/\.[a-z0-9]+$/i, ""))
+  );
 
-  const authors =
+  const authors = sanitizePdfText(
     input.authorName ||
     (isUploadedPaper
       ? "Sujith Kumar Vishwakarma, Arathi A"
-      : "Academic Contributor / Author");
+      : "Academic Contributor / Author")
+  );
 
-  const affiliation =
+  const affiliation = sanitizePdfText(
     (isUploadedPaper
       ? "Department of MCA, Seshadripuram First Grade College, Bangalore, Karnataka, India"
-      : input.docType ? titleCase(input.docType) : "Academic Institution / Department of Computer Applications");
+      : input.docType ? titleCase(input.docType) : "Academic Institution / Department of Computer Applications")
+  );
 
   // Conference/Journal style Top Header Label
   doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...ACCENT);
@@ -361,11 +392,12 @@ function academicPaperHeader(ctx: Ctx, input: ReportInput) {
 
   // Abstract & Forensic Audit Block (academic paper style)
   const abstractBoxW = W - 2 * M;
-  const rawExcerpt = input.results.text_excerpt || "";
-  const abstractText =
+  const rawExcerpt = input.results?.text_excerpt || "";
+  const abstractText = sanitizePdfText(
     rawExcerpt.length > 50
-      ? rawExcerpt.slice(0, 340).replace(/\s+/g, " ").trim() + "…"
-      : "This academic submission was analyzed by PlagiShield AI across global scholarly registries, OpenAlex repository databases, Crossref DOI bibliographic indices, stylometric LLM forensic markers, and syntactic grammar engines.";
+      ? rawExcerpt.slice(0, 340).replace(/\s+/g, " ").trim() + "..."
+      : "This academic submission was analyzed by PlagiShield AI across global scholarly registries, OpenAlex repository databases, Crossref DOI bibliographic indices, stylometric LLM forensic markers, and syntactic grammar engines."
+  );
 
   doc.setFillColor(248, 250, 253);
   doc.setDrawColor(215, 223, 235);
@@ -385,20 +417,22 @@ function academicPaperHeader(ctx: Ctx, input: ReportInput) {
   });
 
   doc.setFont("helvetica", "bold").setFontSize(6.8).setTextColor(...MUTED);
-  doc.text("Index Terms— Academic Integrity, Plagiarism Detection, AI Stylometry, Scholarly Verification, Crossref DOI", M + 6, ctx.y + 24);
+  doc.text("Index Terms -- Academic Integrity, Plagiarism Detection, AI Stylometry, Scholarly Verification, Crossref DOI", M + 6, ctx.y + 24);
 
   ctx.y += 33;
 }
 
 function documentBlock(ctx: Ctx, input: ReportInput) {
+  const docName = sanitizePdfText(input.documentName || "document");
+  const refId = String(input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
   const rows: Array<[string, string]> = [
-    ["Document filename", input.documentName],
-    ["Paper Title", input.paperTitle || input.documentName.replace(/\.[a-z0-9]+$/i, "")],
+    ["Document filename", docName],
+    ["Paper Title", input.paperTitle || docName.replace(/\.[a-z0-9]+$/i, "")],
     ["Primary Author(s)", input.authorName || "Academic Contributor"],
     ["Affiliation / Submission", input.docType ? titleCase(input.docType) : "Academic Research Submission"],
-    ["Format & Version", `${String(input.fileType || "PDF").toUpperCase()} · v${input.version}`],
-    ["Analysis Reference ID", input.analysisId.toUpperCase()],
-    ["Audit Generated At", input.generatedAt],
+    ["Format & Version", `${String(input.fileType || "PDF").toUpperCase()} · v${input.version || 1}`],
+    ["Analysis Reference ID", refId],
+    ["Audit Generated At", input.generatedAt || new Date().toLocaleString()],
   ];
   metaTable(ctx, rows);
 }
@@ -746,10 +780,11 @@ function compositionSection(ctx: Ctx, input: ReportInput) {
     doc.rect(cx, cy + 1, 3.5, 3.5, "F");
 
     doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
-    doc.text(s.category, cx + 5.5, cy + 4);
+    doc.text(sanitizePdfText(s.category), cx + 5.5, cy + 4);
 
+    const wordCount = Number(s.words ?? 0);
     doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(...MUTED);
-    doc.text(`${s.percent}% · ${s.words.toLocaleString()} words`, cx + 5.5, cy + 8);
+    doc.text(`${s.percent}% · ${wordCount.toLocaleString()} words`, cx + 5.5, cy + 8);
   });
 
   const numRows = Math.ceil(slices.length / 3);
@@ -762,7 +797,7 @@ function compositionSection(ctx: Ctx, input: ReportInput) {
       { header: "Share of document", width: 40, align: "right" },
       { header: "Words count", width: 26, align: "right" },
     ],
-    slices.map((s) => [s.category, `${s.percent}%`, s.words.toLocaleString()]),
+    slices.map((s) => [s.category, `${s.percent}%`, (Number(s.words ?? 0)).toLocaleString()]),
   );
 }
 
@@ -815,7 +850,8 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
   ensure(ctx, 12);
 
   for (const seg of segments) {
-    const tokens = seg.text.split(/(\s+)/).filter((t) => t !== "");
+    const safeSegmentText = sanitizePdfText(seg.text);
+    const tokens = safeSegmentText.split(/(\s+)/).filter((t) => t !== "");
     for (const tk of tokens) {
       if (/\n/.test(tk)) {
         x = M;
