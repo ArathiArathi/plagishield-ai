@@ -174,7 +174,8 @@ function pdfTextFromContent(content: string): string {
 async function extractPdf(bytes: Uint8Array): Promise<string> {
   const raw = latin1(bytes);
   let text = "";
-  const streamRe = /stream\r?\n?/g;
+  // Ensure we match 'stream' but NOT 'endstream'
+  const streamRe = /(?<!end)stream\r?\n/g;
   let m: RegExpExecArray | null;
   let extracted = 0;
 
@@ -182,7 +183,7 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
     const start = m.index + m[0].length;
     const end = raw.indexOf("endstream", start);
     if (end < 0) break;
-    streamRe.lastIndex = end;
+    streamRe.lastIndex = end + 9;
     const slice = trimStreamBytes(bytes.subarray(start, end));
     extracted += 1;
     let content = "";
@@ -228,6 +229,7 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
 export async function extractText(buffer: ArrayBuffer, fileName: string): Promise<{ text: string; method: string }> {
   const bytes = new Uint8Array(buffer);
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
+  const isPdf = ext === "pdf" || (bytes[0] === 0x25 && bytes[1] === 0x50);
 
   let rawText = "";
   let method = "plain-text";
@@ -236,12 +238,13 @@ export async function extractText(buffer: ArrayBuffer, fileName: string): Promis
     rawText = await extractDocx(bytes);
     if (rawText.length > 40) method = "docx-xml";
   }
-  if (!rawText && (ext === "pdf" || (bytes[0] === 0x25 && bytes[1] === 0x50))) {
+  if (!rawText && isPdf) {
     rawText = await extractPdf(bytes);
     if (rawText.length > 40) method = "pdf-content-stream";
   }
 
-  if (!rawText) {
+  // Only decode raw binary as UTF-8 for plaintext files — NEVER decode raw PDF byte streams as English text
+  if (!rawText && !isPdf && ext !== "docx") {
     const plain = decodeUtf8(bytes)
       .replace(/\u0000/g, "")
       .replace(/[^\S\n]+/g, " ")

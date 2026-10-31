@@ -99,9 +99,13 @@ function RootComponent() {
     pathname.startsWith("/auth");
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        ctxClient.clear();
+      } else {
+        ctxClient.invalidateQueries();
+      }
       router.invalidate();
-      ctxClient.invalidateQueries();
     });
     return () => subscription.unsubscribe();
   }, [router, ctxClient]);
@@ -110,7 +114,11 @@ function RootComponent() {
     <QueryClientProvider client={ctxClient}>
       {isPublicRoute ? (
         <Outlet />
-      ) : !loading && !isAuthenticated ? (
+      ) : loading ? (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      ) : !isAuthenticated ? (
         <Navigate to="/" />
       ) : (
         <SidebarProvider>
