@@ -60,11 +60,15 @@ export function useAnalysisQueue(options: { autoStart?: boolean } = {}) {
     let cancelled = false;
 
     const tick = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("analyses")
         .select("id")
         .in("status", ["pending", "processing"])
         .limit(1);
+      if (error) {
+        console.error("Could not check the analysis queue:", error);
+        return;
+      }
       if (cancelled || !data || data.length === 0) return;
       await drain({ notify: false });
     };

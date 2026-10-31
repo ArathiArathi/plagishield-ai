@@ -27,19 +27,26 @@ async function execute(
     rendering: 90,
   };
   const setStage = async (stage: string) => {
-    await supabase
+    const { error } = await supabase
       .from("analyses")
       .update({ stage, stage_pct: STAGE_PCT[stage] ?? 0 })
       .eq("id", data.analysisId);
+    if (error) throw error;
   };
 
-  await supabase
-    .from("analyses")
-    .update({ status: "processing", error: null, stage: "extracting", stage_pct: STAGE_PCT.extracting })
-    .eq("id", data.analysisId);
-  await supabase.from("documents").update({ status: "processing" }).eq("id", data.documentId);
-
   try {
+    const { error: analysisUpdateError } = await supabase
+      .from("analyses")
+      .update({ status: "processing", error: null, stage: "extracting", stage_pct: STAGE_PCT.extracting })
+      .eq("id", data.analysisId);
+    if (analysisUpdateError) throw analysisUpdateError;
+
+    const { error: documentUpdateError } = await supabase
+      .from("documents")
+      .update({ status: "processing" })
+      .eq("id", data.documentId);
+    if (documentUpdateError) throw documentUpdateError;
+
     const { data: doc } = await supabase
       .from("documents")
       .select("name,doc_type,author_name,paper_title")
@@ -66,7 +73,7 @@ async function execute(
     });
 
 
-    await supabase
+    const { error: analysisSaveError } = await supabase
       .from("analyses")
       .update({
         status: "completed",
@@ -80,8 +87,13 @@ async function execute(
         stage_pct: 100,
       })
       .eq("id", data.analysisId);
+    if (analysisSaveError) throw analysisSaveError;
 
-    await supabase.from("documents").update({ status: "analyzed" }).eq("id", data.documentId);
+    const { error: documentSaveError } = await supabase
+      .from("documents")
+      .update({ status: "analyzed" })
+      .eq("id", data.documentId);
+    if (documentSaveError) throw documentSaveError;
     return { ok: true as const, analysisId: data.analysisId };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Analysis failed";
@@ -109,11 +121,12 @@ export const processQueue = createServerFn({ method: "POST" })
     const ctx = context as unknown as Ctx;
     const { supabase } = ctx;
 
-    const { data: processing } = await supabase
+    const { data: processing, error: processingError } = await supabase
       .from("analyses")
-      .select("id,updated_at")
+      .select("id,document_id,updated_at")
       .eq("status", "processing")
       .order("updated_at", { ascending: true });
+    if (processingError) throw processingError;
 
     const STALE_MS = 6 * 60 * 1000;
     const active = (processing ?? []).filter(
@@ -123,39 +136,68 @@ export const processQueue = createServerFn({ method: "POST" })
       (a: { updated_at: string }) => Date.now() - new Date(a.updated_at).getTime() >= STALE_MS,
     );
     for (const s of stale) {
-      await supabase
+      const { error: staleAnalysisError } = await supabase
         .from("analyses")
-        .update({ status: "failed", error: "Analysis timed out — please re-run." })
+        .update({ status: "failed", error: "Analysis timed out — please re-run.", stage: "failed" })
         .eq("id", s.id);
+      if (staleAnalysisError) throw staleAnalysisError;
+
+      const { error: staleDocumentError } = await supabase
+        .from("documents")
+        .update({ status: "failed" })
+        .eq("id", s.document_id);
+      if (staleDocumentError) throw staleDocumentError;
     }
 
     if (active.length > 0) {
       return { started: false as const, reason: "busy" as const, activeId: active[0]!.id };
     }
 
-    const { data: pending } = await supabase
+    const { data: pending, error: pendingError } = await supabase
       .from("analyses")
       .select("id,document_id,version_id")
       .eq("status", "pending")
       .order("created_at", { ascending: true })
       .limit(1);
+    if (pendingError) throw pendingError;
 
     const next = pending?.[0];
     if (!next) return { started: false as const, reason: "empty" as const };
 
-    const { data: version } = await supabase
+    const { data: version, error: versionError } = await supabase
       .from("document_versions")
       .select("storage_path")
       .eq("id", next.version_id)
       .maybeSingle();
+    if (versionError) throw versionError;
 
     if (!version?.storage_path) {
-      await supabase
+      const { error: failedAnalysisError } = await supabase
         .from("analyses")
-        .update({ status: "failed", error: "Stored file missing for this version" })
+        .update({ status: "failed", error: "Stored file missing for this version", stage: "failed" })
         .eq("id", next.id);
-      return { started: false as const, reason: "missing-file" as const };
+      if (failedAnalysisError) throw failedAnalysisError;
+      const { error: failedDocumentError } = await supabase
+        .from("documents")
+        .update({ status: "failed" })
+        .eq("id", next.document_id);
+      if (failedDocumentError) throw failedDocumentError;
+      return {
+        started: true as const,
+        ok: false as const,
+        error: "Stored file missing for this version",
+      };
     }
+
+    const { data: claimed, error: claimError } = await supabase
+      .from("analyses")
+      .update({ status: "processing", error: null, stage: "extracting", stage_pct: 15 })
+      .eq("id", next.id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (claimError) throw claimError;
+    if (!claimed) return { started: false as const, reason: "claimed" as const };
 
     const res = await execute(ctx, {
       analysisId: next.id,
