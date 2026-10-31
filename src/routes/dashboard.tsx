@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
 
@@ -33,10 +34,12 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardPage() {
   const { user } = useAuth();
+  const { profile } = useUserProfile();
   const { data, isPending } = useWorkspaceData();
   useAnalysisQueue();
 
   const firstName =
+    profile?.first_name ||
     (user?.user_metadata?.first_name as string | undefined) ||
     user?.email?.split("@")[0] ||
     "there";

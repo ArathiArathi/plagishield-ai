@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import {
   ShieldCheck, ScanSearch, Sparkles, SpellCheck, Quote, FileBarChart, ArrowRight, Lock,
 } from "lucide-react";
@@ -31,6 +32,13 @@ const features = [
 
 function WelcomePage() {
   const { isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
 
   return (
     <div className="min-h-screen bg-background">

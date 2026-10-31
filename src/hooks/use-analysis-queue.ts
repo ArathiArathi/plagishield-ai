@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { processQueue } from "@/lib/analysis.functions";
 import { useAuth } from "@/hooks/use-auth";
 
+import { secureUserCache } from "@/lib/cache/secure-cache";
+
 type QueueResult = { started: boolean; reason?: string; ok?: boolean; error?: string };
 
 /**
@@ -23,11 +25,16 @@ export function useAnalysisQueue(options: { autoStart?: boolean } = {}) {
   const processQueueFn = useServerFn(processQueue);
   const running = useRef(false);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
+    if (user?.id) {
+      await secureUserCache.invalidateByTag("documents", { userId: user.id });
+      await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+      await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+    }
     qc.invalidateQueries({ queryKey: ["documents"] });
     qc.invalidateQueries({ queryKey: ["analyses-latest"] });
     qc.invalidateQueries({ queryKey: ["workspace-data"] });
-  }, [qc]);
+  }, [qc, user?.id]);
 
   const drain = useCallback(
     async (opts: { notify?: boolean } = {}) => {
@@ -37,7 +44,7 @@ export function useAnalysisQueue(options: { autoStart?: boolean } = {}) {
       try {
         for (let i = 0; i < 25; i++) {
           const res = (await processQueueFn({ data: undefined })) as QueueResult | undefined;
-          refresh();
+          await refresh();
           if (!res?.started) return;
           if (res.ok === false && res.error) {
             if (notify) toast.error(`Analysis failed: ${res.error}`);
@@ -47,7 +54,7 @@ export function useAnalysisQueue(options: { autoStart?: boolean } = {}) {
         }
       } catch (e: unknown) {
         if (notify) toast.error(e instanceof Error ? e.message : "Queue error");
-        refresh();
+        await refresh();
       } finally {
         running.current = false;
       }

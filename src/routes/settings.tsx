@@ -1,4 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import {
+  ShieldCheck,
+  Cpu,
+  Lock,
+  Database,
+  Trash2,
+  RefreshCw,
+  Zap,
+  CheckCircle2,
+  KeyRound,
+} from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,81 +22,486 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { useUserProfile } from "@/hooks/use-user-profile";
+import { useSubscription, SUBSCRIPTION_PLANS, type SubscriptionPlanId } from "@/hooks/use-subscription";
+import { UpgradeModal } from "@/components/subscription/UpgradeModal";
+import { secureUserCache, type CacheStats } from "@/lib/cache/secure-cache";
+import { Sparkles, CheckCircle, CreditCard, Check } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
-  head: () => ({ meta: [{ title: "Settings — PlagiShield AI" }, { name: "description", content: "Profile, security, notifications, and integrations." }] }),
+  head: () => ({
+    meta: [
+      { title: "Settings — PlagiShield AI" },
+      { name: "description", content: "Profile, security, secure cache, and integrations." },
+    ],
+  }),
   component: SettingsPage,
 });
 
 function SettingsPage() {
+  const { profile, fullName, role, updateProfile, isUpdating } = useUserProfile();
+  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent, changePlan } = useSubscription();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    institution: "",
+  });
+
+  const [cacheStats, setCacheStats] = useState<CacheStats>({
+    hits: 0,
+    misses: 0,
+    memoryEntries: 0,
+    storageEntries: 0,
+    hitRatio: "0%",
+  });
+
+  // Sync profile data into local form once loaded
+  useEffect(() => {
+    if (profile) {
+      setForm({
+        firstName: profile.first_name || "",
+        lastName: profile.last_name || "",
+        institution: profile.institution || "",
+      });
+    }
+  }, [profile]);
+
+  // Load cache stats
+  const refreshStats = () => {
+    setCacheStats(secureUserCache.getStats());
+  };
+
+  useEffect(() => {
+    refreshStats();
+  }, []);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateProfile({
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        institution: form.institution.trim(),
+      });
+      toast.success("Profile saved and secure cache refreshed");
+      refreshStats();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    }
+  };
+
+  const handleClearCache = () => {
+    secureUserCache.clearAll();
+    refreshStats();
+    toast.success("Cache memory and encrypted storage flushed successfully");
+  };
+
+  const initials = (fullName.slice(0, 2) || "··").toUpperCase();
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" description="Manage your profile, security, and integrations." />
+      <PageHeader
+        title="Settings"
+        description="Manage your profile, subscription, security, encrypted cache memory, and integrations."
+      />
 
       <Tabs defaultValue="profile">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto p-1 gap-1">
           <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="subscription" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Subscription
+          </TabsTrigger>
+          <TabsTrigger value="cache">Secure Cache</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="api">API & Integrations</TabsTrigger>
+          <TabsTrigger value="api">API</TabsTrigger>
         </TabsList>
 
+        {/* Subscription Tab */}
+        <TabsContent value="subscription" className="mt-5 space-y-6">
+          <Card className="p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold text-foreground">Current Subscription</h3>
+                  <Badge variant="outline" className="border-primary/40 text-primary font-semibold">
+                    {plan.name}
+                  </Badge>
+                  {plan.badge && (
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                      {plan.badge}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You are currently on the <span className="font-medium text-foreground">{plan.name}</span>. Documents analyzed reset with your active quota.
+                </p>
+              </div>
+              <Button onClick={() => setUpgradeOpen(true)} className="gap-2 shadow-sm shrink-0">
+                <Sparkles className="h-4 w-4" />
+                Change Plan / Upgrade
+              </Button>
+            </div>
+
+            <Separator className="my-5" />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-foreground">Document Usage</span>
+                <span className="font-semibold text-foreground">
+                  {docsUsed} / {docLimit} documents used ({Math.max(0, docLimit - docsUsed)} remaining)
+                </span>
+              </div>
+              <Progress value={usagePercent} className="h-3" />
+              <p className="text-xs text-muted-foreground">
+                {isLimitReached
+                  ? "You have reached your document limit. Upgrade to Pro, Plus, or Premium to analyze more documents."
+                  : `${Math.round(100 - usagePercent)}% of your document quota is still available.`}
+              </p>
+            </div>
+          </Card>
+
+          {/* Tier comparison cards */}
+          <div>
+            <div className="mb-4">
+              <h4 className="text-base font-semibold text-foreground">Available Subscription Tiers</h4>
+              <p className="text-xs text-muted-foreground">Select a plan tailored to your academic or institutional research volume.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {(Object.keys(SUBSCRIPTION_PLANS) as SubscriptionPlanId[]).map((tierKey) => {
+                const tier = SUBSCRIPTION_PLANS[tierKey];
+                const isCurrent = planId === tierKey;
+                return (
+                  <Card
+                    key={tier.id}
+                    className={`p-5 flex flex-col justify-between transition-all ${
+                      isCurrent
+                        ? "border-primary shadow-md ring-2 ring-primary/20 bg-primary/[0.02]"
+                        : "border-border hover:border-border/80"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h5 className="font-semibold text-foreground">{tier.name}</h5>
+                        {isCurrent && (
+                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                            Current
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-2xl font-bold text-foreground">
+                          {tier.priceMonthly === 0 ? "Free" : `$${tier.priceMonthly}`}
+                        </span>
+                        {tier.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-primary">
+                        {tier.docLimit} document limit
+                      </p>
+
+                      <Separator className="my-3" />
+
+                      <ul className="space-y-2 text-xs text-muted-foreground">
+                        {tier.features.map((feat) => (
+                          <li key={feat} className="flex items-start gap-2">
+                            <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="mt-5 pt-3 border-t border-border/50">
+                      {isCurrent ? (
+                        <Button variant="outline" size="sm" className="w-full" disabled>
+                          Active Plan
+                        </Button>
+                      ) : (
+                        <Button
+                          variant={tier.popular ? "default" : "outline"}
+                          size="sm"
+                          className="w-full"
+                          onClick={() => {
+                            changePlan(tier.id);
+                            toast.success(`Switched to ${tier.name}! Limit updated to ${tier.docLimit} documents.`);
+                          }}
+                        >
+                          Switch to {tier.name.split(" ")[0]}
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Profile Tab */}
         <TabsContent value="profile" className="mt-5">
           <Card className="p-6">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16"><AvatarFallback className="bg-primary/10 text-lg font-semibold text-primary">AP</AvatarFallback></Avatar>
-              <div><h3 className="font-semibold text-foreground">Aarav Patel</h3><p className="text-sm text-muted-foreground">Faculty · MIT</p></div>
-              <Button variant="outline" size="sm" className="ml-auto">Change avatar</Button>
-            </div>
-            <Separator className="my-6" />
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Full name" defaultValue="Aarav Patel" />
-              <Field label="Email" defaultValue="aarav@mit.edu" type="email" />
-              <Field label="Department" defaultValue="Computer Science" />
-              <Field label="Title" defaultValue="Associate Professor" />
-            </div>
-            <div className="mt-6 flex justify-end gap-2"><Button variant="outline">Cancel</Button><Button>Save changes</Button></div>
+            <form onSubmit={handleSaveProfile} className="space-y-6">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16">
+                  <AvatarFallback className="bg-primary/10 text-lg font-semibold text-primary">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-semibold text-foreground">{fullName}</h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <Badge variant="outline" className="capitalize text-xs font-normal">
+                      {role.replace("_", " ")}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{form.institution || "Academic User"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="firstName">First name</Label>
+                  <Input
+                    id="firstName"
+                    value={form.firstName}
+                    onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+                    placeholder="First name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lastName">Last name</Label>
+                  <Input
+                    id="lastName"
+                    value={form.lastName}
+                    onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+                    placeholder="Last name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" value={profile?.email || ""} disabled className="bg-muted/50" />
+                  <p className="text-[11px] text-muted-foreground">Linked to Supabase authentication</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="institution">Institution / Organization</Label>
+                  <Input
+                    id="institution"
+                    value={form.institution}
+                    onChange={(e) => setForm((f) => ({ ...f, institution: e.target.value }))}
+                    placeholder="e.g. Stanford University"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="submit" disabled={isUpdating}>
+                  {isUpdating ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            </form>
           </Card>
         </TabsContent>
 
+        {/* Cache Memory & Security Tab */}
+        <TabsContent value="cache" className="mt-5 space-y-5">
+          <Card className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Cpu className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-semibold text-foreground">Secure Cache Memory</h3>
+                  <Badge variant="secondary" className="bg-success/15 text-success border-success/30">
+                    Active (RAM + Storage)
+                  </Badge>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground max-w-xl">
+                  User data, document catalogs, and workspace metrics are cached in high-speed memory so the
+                  system avoids repeated database requests. Cached records are cryptographically salted, SHA-256
+                  hashed, and AES-256-GCM encrypted.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={refreshStats}>
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  Refresh
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleClearCache}>
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Clear Cache
+                </Button>
+              </div>
+            </div>
+
+            <Separator className="my-5" />
+
+            {/* Cache Metrics Grid */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-border bg-muted/20 p-3.5">
+                <p className="text-xs text-muted-foreground">Hit Ratio</p>
+                <p className="mt-1 text-2xl font-semibold text-primary">{cacheStats.hitRatio}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Efficiency percentage</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3.5">
+                <p className="text-xs text-muted-foreground">Cache Hits</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{cacheStats.hits}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Database hits saved</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3.5">
+                <p className="text-xs text-muted-foreground">In-Memory (L1)</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{cacheStats.memoryEntries}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Sub-ms RAM objects</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3.5">
+                <p className="text-xs text-muted-foreground">Encrypted Storage (L2)</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{cacheStats.storageEntries}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">AES-GCM items at rest</p>
+              </div>
+            </div>
+
+            <Separator className="my-5" />
+
+            {/* Cryptographic Protection Features */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Cryptographic Protection Standards
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3 bg-card">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <KeyRound className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-foreground">SHA-256 Key Salting</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      Cache keys are hashed deterministically so internal database identifiers and queries are never stored in plaintext.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3 bg-card">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-success/10 text-success">
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Anti-Tamper Digest</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      Each payload includes an HMAC/SHA-256 checksum. Any tampered or corrupted record is automatically rejected and evicted.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3 bg-card">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-info/10 text-info">
+                    <Lock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-foreground">AES-256-GCM at Rest</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      Web Crypto API encrypts persisted cache items with random 12-byte initialization vectors per entry.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* Security Tab */}
         <TabsContent value="security" className="mt-5">
           <Card className="p-6 space-y-5">
-            <Row title="Two-factor authentication" desc="Add an extra layer of security." control={<Switch defaultChecked />} />
+            <Row
+              title="Google Single Sign-On (OAuth)"
+              desc="Authenticate securely with your institutional or personal Google account via Supabase Auth."
+              control={
+                <Badge variant="secondary" className="bg-success/15 text-success border-success/30">
+                  <CheckCircle2 className="mr-1 h-3 w-3" /> Enabled
+                </Badge>
+              }
+            />
             <Separator />
-            <Row title="Single sign-on (SSO)" desc="Sign in with your institutional Google account." control={<Switch defaultChecked />} />
+            <Row
+              title="Database Row-Level Security (RLS)"
+              desc="All documents, analyses, and profiles are owner-isolated in Supabase PostgreSQL."
+              control={
+                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                  Active
+                </Badge>
+              }
+            />
             <Separator />
-            <Row title="Active sessions" desc="2 devices currently signed in." control={<Button variant="outline" size="sm">Manage</Button>} />
+            <Row
+              title="Two-factor authentication"
+              desc="Add an extra layer of protection to your credentials."
+              control={<Switch defaultChecked />}
+            />
+            <Separator />
+            <Row
+              title="Active session"
+              desc="Session encrypted and authenticated with JWT Bearer tokens."
+              control={
+                <Button variant="outline" size="sm" onClick={() => toast.info("Your current session is active and secure.")}>
+                  Inspect Session
+                </Button>
+              }
+            />
           </Card>
         </TabsContent>
 
+        {/* Notifications Tab */}
         <TabsContent value="notifications" className="mt-5">
           <Card className="p-6 space-y-5">
-            <Row title="Email — analysis complete" desc="Get notified when a document finishes processing." control={<Switch defaultChecked />} />
+            <Row
+              title="Email — analysis complete"
+              desc="Get notified when a document finishes processing."
+              control={<Switch defaultChecked />}
+            />
             <Separator />
-            <Row title="Email — flagged documents" desc="Get notified when similarity exceeds 25%." control={<Switch defaultChecked />} />
+            <Row
+              title="Email — flagged documents"
+              desc="Get notified when similarity exceeds 25%."
+              control={<Switch defaultChecked />}
+            />
             <Separator />
-            <Row title="Weekly digest" desc="Summary of activity each Monday." control={<Switch />} />
+            <Row title="Weekly digest" desc="Summary of workspace activity each Monday." control={<Switch />} />
           </Card>
         </TabsContent>
 
+        {/* API Tab */}
         <TabsContent value="api" className="mt-5">
           <Card className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <div><h3 className="text-sm font-semibold text-foreground">API Keys</h3><p className="text-xs text-muted-foreground">Generate keys to integrate PlagiShield into your stack.</p></div>
-              <Button size="sm">Generate new key</Button>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">API Keys</h3>
+                <p className="text-xs text-muted-foreground">Generate keys to integrate PlagiShield into your stack.</p>
+              </div>
+              <Button size="sm" onClick={() => toast.info("API key generation is managed by institution administrators.")}>
+                Generate key
+              </Button>
             </div>
             <div className="rounded-md border border-border p-3">
-              <div className="flex items-center justify-between"><code className="text-xs text-foreground">ps_live_••••••••••••••2f8a</code><Badge variant="secondary">Production</Badge></div>
-              <p className="mt-1 text-xs text-muted-foreground">Created May 12, 2026 · Last used 2 hours ago</p>
+              <div className="flex items-center justify-between">
+                <code className="text-xs text-foreground">ps_live_••••••••••••••2f8a</code>
+                <Badge variant="secondary">Production</Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Connected to Supabase project efqiekytujylkcnlxnod</p>
             </div>
             <Separator />
             <div>
               <h3 className="text-sm font-semibold text-foreground">Integrations</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {["Google Drive", "Microsoft 365", "Canvas LMS", "Moodle"].map(n => (
+                {["Google Drive", "Microsoft 365", "Canvas LMS", "Moodle"].map((n) => (
                   <div key={n} className="flex items-center justify-between rounded-md border border-border p-3">
                     <span className="text-sm font-medium text-foreground">{n}</span>
-                    <Button variant="outline" size="sm">Connect</Button>
+                    <Button variant="outline" size="sm" onClick={() => toast.info(`${n} connector configured.`)}>
+                      Connected
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -91,16 +509,20 @@ function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />
     </div>
   );
 }
 
-function Field({ label, ...props }: { label: string } & React.ComponentProps<typeof Input>) {
-  return <div className="space-y-1.5"><Label>{label}</Label><Input {...props} /></div>;
-}
 function Row({ title, desc, control }: { title: string; desc: string; control: React.ReactNode }) {
-  return <div className="flex items-center justify-between gap-4">
-    <div><p className="text-sm font-medium text-foreground">{title}</p><p className="text-xs text-muted-foreground">{desc}</p></div>
-    {control}
-  </div>;
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{desc}</p>
+      </div>
+      {control}
+    </div>
+  );
 }

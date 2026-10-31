@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { runAnalysis } from "@/lib/analysis.functions";
 import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
+import { secureUserCache } from "@/lib/cache/secure-cache";
 
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,10 @@ type AnalysisRow = {
   similarity_score: number | null; ai_score: number | null;
 };
 
+import { useSubscription } from "@/hooks/use-subscription";
+import { UpgradeModal } from "@/components/subscription/UpgradeModal";
+import { Sparkles, AlertCircle } from "lucide-react";
+
 const DOC_TYPES = [
   { value: "research", label: "Research paper" },
   { value: "assignment", label: "Assignment" },
@@ -82,15 +87,23 @@ function DocumentsPage() {
   const [historyOpen, setHistoryOpen] = useState<DocRow | null>(null);
   const [pending, setPending] = useState<{ file: File; existingDocId?: string } | null>(null);
   const [meta, setMeta] = useState<UploadMeta>({ docType: "research", authorName: "", paperTitle: "" });
+  const { plan, docsUsed, docLimit, isLimitReached } = useSubscription();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
 
   const docsQ = useQuery({
     queryKey: ["documents", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("documents").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as DocRow[];
+      return secureUserCache.getOrFetch<DocRow[]>(
+        "documents_list",
+        async () => {
+          const { data, error } = await supabase.from("documents").select("*").order("created_at", { ascending: false });
+          if (error) throw error;
+          return data as DocRow[];
+        },
+        { userId: user?.id, ttlMs: 3 * 60 * 1000, tags: ["documents"] },
+      );
     },
   });
 
@@ -98,10 +111,17 @@ function DocumentsPage() {
     queryKey: ["analyses-latest", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("analyses").select("id,document_id,status,similarity_score,ai_score").order("created_at", { ascending: false });
-      if (error) throw error;
+      const list = await secureUserCache.getOrFetch<AnalysisRow[]>(
+        "analyses_latest_raw",
+        async () => {
+          const { data, error } = await supabase.from("analyses").select("id,document_id,status,similarity_score,ai_score").order("created_at", { ascending: false });
+          if (error) throw error;
+          return data as AnalysisRow[];
+        },
+        { userId: user?.id, ttlMs: 3 * 60 * 1000, tags: ["analyses"] },
+      );
       const map = new Map<string, AnalysisRow>();
-      (data as AnalysisRow[]).forEach((a) => { if (!map.has(a.document_id)) map.set(a.document_id, a); });
+      list.forEach((a) => { if (!map.has(a.document_id)) map.set(a.document_id, a); });
       return map;
     },
   });
@@ -125,6 +145,11 @@ function DocumentsPage() {
 
   const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;
+    if (!existingDocId && isLimitReached) {
+      toast.error(`${plan.name} limit of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium.`);
+      setUpgradeOpen(true);
+      return;
+    }
     setUploadProgress(5);
     try {
       let documentId = existingDocId;
@@ -177,7 +202,15 @@ function DocumentsPage() {
       setUploadProgress(90);
 
       toast.success(`Uploaded ${file.name} (v${version}) — queued for analysis`);
+      if (user?.id) {
+        await secureUserCache.invalidateByTag("documents", { userId: user.id });
+        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+      }
       refresh();
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+      qc.invalidateQueries({ queryKey: ["workspace-data"] });
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(null), 600);
       void drainQueue();
@@ -186,13 +219,18 @@ function DocumentsPage() {
       toast.error(msg);
       setUploadProgress(null);
     }
-  }, [user, refresh, drainQueue]);
+  }, [user, refresh, drainQueue, qc, isLimitReached, plan.name, docLimit]);
 
   const startUpload = useCallback((file: File, existingDocId?: string) => {
+    if (!existingDocId && isLimitReached) {
+      toast.error(`${plan.name} limit of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium to upload more.`);
+      setUpgradeOpen(true);
+      return;
+    }
     const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
     setMeta((m) => ({ ...m, paperTitle: m.paperTitle || base }));
     setPending({ file, existingDocId });
-  }, []);
+  }, [isLimitReached, plan.name, docLimit]);
 
   const reanalyze = useCallback(async (doc: DocRow) => {
     const { data: ver } = await supabase
@@ -215,6 +253,10 @@ function DocumentsPage() {
 
     toast.info(`Re-analyzing ${doc.name}…`);
     try {
+      if (user?.id) {
+        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+      }
       if (existing) {
         const res = (await runAnalysisFn({ data: {
           analysisId: existing.id, documentId: doc.id, versionId: ver.id, storagePath: ver.storage_path,
@@ -226,11 +268,13 @@ function DocumentsPage() {
         await supabase.from("analyses").insert({ document_id: doc.id, version_id: ver.id, status: "pending" });
         await drainQueue();
       }
+      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+      qc.invalidateQueries({ queryKey: ["workspace-data"] });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Analysis failed");
       refresh();
     }
-  }, [runAnalysisFn, refresh, drainQueue]);
+  }, [runAnalysisFn, refresh, drainQueue, user, qc]);
 
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -242,12 +286,27 @@ function DocumentsPage() {
 
   const deleteDoc = async (id: string) => {
     if (!confirm("Delete this document and all versions?")) return;
-    const { data: versions } = await supabase.from("document_versions").select("storage_path").eq("document_id", id);
-    const paths = (versions ?? []).map((v) => v.storage_path);
-    if (paths.length) await supabase.storage.from("documents").remove(paths);
-    await supabase.from("documents").delete().eq("id", id);
-    toast.success("Document deleted");
-    qc.invalidateQueries({ queryKey: ["documents"] });
+    try {
+      const { data: versions } = await supabase.from("document_versions").select("storage_path").eq("document_id", id);
+      const paths = (versions ?? []).map((v) => v.storage_path).filter(Boolean);
+      if (paths.length) {
+        await supabase.storage.from("documents").remove(paths);
+      }
+      const { error: delErr } = await supabase.from("documents").delete().eq("id", id);
+      if (delErr) throw delErr;
+
+      if (user?.id) {
+        await secureUserCache.invalidateByTag("documents", { userId: user.id });
+        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+      }
+      toast.success("Document deleted");
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+      qc.invalidateQueries({ queryKey: ["workspace-data"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete document");
+    }
   };
 
   const downloadVersion = async (storagePath: string, name: string) => {
@@ -274,11 +333,47 @@ function DocumentsPage() {
         title="Documents"
         description="Upload, version, and analyze your documents."
         actions={
-          <Button size="sm" onClick={() => fileRef.current?.click()}>
-            <Upload className="mr-1.5 h-4 w-4" />Upload
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUpgradeOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground hover:bg-muted transition-colors"
+            >
+              <span className="font-medium">{docsUsed} / {docLimit} docs</span>
+              <span className="text-primary font-semibold">({plan.name})</span>
+              <Sparkles className="h-3 w-3 text-primary" />
+            </button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (isLimitReached) {
+                  toast.error(`${plan.name} limit of ${docLimit} documents reached. Upgrade your plan to upload more.`);
+                  setUpgradeOpen(true);
+                } else {
+                  fileRef.current?.click();
+                }
+              }}
+            >
+              <Upload className="mr-1.5 h-4 w-4" />Upload
+            </Button>
+          </div>
         }
       />
+
+      {isLimitReached && (
+        <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-warning/40 bg-warning/10 p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-warning shrink-0" />
+            <div className="text-xs">
+              <p className="font-semibold text-foreground">Document limit reached for {plan.name} ({docLimit} documents)</p>
+              <p className="text-muted-foreground mt-0.5">Upgrade to Pro (15 docs), Plus (25 docs), or Premium (35 docs) to continue uploading.</p>
+            </div>
+          </div>
+          <Button size="sm" onClick={() => setUpgradeOpen(true)} className="shrink-0 text-xs">
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />Upgrade plan
+          </Button>
+        </Card>
+      )}
 
       <Card
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -342,8 +437,8 @@ function DocumentsPage() {
                         <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
                           <FileText className="h-4 w-4" />
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{doc.name}</p>
+                        <div className="min-w-0 max-w-[240px] sm:max-w-[320px] lg:max-w-[440px]">
+                          <p className="truncate text-sm font-medium text-foreground" title={doc.name}>{doc.name}</p>
                           <p className="text-xs text-muted-foreground">{doc.file_type} · {(doc.size_bytes / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>
@@ -473,8 +568,8 @@ function DocumentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />
     </div>
-
   );
 }
 

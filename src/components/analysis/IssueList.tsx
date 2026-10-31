@@ -47,17 +47,17 @@ export function IssueList({ issues }: { issues: IssueItem[] }) {
       </div>
       <div className="space-y-2">
         {filtered.map((i, n) => (
-          <div key={n} className="rounded-md border border-border p-3">
+          <div key={n} className="rounded-md border border-border p-3 min-w-0 overflow-hidden">
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <Badge variant="outline" className={cn(SEVERITY[i.severity] ?? SEVERITY.low)}>
                 {i.severity} severity
               </Badge>
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{i.category}</span>
             </div>
-            <p className="text-sm font-medium text-foreground">{i.title}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{i.detail}</p>
+            <p className="text-sm font-medium text-foreground break-words [overflow-wrap:anywhere]">{i.title}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">{i.detail}</p>
             {i.excerpt && (
-              <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs italic text-foreground/90">
+              <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs italic text-foreground/90 break-words [overflow-wrap:anywhere]">
                 “{i.excerpt}”
               </p>
             )}
