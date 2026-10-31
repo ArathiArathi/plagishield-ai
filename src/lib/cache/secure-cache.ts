@@ -223,6 +223,11 @@ class SecureUserCache {
       return parsed;
     } catch (e) {
       console.warn(`[SecureCache] Failed reading cached key ${rawKey}:`, e);
+      try {
+        sessionStorage.removeItem(hashedKey);
+      } catch {
+        // ignore
+      }
       this.misses++;
       return null;
     }

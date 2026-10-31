@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { secureUserCache } from "@/lib/cache/secure-cache";
+import { useAuth } from "@/hooks/use-auth";
 
 export type AnalysisRow = {
   id: string;
@@ -87,6 +88,7 @@ function attachRealtimeListener(queryClient: ReturnType<typeof useQueryClient>) 
 
 export function useWorkspaceData() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // Real-time Supabase subscription with safe ref-counted channel management
   useEffect(() => {
@@ -94,7 +96,8 @@ export function useWorkspaceData() {
   }, [queryClient]);
 
   return useQuery({
-    queryKey: ["workspace-data"],
+    queryKey: ["workspace-data", user?.id],
+    enabled: !!user,
     refetchInterval: (query) => {
       const analyses = (query.state.data as any)?.analyses ?? [];
       const documents = (query.state.data as any)?.documents ?? [];

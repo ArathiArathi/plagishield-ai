@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ShieldCheck, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { secureUserCache } from "@/lib/cache/secure-cache";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/auth/callback")({
@@ -14,6 +15,10 @@ export const Route = createFileRoute("/auth/callback")({
   }),
   component: AuthCallbackPage,
 });
+
+// Singleton in-flight exchange promise to prevent React StrictMode double-invocation bugs
+let inFlightCodeExchange: Promise<{ success: boolean; error?: string }> | null = null;
+let lastProcessedCode: string | null = null;
 
 export function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -56,9 +61,24 @@ export function AuthCallbackPage() {
           return;
         }
 
-        // 1. Check if a session is already present (e.g. from background client auto-exchange)
+        // Setup onAuthStateChange listener FIRST so any parallel exchange is caught immediately
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+          if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && s) {
+            subscription.unsubscribe();
+            secureUserCache.clearAll();
+            if (typeof window !== "undefined") {
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            toast.success("Signed in successfully");
+            navigate({ to: "/dashboard", replace: true });
+          }
+        });
+
+        // 1. Check if a session is already present
         const { data: initialData } = await supabase.auth.getSession();
         if (initialData.session) {
+          subscription.unsubscribe();
+          secureUserCache.clearAll();
           if (typeof window !== "undefined") {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
@@ -77,6 +97,8 @@ export function AuthCallbackPage() {
           });
 
           if (!sessionErr && sessionData.session) {
+            subscription.unsubscribe();
+            secureUserCache.clearAll();
             if (typeof window !== "undefined") {
               window.history.replaceState({}, document.title, window.location.pathname);
             }
@@ -89,28 +111,24 @@ export function AuthCallbackPage() {
         // 3. Handle PKCE authorization code (?code=...)
         const code = url.searchParams.get("code");
         if (code) {
-          // Attempt exchange code for session
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) {
-            console.warn("[OAuth Callback] exchangeCodeForSession notice:", exchangeError.message);
-            // Check if Supabase client already completed the exchange in parallel
-            const { data: checkData } = await supabase.auth.getSession();
-            if (checkData.session) {
-              if (typeof window !== "undefined") {
-                window.history.replaceState({}, document.title, window.location.pathname);
+          if (lastProcessedCode !== code) {
+            lastProcessedCode = code;
+            inFlightCodeExchange = (async () => {
+              try {
+                const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+                if (!exchangeErr) return { success: true };
+                return { success: false, error: exchangeErr.message };
+              } catch (e: any) {
+                return { success: false, error: e?.message || "Exchange error" };
               }
-              toast.success("Signed in successfully");
-              navigate({ to: "/dashboard", replace: true });
-              return;
-            }
-
-            if (active) setErrorMsg(exchangeError.message);
-            toast.error(exchangeError.message);
-            return;
+            })();
           }
 
-          const { data: verifiedData } = await supabase.auth.getSession();
-          if (verifiedData.session) {
+          const res = inFlightCodeExchange ? await inFlightCodeExchange : { success: false };
+
+          if (res.success) {
+            subscription.unsubscribe();
+            secureUserCache.clearAll();
             if (typeof window !== "undefined") {
               window.history.replaceState({}, document.title, window.location.pathname);
             }
@@ -118,23 +136,42 @@ export function AuthCallbackPage() {
             navigate({ to: "/dashboard", replace: true });
             return;
           }
+
+          // If exchangeCodeForSession failed, wait briefly and poll getSession()
+          // because Supabase's internal client may have completed the exchange in parallel
+          for (let attempt = 1; attempt <= 5; attempt++) {
+            await new Promise((r) => setTimeout(r, 350));
+            const { data: checkData } = await supabase.auth.getSession();
+            if (checkData.session) {
+              subscription.unsubscribe();
+              secureUserCache.clearAll();
+              if (typeof window !== "undefined") {
+                window.history.replaceState({}, document.title, window.location.pathname);
+              }
+              toast.success("Signed in successfully with Google");
+              navigate({ to: "/dashboard", replace: true });
+              return;
+            }
+          }
+
+          subscription.unsubscribe();
+          let friendly = res.error || "Authentication code exchange failed";
+          if (
+            friendly.toLowerCase().includes("code already consumed") ||
+            friendly.toLowerCase().includes("code verifier") ||
+            friendly.toLowerCase().includes("validation_failed")
+          ) {
+            friendly = "Your login session expired or was already processed. Please try signing in again.";
+          }
+          if (active) setErrorMsg(friendly);
+          toast.error(friendly);
+          return;
         }
 
-        // 4. Listen for onAuthStateChange in case session is finalizing asynchronously
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
-          if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && s) {
-            subscription.unsubscribe();
-            if (typeof window !== "undefined") {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-            toast.success("Signed in successfully");
-            navigate({ to: "/dashboard", replace: true });
-          }
-        });
-
-        // 5. Fallback timeout after 6 seconds
+        // 4. Fallback timeout after 6 seconds
         const timer = setTimeout(() => {
           if (active) {
+            subscription.unsubscribe();
             setErrorMsg("Authentication session was not established. Please try signing in again.");
           }
         }, 6000);
