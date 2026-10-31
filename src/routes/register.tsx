@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ShieldAlert, Sparkles } from "lucide-react";
+import { ShieldAlert, Sparkles, ExternalLink } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -293,6 +293,22 @@ function RegisterPage() {
               <Button
                 variant="outline"
                 className="w-full text-xs"
+                asChild
+              >
+                <a
+                  href="https://supabase.com/dashboard/project/efqiekytujylkcnlxnod/auth/providers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Supabase Providers Settings
+                </a>
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="w-full text-xs text-muted-foreground"
                 onClick={() => setOauthHelpOpen(false)}
               >
                 Close & Use Email Registration

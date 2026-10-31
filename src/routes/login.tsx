@@ -266,6 +266,22 @@ function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full text-xs"
+                asChild
+              >
+                <a
+                  href="https://supabase.com/dashboard/project/efqiekytujylkcnlxnod/auth/providers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open Supabase Providers Settings
+                </a>
+              </Button>
+
+              <Button
+                variant="ghost"
+                className="w-full text-xs text-muted-foreground"
                 onClick={() => setOauthHelpOpen(false)}
               >
                 Close & Use Email Sign-in
