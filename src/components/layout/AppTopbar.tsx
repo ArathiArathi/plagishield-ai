@@ -12,10 +12,13 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
+import { useUserProfile } from "@/hooks/use-user-profile";
+import { secureUserCache } from "@/lib/cache/secure-cache";
 
 export function AppTopbar() {
   const [dark, setDark] = useState(false);
   const { user, signOut } = useAuth();
+  const { fullName, role } = useUserProfile();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,9 +26,11 @@ export function AppTopbar() {
   }, [dark]);
 
   const email = user?.email ?? "";
-  const initials = (email.slice(0, 2) || "··").toUpperCase();
+  const displayName = fullName || email || "Account";
+  const initials = (displayName.slice(0, 2) || "··").toUpperCase();
 
   const handleSignOut = async () => {
+    secureUserCache.clearAll();
     await signOut();
     navigate({ to: "/", replace: true });
   };
@@ -57,13 +62,18 @@ export function AppTopbar() {
                 <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
               </Avatar>
               <div className="hidden text-right leading-tight sm:block">
-                <p className="text-xs font-medium text-foreground max-w-[160px] truncate">{email || "Account"}</p>
-                
+                <p className="text-xs font-medium text-foreground max-w-[160px] truncate">{displayName}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{role.replace("_", " ")}</p>
               </div>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+            <DropdownMenuLabel className="truncate">
+              <div>
+                <p className="font-semibold text-foreground">{displayName}</p>
+                <p className="text-xs text-muted-foreground font-normal">{email}</p>
+              </div>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />

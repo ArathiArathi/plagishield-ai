@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — PlagiShield AI" }, { name: "description", content: "Sign in to your PlagiShield AI workspace." }] }),
@@ -16,14 +17,30 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate({ to: "/dashboard", replace: true });
+    }
+  }, [authLoading, isAuthenticated, navigate]);
+
   const handleGoogle = async () => {
     try {
-      const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
-      if (res.error) { toast.error(res.error.message || "Google sign-in failed"); return; }
+      const res = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/auth/callback`,
+      });
+      if (res.error) {
+        let msg = res.error.message || "Google sign-in failed";
+        if (msg.toLowerCase().includes("unsupported provider") || msg.toLowerCase().includes("not enabled")) {
+          msg = "Google provider is not enabled in your Supabase project. Enable it under Supabase Dashboard → Authentication → Providers → Google.";
+        }
+        toast.error(msg);
+        return;
+      }
       if (res.redirected) return;
       navigate({ to: "/dashboard" });
     } catch (err) {

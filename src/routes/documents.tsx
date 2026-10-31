@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { runAnalysis } from "@/lib/analysis.functions";
 import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
+import { secureUserCache } from "@/lib/cache/secure-cache";
 
 import { cn } from "@/lib/utils";
 
@@ -88,9 +89,15 @@ function DocumentsPage() {
     queryKey: ["documents", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("documents").select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as DocRow[];
+      return secureUserCache.getOrFetch<DocRow[]>(
+        "documents_list",
+        async () => {
+          const { data, error } = await supabase.from("documents").select("*").order("created_at", { ascending: false });
+          if (error) throw error;
+          return data as DocRow[];
+        },
+        { userId: user?.id, ttlMs: 3 * 60 * 1000, tags: ["documents"] },
+      );
     },
   });
 
@@ -98,10 +105,17 @@ function DocumentsPage() {
     queryKey: ["analyses-latest", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("analyses").select("id,document_id,status,similarity_score,ai_score").order("created_at", { ascending: false });
-      if (error) throw error;
+      const list = await secureUserCache.getOrFetch<AnalysisRow[]>(
+        "analyses_latest_raw",
+        async () => {
+          const { data, error } = await supabase.from("analyses").select("id,document_id,status,similarity_score,ai_score").order("created_at", { ascending: false });
+          if (error) throw error;
+          return data as AnalysisRow[];
+        },
+        { userId: user?.id, ttlMs: 3 * 60 * 1000, tags: ["analyses"] },
+      );
       const map = new Map<string, AnalysisRow>();
-      (data as AnalysisRow[]).forEach((a) => { if (!map.has(a.document_id)) map.set(a.document_id, a); });
+      list.forEach((a) => { if (!map.has(a.document_id)) map.set(a.document_id, a); });
       return map;
     },
   });
@@ -177,7 +191,15 @@ function DocumentsPage() {
       setUploadProgress(90);
 
       toast.success(`Uploaded ${file.name} (v${version}) — queued for analysis`);
+      if (user?.id) {
+        await secureUserCache.invalidateByTag("documents", { userId: user.id });
+        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+      }
       refresh();
+      qc.invalidateQueries({ queryKey: ["documents"] });
+      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+      qc.invalidateQueries({ queryKey: ["workspace-data"] });
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(null), 600);
       void drainQueue();
@@ -186,7 +208,7 @@ function DocumentsPage() {
       toast.error(msg);
       setUploadProgress(null);
     }
-  }, [user, refresh, drainQueue]);
+  }, [user, refresh, drainQueue, qc]);
 
   const startUpload = useCallback((file: File, existingDocId?: string) => {
     const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
@@ -215,6 +237,10 @@ function DocumentsPage() {
 
     toast.info(`Re-analyzing ${doc.name}…`);
     try {
+      if (user?.id) {
+        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+      }
       if (existing) {
         const res = (await runAnalysisFn({ data: {
           analysisId: existing.id, documentId: doc.id, versionId: ver.id, storagePath: ver.storage_path,
@@ -226,11 +252,13 @@ function DocumentsPage() {
         await supabase.from("analyses").insert({ document_id: doc.id, version_id: ver.id, status: "pending" });
         await drainQueue();
       }
+      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+      qc.invalidateQueries({ queryKey: ["workspace-data"] });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Analysis failed");
       refresh();
     }
-  }, [runAnalysisFn, refresh, drainQueue]);
+  }, [runAnalysisFn, refresh, drainQueue, user, qc]);
 
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -246,8 +274,15 @@ function DocumentsPage() {
     const paths = (versions ?? []).map((v) => v.storage_path);
     if (paths.length) await supabase.storage.from("documents").remove(paths);
     await supabase.from("documents").delete().eq("id", id);
+    if (user?.id) {
+      await secureUserCache.invalidateByTag("documents", { userId: user.id });
+      await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+      await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+    }
     toast.success("Document deleted");
     qc.invalidateQueries({ queryKey: ["documents"] });
+    qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+    qc.invalidateQueries({ queryKey: ["workspace-data"] });
   };
 
   const downloadVersion = async (storagePath: string, name: string) => {

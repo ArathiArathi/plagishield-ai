@@ -12,27 +12,54 @@ type SignInOptions = {
 export const lovable = {
   auth: {
     signInWithOAuth: async (provider: "google" | "apple" | "microsoft" | "lovable", opts?: SignInOptions) => {
-      const result = await lovableAuth.signInWithOAuth(provider, {
-        ...opts,
-        extraParams: {
-          ...opts?.extraParams,
-        },
-      });
+      const isClient = typeof window !== "undefined";
+      const redirectUri = opts?.redirect_uri || (isClient ? `${window.location.origin}/auth/callback` : undefined);
 
-      if (result.redirected) {
-        return result;
+      // In a Lovable iframe editor environment, try lovable broker
+      const isFramed = isClient && window.parent && window.parent !== window;
+      const isLovableHost = isClient && ["lovable.app", "lovableproject.com", "gptengineer.run"].some((h) => window.location.hostname.endsWith(h));
+
+      if (isFramed && isLovableHost) {
+        try {
+          const result = await lovableAuth.signInWithOAuth(provider, {
+            ...opts,
+            redirect_uri: redirectUri,
+            extraParams: { ...opts?.extraParams },
+          });
+
+          if (result.redirected) return result;
+          if (!result.error && result.tokens) {
+            await supabase.auth.setSession(result.tokens);
+            return result;
+          }
+        } catch {
+          // Fall through to native Supabase OAuth
+        }
       }
 
-      if (result.error) {
-        return result;
-      }
-
+      // Standalone / Direct Supabase OAuth flow (reliable on localhost and custom domains)
       try {
-        await supabase.auth.setSession(result.tokens);
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: provider === "google" ? "google" : (provider as any),
+          options: {
+            redirectTo: redirectUri,
+            queryParams: opts?.extraParams,
+          },
+        });
+
+        if (error) {
+          return { error };
+        }
+
+        if (data?.url && isClient) {
+          window.location.assign(data.url);
+          return { error: null, redirected: true };
+        }
+
+        return { error: null, redirected: true };
       } catch (e) {
         return { error: e instanceof Error ? e : new Error(String(e)) };
       }
-      return result;
     },
   },
 };

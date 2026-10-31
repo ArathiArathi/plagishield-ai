@@ -82,9 +82,14 @@ function RootComponent() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { isAuthenticated, loading } = useAuth();
 
-  const isPublicRoute = pathname === "/" || pathname.startsWith("/login") || pathname.startsWith("/register") ||
-    pathname.startsWith("/forgot-password") || pathname.startsWith("/reset-password") ||
-    pathname.startsWith("/verify-email");
+  const isPublicRoute =
+    pathname === "/" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/verify-email") ||
+    pathname.startsWith("/auth");
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
