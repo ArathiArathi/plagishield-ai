@@ -360,59 +360,179 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
 
 /* --------------------------------------------- 2. AI content detection */
 
-const AI_MARKERS = [
-  "furthermore", "moreover", "in conclusion", "it is important to note", "delve", "leverage",
-  "robust", "comprehensive", "multifaceted", "landscape", "realm", "pivotal", "underscore",
-  "in today's", "navigate", "tapestry", "crucial role", "significantly", "overall,", "additionally",
-  "it is worth noting", "seamless", "foster", "holistic", "paradigm",
+const AI_SPECIFIC_PHRASES = [
+  "in today's rapidly evolving",
+  "in today's digital era",
+  "in the contemporary landscape",
+  "delving into the realm",
+  "delve into the",
+  "delves into",
+  "a testament to",
+  "plays a pivotal role",
+  "play a pivotal role",
+  "serves as a cornerstone",
+  "is a cornerstone of",
+  "multifaceted nature",
+  "multifaceted approach",
+  "multifaceted power",
+  "holistic understanding",
+  "holistic approach",
+  "it is important to note",
+  "it is worth noting",
+  "it is crucial to remember",
+  "navigating the complexities",
+  "navigate the complexities",
+  "navigate the nuances",
+  "foster a deeper",
+  "fosters a",
+  "foster a",
+  "rich tapestry",
+  "vibrant tapestry",
+  "beacon of hope",
+  "catalyst for change",
+  "a myriad of",
+  "paves the way for",
+  "paving the way",
+  "by embracing this",
+  "by leveraging the",
+  "seamlessly integrate",
+  "seamless integration",
+  "deep dive into",
+  "in conclusion,",
+  "to conclude,",
+  "in summary,",
+  "to sum up,",
+  "crucial role in",
+  "resilient future for all",
+  "not without its challenges",
+];
+
+const AI_KEYWORDS = [
+  "delve", "delving", "pivotal", "multifaceted", "holistic", "tapestry", "seamlessly",
+  "underscores", "fosters", "cornerstone", "linchpin", "navigating",
+  "transformative", "burgeoning", "intertwined", "unravel", "myriad",
+  "paramount", "imperative", "catalyst", "overarching", "bespoke"
 ];
 
 function stylometry(text: string, sentences: Sentence[]) {
   const words = tokenize(text);
-  const n = words.length || 1;
-  const lens = sentences.map((s) => s.words.length).filter((l) => l > 0);
-  const mean = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
-  const variance = lens.length ? lens.reduce((a, b) => a + (b - mean) ** 2, 0) / lens.length : 0;
-  const sd = Math.sqrt(variance);
-  const burstiness = mean > 0 ? sd / mean : 0; // human writing is bursty
-  const ttr = new Set(words).size / n; // lexical diversity
-  const avgWordLen = words.reduce((a, w) => a + w.length, 0) / n;
+  const totalWords = words.length || 1;
+  const numSentences = Math.max(1, sentences.length);
   const lower = text.toLowerCase();
-  const markerHits = AI_MARKERS.reduce((a, m) => a + (lower.split(m).length - 1), 0);
-  const markerRate = (markerHits / n) * 1000;
-  const contractions = (lower.match(/\b\w+'(s|t|re|ve|ll|d|m)\b/g) ?? []).length;
-  const contractionRate = (contractions / n) * 1000;
-  const commaRate = ((text.match(/,/g) ?? []).length / Math.max(1, sentences.length));
-  const bigrams = ngrams(words, 2);
-  const bigramRepeat = 1 - bigrams.size / Math.max(1, words.length - 1);
-  const punctVariety = new Set((text.match(/[;:—–()"'?!]/g) ?? [])).size;
 
-  // Logistic regression over normalised features (weights calibrated on
-  // human vs. LLM academic prose; positive weight ⇒ more machine-like).
-  const z =
-    -1.15 +
-    3.6 * Math.max(0, 0.42 - burstiness) * 4 +
-    2.4 * Math.max(0, 0.42 - ttr) * 3 +
-    0.55 * Math.min(3, markerRate) +
-    0.9 * Math.max(0, 1.6 - contractionRate) +
-    1.4 * Math.max(0, avgWordLen - 4.9) +
-    0.8 * Math.max(0, commaRate - 2.2) +
-    2.2 * Math.max(0, bigramRepeat - 0.02) * 5 +
-    0.45 * Math.max(0, 4 - punctVariety);
+  // 1. Sentence length distribution & burstiness (human writing has high variance)
+  const lens = sentences.map((s) => s.words.length).filter((l) => l > 0);
+  const meanLen = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 15;
+  const variance = lens.length ? lens.reduce((a, b) => a + (b - meanLen) ** 2, 0) / lens.length : 0;
+  const sd = Math.sqrt(variance);
+  const burstiness = meanLen > 0 ? sd / meanLen : 0;
+
+  // First-order delta burstiness (adjacent sentence jump differences)
+  let jumpSum = 0;
+  for (let i = 0; i < lens.length - 1; i++) {
+    jumpSum += Math.abs(lens[i + 1]! - lens[i]!);
+  }
+  const deltaBurstiness = lens.length > 1 ? (jumpSum / (lens.length - 1)) / meanLen : 0.35;
+
+  // 2. AI Multi-word phrase matches
+  let aiPhraseHits = 0;
+  for (const phrase of AI_SPECIFIC_PHRASES) {
+    let pos = 0;
+    while ((pos = lower.indexOf(phrase, pos)) !== -1) {
+      aiPhraseHits++;
+      pos += phrase.length;
+    }
+  }
+  const aiPhraseDensity = (aiPhraseHits / totalWords) * 1000;
+
+  // 3. AI Keyword matches
+  let aiKeywordHits = 0;
+  for (const kw of AI_KEYWORDS) {
+    const re = new RegExp(`\\b${kw}\\b`, "g");
+    const m = lower.match(re);
+    if (m) aiKeywordHits += m.length;
+  }
+  const aiKeywordDensity = (aiKeywordHits / totalWords) * 1000;
+
+  // 4. Triad grouping pattern (X, Y, and Z)
+  const triadRegex = /\b\w{4,},\s+\w{4,},\s+and\s+\w{4,}\b/g;
+  const triads = (text.match(triadRegex) ?? []).length;
+  const triadDensity = triads / numSentences;
+
+  // 5. Formulaic transition openers (Furthermore, Moreover, Additionally, In conclusion)
+  let transitionOpeners = 0;
+  for (const s of sentences) {
+    const st = s.text.trim().toLowerCase();
+    if (/^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(st)) {
+      transitionOpeners++;
+    }
+  }
+  const transitionOpenerRatio = transitionOpeners / numSentences;
+
+  // 6. Positive Human Research & Scholarly Indicators
+  const empiricalMetrics = (text.match(/\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/gi) ?? []).length;
+  const artifactRefs = (text.match(/\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm|appendix)\s+\d+([a-z]|\.\d+)?\b/gi) ?? []).length;
+  const authorialAgency = (text.match(/\b(we\s+(propose|evaluate|investigate|demonstrate|observe|implement|collected|conducted|designed|developed|found|measured|analyzed|tested)|our\s+(framework|approach|system|model|dataset|experiments?|findings?|results?|prototype|pipeline|architecture|analysis|methodology)|in\s+this\s+(work|paper|study|section))\b/gi) ?? []).length;
+  const citations = (text.match(/\[\d+(?:[,\s–-]+\d+)*\]|\([A-Z][a-z]+(?:\s+et\s+al\.)?,\s*\d{4}\)/g) ?? []).length;
+
+  const humanEvidenceCount = empiricalMetrics * 1.5 + artifactRefs * 2 + authorialAgency * 2 + citations * 1.5;
+  const humanEvidenceRate = (humanEvidenceCount / totalWords) * 1000;
+
+  // Dampen phrase penalty if text contains substantial human empirical research evidence
+  const dampener = humanEvidenceRate > 40 ? 0.6 : 1.0;
+
+  // 7. Composite Calibrated Logistic Score
+  let z = -2.2;
+
+  // Add AI indicators:
+  z += Math.min(4.0, aiPhraseDensity * 0.25 * dampener);
+  z += Math.min(2.5, aiKeywordDensity * 0.25 * dampener);
+  z += Math.min(2.0, triadDensity * 2.2);
+  z += Math.min(2.2, transitionOpenerRatio * 3.5);
+
+  // Uniformity penalty (low burstiness & low delta indicates mechanical LLM output)
+  if (burstiness < 0.22) {
+    z += (0.22 - burstiness) * 6.5;
+  }
+  if (deltaBurstiness < 0.25) {
+    z += (0.25 - deltaBurstiness) * 5.5;
+  }
+
+  // Credit Human indicators (subtract from z):
+  if (burstiness > 0.30) {
+    z -= Math.min(1.8, (burstiness - 0.30) * 3.5);
+  }
+  if (deltaBurstiness > 0.32) {
+    z -= Math.min(1.8, (deltaBurstiness - 0.32) * 3.0);
+  }
+  z -= Math.min(4.0, humanEvidenceRate * 0.20);
+
   const probability = 1 / (1 + Math.exp(-z));
+  const score = Math.max(1, Math.min(99, Math.round(probability * 100)));
+
+  // Generate detailed forensic reasoning
+  let reasoning = "";
+  if (score < 25) {
+    reasoning = `Analysis confirms authentic human authorship (estimated ${score}% AI likelihood). Text exhibits natural sentence-length burstiness (CV = ${burstiness.toFixed(2)}) with healthy structural delta (${deltaBurstiness.toFixed(2)}). Rich empirical markers, experimental references, and authorial agency (${humanEvidenceCount.toFixed(0)} evidentiary markers) are present without formulaic generative AI transitions.`;
+  } else if (score < 60) {
+    reasoning = `Text shows mixed stylometric characteristics (${score}% AI likelihood). While core sections display human research framing and empirical detail, localized passages contain standardized transition structures and predictable phrasing (${aiPhraseDensity.toFixed(1)} AI markers per 1k words), suggesting potential AI-assisted editing or automated paraphrasing.`;
+  } else {
+    reasoning = `High probability of synthetic generative AI authorship (${score}% AI likelihood). The text exhibits low sentence-length entropy (CV = ${burstiness.toFixed(2)}), repetitive triadic parallelisms, and a dense concentration of formulaic LLM transition idioms (${aiPhraseDensity.toFixed(1)} markers per 1k words) without primary empirical or experimental signatures.`;
+  }
 
   return {
-    score: Math.round(probability * 100),
+    score,
+    reasoning,
     features: {
       burstiness: Number(burstiness.toFixed(3)),
-      lexical_diversity: Number(ttr.toFixed(3)),
-      avg_sentence_length: Number(mean.toFixed(1)),
-      avg_word_length: Number(avgWordLen.toFixed(2)),
-      boilerplate_per_1k: Number(markerRate.toFixed(2)),
-      contractions_per_1k: Number(contractionRate.toFixed(2)),
-      commas_per_sentence: Number(commaRate.toFixed(2)),
-      repeated_bigram_ratio: Number(bigramRepeat.toFixed(3)),
-      punctuation_variety: punctVariety,
+      delta_burstiness: Number(deltaBurstiness.toFixed(3)),
+      avg_sentence_length: Number(meanLen.toFixed(1)),
+      ai_phrase_density: Number(aiPhraseDensity.toFixed(2)),
+      ai_keyword_density: Number(aiKeywordDensity.toFixed(2)),
+      triad_density: Number(triadDensity.toFixed(2)),
+      transition_opener_ratio: Number(transitionOpenerRatio.toFixed(2)),
+      human_evidence_count: Number(humanEvidenceCount.toFixed(1)),
+      human_evidence_rate: Number(humanEvidenceRate.toFixed(2)),
     },
   };
 }
@@ -420,8 +540,8 @@ function stylometry(text: string, sentences: Sentence[]) {
 export type SentenceVerdict = { p: number; why: string };
 
 /**
- * Sentence-level AI highlights. When the language model returned per-sentence
- * verdicts those win; otherwise we fall back to the stylometric heuristic.
+ * Sentence-level AI highlights. Evaluates multi-word phrases, transition openers,
+ * triadic parallelism, and discounts sentences bearing primary empirical research metrics.
  */
 function aiHighlights(
   sentences: Sentence[],
@@ -430,32 +550,78 @@ function aiHighlights(
 ): Highlight[] {
   const scored = sentences.map((s, i) => {
     const lower = s.text.toLowerCase();
-    const markers = AI_MARKERS.filter((m) => lower.includes(m)).length;
-    const ttr = new Set(s.words).size / Math.max(1, s.words.length);
-    const long = s.words.length > 24 ? 1 : 0;
-    const heuristic = Math.min(100, baseline + markers * 18 + (ttr < 0.62 ? 14 : 0) + long * 8);
+    
+    // Check for AI phrases
+    let phraseHits = 0;
+    let matchedPhrase = "";
+    for (const p of AI_SPECIFIC_PHRASES) {
+      if (lower.includes(p)) {
+        phraseHits++;
+        if (!matchedPhrase) matchedPhrase = p;
+      }
+    }
+
+    // Check for AI keywords
+    let kwHits = 0;
+    for (const kw of AI_KEYWORDS) {
+      if (new RegExp(`\\b${kw}\\b`).test(lower)) kwHits++;
+    }
+
+    // Check for transition opener
+    const isOpener = /^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(s.text.trim());
+
+    // Check for triadic pattern
+    const hasTriad = /\b\w{4,},\s+\w{4,},\s+and\s+\w{4,}\b/.test(s.text);
+
+    // Check for empirical numbers / research metrics (human credit)
+    const hasEmpirical = /\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/i.test(s.text) ||
+      /\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm)\s+\d+/i.test(s.text) ||
+      /\[\d+(?:[,\s–-]+\d+)*\]/.test(s.text);
+
+    // Compute sentence-level probability
+    let local = baseline;
+    if (phraseHits > 0) local += phraseHits * 32;
+    if (kwHits > 0) local += kwHits * 18;
+    if (isOpener) local += 22;
+    if (hasTriad) local += 20;
+    if (hasEmpirical) local -= 35; // Strongly protect genuine research sentences
+
+    local = Math.max(0, Math.min(100, local));
+
     const verdict = model?.get(i);
-    const local = verdict ? Math.round(verdict.p * 0.75 + heuristic * 0.25) : heuristic;
-    return { s, local, markers, why: verdict?.why, fromModel: Boolean(verdict) };
+    const finalScore = verdict ? Math.round(verdict.p * 0.70 + local * 0.30) : local;
+
+    let note = "Formulaic LLM sentence structure";
+    if (matchedPhrase) note = `Contains stereotypical LLM phrase "${matchedPhrase}"`;
+    else if (isOpener) note = "Formulaic transition opener with low entropy";
+    else if (hasTriad) note = "Predictable triadic parallel clause structure";
+
+    return {
+      s,
+      score: finalScore,
+      why: verdict?.why || note,
+      fromModel: Boolean(verdict),
+      hasAiSignatures: phraseHits > 0 || kwHits > 0 || isOpener || hasTriad,
+    };
   });
+
   return scored
-    .filter((x) => x.local >= 55 && (x.fromModel || x.markers > 0 || baseline >= 50))
-    .sort((a, b) => b.local - a.local)
+    .filter((x) => x.score >= 50 && (x.fromModel || x.hasAiSignatures || baseline >= 60))
+    .sort((a, b) => b.score - a.score)
     .slice(0, 14)
     .map((x) => ({
       start: x.s.start,
       end: x.s.end,
       text: x.s.text,
       category: "ai" as const,
-      score: Math.round(x.local),
-      note: x.why || (x.markers > 0 ? "Formulaic LLM phrasing" : "Low lexical variation"),
-      provider: x.fromModel ? `Language-model sentence classifier (${AI_MODEL})` : "Stylometric classifier",
-      confidence: (x.local >= 75 ? "high" : x.local >= 62 ? "medium" : "low") as "high" | "medium" | "low",
+      score: Math.round(x.score),
+      note: x.why,
+      provider: x.fromModel ? `Language-model sentence classifier (${AI_MODEL})` : "Forensic stylometric classifier",
+      confidence: (x.score >= 75 ? "high" : x.score >= 60 ? "medium" : "low") as "high" | "medium" | "low",
     }));
-
 }
 
-const AI_MODEL = "google/gemini-3.5-flash";
+const AI_MODEL = "google/gemini-2.5-flash";
 
 async function callGateway(body: unknown, timeoutMs = 45000): Promise<any | null> {
   const apiKey = process.env["LOVABLE_API_KEY"];
@@ -817,9 +983,7 @@ export async function analyzeDocument(
     ai_detection: {
       score: aiScore,
       confidence,
-      reasoning:
-        judgement?.reasoning ||
-        `Stylometric classifier: burstiness ${sty.features.burstiness}, lexical diversity ${sty.features.lexical_diversity}, ${sty.features.boilerplate_per_1k} formulaic markers per 1k words.`,
+      reasoning: judgement?.reasoning || sty.reasoning,
       model_score: modelScore,
       stylometry_score: sty.score,
       features: sty.features,
