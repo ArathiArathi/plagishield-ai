@@ -298,7 +298,37 @@ async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
   }).filter((c) => c.text.length > 40);
 }
 
-async function detectPlagiarism(text: string, sentences: Sentence[]) {
+function keywordOverlap(sentenceWords: string[], sourceText: string): number {
+  const stopWords = new Set([
+    "this", "that", "these", "those", "with", "from", "have", "been", "were", "which",
+    "will", "would", "their", "there", "what", "when", "where", "also", "such", "into",
+    "each", "than", "them", "about", "after", "before", "between", "through", "during"
+  ]);
+  const sKeys = sentenceWords.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase()));
+  if (sKeys.length < 3) return 0;
+  const srcWords = new Set(tokenize(sourceText));
+  let hits = 0;
+  for (const k of sKeys) {
+    if (srcWords.has(k)) hits++;
+  }
+  return Math.round((hits / sKeys.length) * 100);
+}
+
+function sentenceSimilarity(sentenceWords: string[], sourceText: string): number {
+  const c4 = containment(sentenceWords, sourceText, 4);
+  const c3 = containment(sentenceWords, sourceText, 3);
+  const kw = keywordOverlap(sentenceWords, sourceText);
+  if (c4 >= 25) return Math.min(100, Math.round(c4 * 1.15));
+  if (c3 >= 18) return Math.min(100, Math.round(c3 * 0.7 + kw * 0.3));
+  if (c3 >= 12 && kw >= 35) return Math.min(100, Math.round(c3 * 0.5 + kw * 0.5));
+  return 0;
+}
+
+async function detectPlagiarism(
+  text: string,
+  sentences: Sentence[],
+  meta?: { title?: string | null; docType?: string | null }
+) {
   const totalWords = tokenize(text).length || 1;
   const usable = sentences.filter((s) => s.words.length >= 8 && s.words.length <= 80);
   const target = Math.min(8, usable.length);
@@ -308,10 +338,15 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     candidates.push(usable[Math.floor(i * step)]!);
   }
 
-  // Also query document-level key terms (title / abstract keywords)
-  const docKeywords = (text.slice(0, 1500).match(/[A-Za-z0-9]+/g) ?? [])
-    .filter((w) => w.length > 5)
-    .slice(0, 8)
+  // Document-level key terms: use user-provided title if available, plus top extracted keywords
+  const titleWords = meta?.title ? meta.title.trim() : "";
+  const docKeywords = [
+    titleWords,
+    ...(text.slice(0, 1500).match(/[A-Za-z0-9]+/g) ?? [])
+      .filter((w) => w.length > 5 && !["introduction", "abstract", "during", "preliminary"].includes(w.toLowerCase()))
+      .slice(0, 8),
+  ]
+    .filter(Boolean)
     .join(" ");
 
   const cache: SourceCache = new Map();
@@ -326,34 +361,49 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
   const docPool = [...docWiki, ...docAlex, ...docCross];
   queried += docPool.length;
 
-  const found = await mapLimit(candidates, 3, async (s) => {
+  // Retrieve sentence-specific candidates for sampled key sentences
+  await mapLimit(candidates, 3, async (s) => {
     const [wiki, alex, cross] = await Promise.all([
       wikipediaCandidates(s.text, cache),
       openAlexCandidates(s.text),
       crossrefCandidates(s.text),
     ]);
-    const pool = [...docPool, ...wiki, ...alex, ...cross];
-    queried += pool.length;
-    let best: { c: Candidate; score: number } | null = null;
-    for (const c of pool) {
-      const score = Math.max(containment(s.words, c.text, 4), Math.round(containment(s.words, c.text, 3) * 0.85));
-      if (score > (best?.score ?? 0)) best = { c, score };
-    }
-    if (!best || best.score < 24) return null;
-    return {
-      sentence: s,
-      source: best.c,
-      similarity: Math.min(100, best.score),
-      matched_snippet: bestWindow(s.words, best.c.text),
-    };
+    docPool.push(...wiki, ...alex, ...cross);
+    queried += wiki.length + alex.length + cross.length;
   });
 
-  const hits = found.filter(Boolean) as Array<{
+  // Deduplicate docPool by title/url to keep in-memory matching efficient
+  const poolMap = new Map<string, Candidate>();
+  for (const c of docPool) {
+    const key = c.url || c.title;
+    if (!poolMap.has(key)) poolMap.set(key, c);
+  }
+  const uniquePool = [...poolMap.values()];
+
+  // Evaluate ALL sentences in the document against the retrieved candidate sources
+  const hits: Array<{
     sentence: Sentence;
     source: Candidate;
     similarity: number;
     matched_snippet: string;
-  }>;
+  }> = [];
+
+  for (const s of sentences) {
+    if (s.words.length < 6) continue;
+    let best: { c: Candidate; score: number } | null = null;
+    for (const c of uniquePool) {
+      const score = sentenceSimilarity(s.words, c.text);
+      if (score > (best?.score ?? 0)) best = { c, score };
+    }
+    if (best && best.score >= 20) {
+      hits.push({
+        sentence: s,
+        source: best.c,
+        similarity: Math.min(100, best.score),
+        matched_snippet: bestWindow(s.words, best.c.text),
+      });
+    }
+  }
 
   const highlights: Highlight[] = hits.map((h) => ({
     start: h.sentence.start,
@@ -366,15 +416,15 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     note: h.source.kind,
     matched_snippet: h.matched_snippet.slice(0, 600),
     provider: h.source.provider ?? "Open web retrieval",
-    confidence: h.similarity >= 65 ? "high" : h.similarity >= 45 ? "medium" : "low",
+    confidence: h.similarity >= 60 ? "high" : h.similarity >= 35 ? "medium" : "low",
   }));
 
-  const matchedWords = hits.reduce((sum, h) => sum + Math.round((h.sentence.words.length * h.similarity) / 100), 0);
-  // Sampling correction: candidates cover part of the document, scale by coverage.
-  const sampledWords = candidates.reduce((s, c) => s + c.words.length, 0) || 1;
-  const coverage = Math.min(1, sampledWords / totalWords);
-  const rawScore = (matchedWords / Math.max(1, sampledWords)) * 100 * (0.55 + 0.45 * coverage);
-  const score = Math.max(0, Math.min(100, Math.round(rawScore)));
+  // True Turnitin/DrillBit similarity: matched words divided by total words
+  const matchedWords = hits.reduce(
+    (sum, h) => sum + Math.round((h.sentence.words.length * Math.min(100, h.similarity)) / 100),
+    0
+  );
+  const score = Math.max(0, Math.min(100, Math.round((matchedWords / Math.max(1, totalWords)) * 100)));
 
   const bySource = new Map<
     string,
@@ -395,7 +445,6 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
       });
     }
   }
-
 
   return {
     score,
@@ -1147,7 +1196,7 @@ export async function analyzeDocument(
 
   await stage("retrieving");
   const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
-    detectPlagiarism(text, sentences),
+    detectPlagiarism(text, sentences, { title: meta.title, docType: meta.docType }),
     checkGrammar(text, meta.author, meta.title),
     verifyCitations(text),
     llmJudgement(text, meta.docType),

@@ -423,6 +423,26 @@ function AnalysisPage() {
 
             <TabsContent value="plagiarism" className="mt-5 space-y-5">
               <ScoreBlock label="Overall similarity" value={similarity} tone={tone(similarity, true)} sub={`${matches.length} source matches`} />
+              {matchChart.length > 0 && (
+                <Card className="bg-muted/30 p-4">
+                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Match strength by source</p>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={matchChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                        <XAxis dataKey="p" fontSize={11} stroke="var(--color-muted-foreground)" />
+                        <YAxis fontSize={11} stroke="var(--color-muted-foreground)" />
+                        <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
+                        <Bar dataKey="risk" radius={[4, 4, 0, 0]}>
+                          {matchChart.map((v, i) => (
+                            <Cell key={i} fill={v.risk > 60 ? "var(--color-destructive)" : v.risk > 30 ? "var(--color-warning)" : "var(--color-success)"} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              )}
               {matches.length === 0 ? (
                 <Empty label="No source matches recorded for this document." />
               ) : (
@@ -451,26 +471,6 @@ function AnalysisPage() {
                 <Card className="bg-muted/30 p-4">
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Detector reasoning</p>
                   <p className="text-sm text-foreground/90 break-words [overflow-wrap:anywhere]">{results.ai_detection.reasoning}</p>
-                </Card>
-              )}
-              {matchChart.length > 0 && (
-                <Card className="bg-muted/30 p-4">
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Match strength by source</p>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={matchChart}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                        <XAxis dataKey="p" fontSize={11} stroke="var(--color-muted-foreground)" />
-                        <YAxis fontSize={11} stroke="var(--color-muted-foreground)" />
-                        <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                        <Bar dataKey="risk" radius={[4, 4, 0, 0]}>
-                          {matchChart.map((v, i) => (
-                            <Cell key={i} fill={v.risk > 60 ? "var(--color-destructive)" : v.risk > 30 ? "var(--color-warning)" : "var(--color-success)"} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
                 </Card>
               )}
             </TabsContent>
