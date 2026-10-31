@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limiter.server";
 
 const InputSchema = z.object({
   analysisId: z.string().uuid(),
@@ -167,7 +168,18 @@ function sanitizeForPostgres<T>(val: T): T {
 export const runAnalysis = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input) => InputSchema.parse(input))
-  .handler(async ({ data, context }) => execute(context as unknown as Ctx, data));
+  .handler(async ({ data, context }) => {
+    const ctx = context as unknown as Ctx;
+    const rateLimit = checkRateLimit(ctx.userId, RATE_LIMITS.ANALYSIS_RUN);
+    if (!rateLimit.isAllowed) {
+      return {
+        ok: false as const,
+        error: rateLimit.message || `Rate limit reached. Please wait ${rateLimit.retryAfterSeconds}s before re-analyzing.`,
+        retryAfter: rateLimit.retryAfterSeconds,
+      };
+    }
+    return execute(ctx, data);
+  });
 
 /**
  * Queue driver. Starts the oldest pending analysis only when nothing else is
@@ -178,6 +190,15 @@ export const processQueue = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const ctx = context as unknown as Ctx;
+    const rateLimit = checkRateLimit(ctx.userId, RATE_LIMITS.QUEUE_PROCESS);
+    if (!rateLimit.isAllowed) {
+      return {
+        started: false as const,
+        reason: "rate_limited" as const,
+        error: rateLimit.message,
+        retryAfter: rateLimit.retryAfterSeconds,
+      };
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     // Check for running analyses for this user

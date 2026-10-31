@@ -125,21 +125,20 @@ function ReportsPage() {
     try {
       downloadReport(kind, reportInput);
       toast.success(`${bundle.find((b) => b.kind === kind)?.title} downloaded`);
-    } catch {
+    } catch (e: unknown) {
+      console.error(`Could not generate ${kind} report:`, e);
       toast.error("Could not generate the PDF. Please try again.");
     }
   };
 
   const downloadAll = () => {
-    bundle.forEach((b, i) => window.setTimeout(() => {
-      try {
-        downloadReport(b.kind, reportInput);
-      } catch (e: unknown) {
-        console.error(`Could not generate ${b.title}:`, e);
-        toast.error(`Could not generate ${b.title}. Please try again.`);
-      }
-    }, i * 350));
-    toast.success("Generating all reports…");
+    try {
+      downloadReport("full", reportInput);
+      toast.success("Comprehensive Integrity Dossier (All Modules) downloaded");
+    } catch (e: unknown) {
+      console.error("Could not generate Comprehensive Dossier:", e);
+      toast.error("Could not generate the dossier PDF. Please try downloading individual module reports.");
+    }
   };
 
   return (
@@ -156,7 +155,7 @@ function ReportsPage() {
               </SelectContent>
             </Select>
             <Button size="sm" onClick={downloadAll}>
-              <Download className="mr-1.5 h-4 w-4" />Download all PDFs
+              <Download className="mr-1.5 h-4 w-4" />Download Full Dossier (PDF)
             </Button>
           </>
         }

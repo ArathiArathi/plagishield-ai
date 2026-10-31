@@ -6,8 +6,21 @@ import type { Database } from './types'
 
 
 
-export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
-  async ({ next }) => {
+import { supabase as clientSupabase } from './client'
+
+export const requireSupabaseAuth = createMiddleware({ type: 'function' })
+  .client(async ({ next }) => {
+    try {
+      const { data } = await clientSupabase.auth.getSession();
+      const token = data.session?.access_token;
+      return next({
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    } catch {
+      return next();
+    }
+  })
+  .server(async ({ next }) => {
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const SUPABASE_PUBLISHABLE_KEY =
       process.env.SUPABASE_PUBLISHABLE_KEY ||
@@ -30,7 +43,22 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       throw new Error('Unauthorized: No request headers available');
     }
 
-    const authHeader = request.headers.get('authorization');
+    let authHeader = request.headers.get('authorization');
+
+    // Fallback: Check cookies for access token if no Authorization header
+    if (!authHeader) {
+      const cookieHeader = request.headers.get('cookie') || '';
+      const match = cookieHeader.match(/sb-[a-z0-9]+-auth-token=([^;]+)/i);
+      if (match && match[1]) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(match[1]));
+          const token = Array.isArray(parsed) ? parsed[0] : parsed?.access_token;
+          if (token) authHeader = `Bearer ${token}`;
+        } catch {
+          // ignore cookie parse error
+        }
+      }
+    }
 
     if (!authHeader) {
       throw new Error('Unauthorized: No authorization header provided');
