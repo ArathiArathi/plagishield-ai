@@ -149,19 +149,33 @@ export async function extractText(buffer: ArrayBuffer, fileName: string): Promis
   const bytes = new Uint8Array(buffer);
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
 
+  let rawText = "";
+  let method = "plain-text";
+
   if (ext === "docx") {
-    const text = await extractDocx(bytes);
-    if (text.length > 40) return { text, method: "docx-xml" };
+    rawText = await extractDocx(bytes);
+    if (rawText.length > 40) method = "docx-xml";
   }
-  if (ext === "pdf" || (bytes[0] === 0x25 && bytes[1] === 0x50)) {
-    const text = await extractPdf(bytes);
-    if (text.length > 40) return { text, method: "pdf-content-stream" };
+  if (!rawText && (ext === "pdf" || (bytes[0] === 0x25 && bytes[1] === 0x50))) {
+    rawText = await extractPdf(bytes);
+    if (rawText.length > 40) method = "pdf-content-stream";
   }
 
-  const plain = decodeUtf8(bytes)
+  if (!rawText) {
+    const plain = decodeUtf8(bytes)
+      .replace(/\u0000/g, "")
+      .replace(/[^\S\n]+/g, " ")
+      .trim();
+    rawText = plain.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u024F\u2018-\u201D\u2013\u2014]/g, "");
+    method = "plain-text";
+  }
+
+  // CRITICAL: Strip null bytes (\u0000) and control characters that trigger Postgres error 22P05
+  const sanitized = rawText
+    .replace(/\0/g, "")
     .replace(/\u0000/g, "")
-    .replace(/[^\S\n]+/g, " ")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
     .trim();
-  const printable = plain.replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u024F\u2018-\u201D\u2013\u2014]/g, "");
-  return { text: printable, method: "plain-text" };
+
+  return { text: sanitized, method };
 }

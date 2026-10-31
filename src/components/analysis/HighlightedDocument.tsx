@@ -65,8 +65,8 @@ export function HighlightedDocument({
         <span className="text-xs text-muted-foreground">Click a category to toggle its highlights</span>
       </div>
 
-      <div className="max-h-[460px] overflow-y-auto rounded-md border border-border bg-card p-4">
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/90">
+      <div className="max-h-[460px] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-card p-4 min-w-0">
+        <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[13px] leading-relaxed text-foreground/90">
           {segments.map((s, i) =>
             s.highlight ? (
               <mark

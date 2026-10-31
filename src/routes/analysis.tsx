@@ -251,8 +251,8 @@ function AnalysisPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <Card className="p-5">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] min-w-0">
+        <Card className="p-5 min-w-0 overflow-hidden">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Integrity summary</h3>
           <div className="space-y-4">
             <ScoreBlock label="Similarity" value={similarity} tone={tone(similarity, true)} sub={similarity < 25 ? "Below 25% threshold" : "Above recommended threshold"} />
@@ -273,18 +273,20 @@ function AnalysisPage() {
         </Card>
 
 
-        <Card className="p-5">
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid h-auto w-full grid-cols-4 sm:grid-cols-8">
-              <TabsTrigger value="highlights" className="flex-col gap-1 py-2 text-[11px]"><Highlighter className="h-4 w-4" />Highlights</TabsTrigger>
-              <TabsTrigger value="evidence" className="flex-col gap-1 py-2 text-[11px]"><Quote className="h-4 w-4" />Evidence</TabsTrigger>
-              <TabsTrigger value="issues" className="flex-col gap-1 py-2 text-[11px]"><ListChecks className="h-4 w-4" />Issues</TabsTrigger>
-              <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Plagiarism</TabsTrigger>
-              <TabsTrigger value="ai" className="flex-col gap-1 py-2 text-[11px]"><Sparkles className="h-4 w-4" />AI Detection</TabsTrigger>
-              <TabsTrigger value="grammar" className="flex-col gap-1 py-2 text-[11px]"><Check className="h-4 w-4" />Grammar</TabsTrigger>
-              <TabsTrigger value="citation" className="flex-col gap-1 py-2 text-[11px]"><BookOpen className="h-4 w-4" />Citation</TabsTrigger>
-              <TabsTrigger value="recs" className="flex-col gap-1 py-2 text-[11px]"><Lightbulb className="h-4 w-4" />Recs</TabsTrigger>
-            </TabsList>
+        <Card className="p-5 min-w-0 overflow-hidden">
+          <Tabs value={tab} onValueChange={setTab} className="min-w-0">
+            <div className="overflow-x-auto pb-1">
+              <TabsList className="grid h-auto min-w-[560px] sm:min-w-0 w-full grid-cols-8">
+                <TabsTrigger value="highlights" className="flex-col gap-1 py-2 text-[11px]"><Highlighter className="h-4 w-4" />Highlights</TabsTrigger>
+                <TabsTrigger value="evidence" className="flex-col gap-1 py-2 text-[11px]"><Quote className="h-4 w-4" />Evidence</TabsTrigger>
+                <TabsTrigger value="issues" className="flex-col gap-1 py-2 text-[11px]"><ListChecks className="h-4 w-4" />Issues</TabsTrigger>
+                <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Plagiarism</TabsTrigger>
+                <TabsTrigger value="ai" className="flex-col gap-1 py-2 text-[11px]"><Sparkles className="h-4 w-4" />AI Detection</TabsTrigger>
+                <TabsTrigger value="grammar" className="flex-col gap-1 py-2 text-[11px]"><Check className="h-4 w-4" />Grammar</TabsTrigger>
+                <TabsTrigger value="citation" className="flex-col gap-1 py-2 text-[11px]"><BookOpen className="h-4 w-4" />Citation</TabsTrigger>
+                <TabsTrigger value="recs" className="flex-col gap-1 py-2 text-[11px]"><Lightbulb className="h-4 w-4" />Recs</TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="highlights" className="mt-5 space-y-4">
               <p className="text-xs text-muted-foreground">
@@ -321,7 +323,7 @@ function AnalysisPage() {
                           <p className="text-sm font-semibold text-foreground">{Math.round(Number(s.similarity ?? 0))}%</p>
                         </div>
                       </div>
-                      {s.snippet && <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs text-foreground/90">{s.snippet}</p>}
+                      {s.snippet && <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs text-foreground/90 break-words [overflow-wrap:anywhere]">{s.snippet}</p>}
                     </div>
                   ))}
                 </div>
@@ -335,7 +337,7 @@ function AnalysisPage() {
               {results.ai_detection?.reasoning && (
                 <Card className="bg-muted/30 p-4">
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Detector reasoning</p>
-                  <p className="text-sm text-foreground/90">{results.ai_detection.reasoning}</p>
+                  <p className="text-sm text-foreground/90 break-words [overflow-wrap:anywhere]">{results.ai_detection.reasoning}</p>
                 </Card>
               )}
               {matchChart.length > 0 && (
@@ -374,8 +376,8 @@ function AnalysisPage() {
                     )}>{g.type ?? "issue"}</Badge>
                     <span className="text-xs text-muted-foreground">{g.severity ?? "low"} severity</span>
                   </div>
-                  {g.text && <p className="text-sm text-muted-foreground line-through">{g.text}</p>}
-                  {g.suggestion && <p className="text-sm font-medium text-foreground">→ {g.suggestion}</p>}
+                  {g.text && <p className="text-sm text-muted-foreground line-through break-words [overflow-wrap:anywhere]">{g.text}</p>}
+                  {g.suggestion && <p className="text-sm font-medium text-foreground break-words [overflow-wrap:anywhere]">→ {g.suggestion}</p>}
                 </div>
               ))}
             </TabsContent>
@@ -399,7 +401,7 @@ function AnalysisPage() {
               ) : citationIssues.map((c, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-md border border-border p-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                  <p className="min-w-0 flex-1 text-sm text-foreground">{c}</p>
+                  <p className="min-w-0 flex-1 text-sm text-foreground break-words [overflow-wrap:anywhere]">{c}</p>
                 </div>
               ))}
             </TabsContent>
@@ -415,7 +417,7 @@ function AnalysisPage() {
                     )}>{r.priority}</Badge>
                     <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{r.group}</span>
                   </div>
-                  <p className="text-sm text-foreground">{r.text}</p>
+                  <p className="text-sm text-foreground break-words [overflow-wrap:anywhere]">{r.text}</p>
                 </div>
               ))}
             </TabsContent>

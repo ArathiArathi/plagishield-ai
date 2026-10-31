@@ -89,7 +89,30 @@ async function execute(
       onStage: (stage) => setStage(stage),
     });
 
+function sanitizeForPostgres<T>(val: T): T {
+  if (typeof val === "string") {
+    return val.replace(/\0/g, "").replace(/\u0000/g, "") as unknown as T;
+  }
+  if (Array.isArray(val)) {
+    return val.map((v) => sanitizeForPostgres(v)) as unknown as T;
+  }
+  if (val !== null && typeof val === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(val)) {
+      out[k] = sanitizeForPostgres(v);
+    }
+    return out as unknown as T;
+  }
+  return val;
+}
+
     // 5. Save completed results
+    const cleanResults = sanitizeForPostgres({
+      ...result,
+      stage: "completed",
+      stage_pct: 100,
+    });
+
     const { error: analysisSaveError } = await supabaseAdmin
       .from("analyses")
       .update({
@@ -98,11 +121,7 @@ async function execute(
         ai_score: result.ai_detection.score,
         grammar_score: result.grammar.score,
         citation_score: result.citations.score,
-        results: {
-          ...result,
-          stage: "completed",
-          stage_pct: 100,
-        },
+        results: cleanResults,
         error: null,
       })
       .eq("id", data.analysisId);

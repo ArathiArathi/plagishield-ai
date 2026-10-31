@@ -42,7 +42,7 @@ export function EvidencePanel({
       {items.map((h, i) => {
         const conf = confidenceOf(h);
         return (
-          <div key={`${h.start}-${h.category}-${i}`} className="rounded-lg border border-border bg-muted/20 p-4">
+          <div key={`${h.start}-${h.category}-${i}`} className="rounded-lg border border-border bg-muted/20 p-4 min-w-0 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline" className={CATEGORY_STYLE[h.category].chip}>
                 {CATEGORY_STYLE[h.category].label}
@@ -51,16 +51,16 @@ export function EvidencePanel({
                 {conf} confidence · {Math.round(h.score)}%
               </Badge>
               {h.provider && (
-                <span className="text-xs text-muted-foreground">Detected by {h.provider}</span>
+                <span className="text-xs text-muted-foreground break-words">{h.provider}</span>
               )}
             </div>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 space-y-3 min-w-0">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Submitted text
                 </p>
-                <p className="mt-1 rounded-md border border-border bg-card p-2.5 text-[13px] leading-relaxed text-foreground/90">
+                <p className="mt-1 rounded-md border border-border bg-card p-2.5 text-[13px] leading-relaxed text-foreground/90 break-words [overflow-wrap:anywhere]">
                   {h.text.slice(0, 600)}
                 </p>
               </div>
@@ -70,24 +70,24 @@ export function EvidencePanel({
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Matched source snippet
                   </p>
-                  <p className="mt-1 rounded-md border border-border bg-card p-2.5 text-[13px] leading-relaxed text-muted-foreground">
+                  <p className="mt-1 rounded-md border border-border bg-card p-2.5 text-[13px] leading-relaxed text-muted-foreground break-words [overflow-wrap:anywhere]">
                     “{h.matched_snippet}”
                   </p>
                 </div>
               )}
 
               {(h.source || h.url || h.note) && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {h.source && <span className="font-medium text-foreground">{h.source}</span>}
-                  {h.note && <span>· {h.note}</span>}
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground min-w-0">
+                  {h.source && <span className="font-medium text-foreground break-words">{h.source}</span>}
+                  {h.note && <span className="break-words">· {h.note}</span>}
                   {h.url && (
                     <a
                       href={h.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-primary hover:underline break-all"
                     >
-                      View source <ExternalLink className="h-3 w-3" />
+                      View source <ExternalLink className="h-3 w-3 shrink-0" />
                     </a>
                   )}
                 </div>

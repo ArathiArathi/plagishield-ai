@@ -191,13 +191,13 @@ function ReportsPage() {
 
 
       <Card className="overflow-hidden">
-        <div className="border-b border-border bg-[image:var(--gradient-subtle)] p-6">
+        <div className="border-b border-border bg-[image:var(--gradient-subtle)] p-6 min-w-0">
           <div className="flex items-center gap-2">
-            <FileBarChart className="h-5 w-5 text-primary" />
+            <FileBarChart className="h-5 w-5 text-primary shrink-0" />
             <Badge variant="secondary">Report · {analysis.id.slice(0, 8).toUpperCase()}</Badge>
           </div>
-          <h2 className="mt-3 text-2xl font-semibold text-foreground">{selected.name}</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="mt-3 text-2xl font-semibold text-foreground break-words [overflow-wrap:anywhere]">{selected.name}</h2>
+          <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
             Generated {new Date(analysis.created_at).toLocaleString()} · version {selected.latest_version} · {selected.file_type}
           </p>
         </div>

@@ -385,8 +385,8 @@ function DocumentsPage() {
                         <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
                           <FileText className="h-4 w-4" />
                         </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-foreground">{doc.name}</p>
+                        <div className="min-w-0 max-w-[240px] sm:max-w-[320px] lg:max-w-[440px]">
+                          <p className="truncate text-sm font-medium text-foreground" title={doc.name}>{doc.name}</p>
                           <p className="text-xs text-muted-foreground">{doc.file_type} · {(doc.size_bytes / 1024).toFixed(1)} KB</p>
                         </div>
                       </div>
