@@ -91,7 +91,6 @@ function ReportsPage() {
 
   const distribution = (data?.similarityDistribution ?? []);
 
-  const meta = selected as unknown as { doc_type?: string | null; author_name?: string | null; paper_title?: string | null };
   const composition = results.composition ?? [];
   const engineIssues = results.issues ?? [];
   const allHighlights: Highlight[] = [
@@ -106,9 +105,9 @@ function ReportsPage() {
     version: selected.latest_version,
     analysisId: analysis.id,
     generatedAt: new Date(analysis.created_at).toLocaleString(),
-    docType: meta.doc_type ?? null,
-    authorName: meta.author_name ?? null,
-    paperTitle: meta.paper_title ?? null,
+    docType: selected.doc_type,
+    authorName: selected.author_name,
+    paperTitle: selected.paper_title,
     similarity, ai, grammar, citation,
     results: results as ReportInput["results"],
   };
@@ -132,7 +131,14 @@ function ReportsPage() {
   };
 
   const downloadAll = () => {
-    bundle.forEach((b, i) => window.setTimeout(() => downloadReport(b.kind, reportInput), i * 350));
+    bundle.forEach((b, i) => window.setTimeout(() => {
+      try {
+        downloadReport(b.kind, reportInput);
+      } catch (e: unknown) {
+        console.error(`Could not generate ${b.title}:`, e);
+        toast.error(`Could not generate ${b.title}. Please try again.`);
+      }
+    }, i * 350));
     toast.success("Generating all reports…");
   };
 

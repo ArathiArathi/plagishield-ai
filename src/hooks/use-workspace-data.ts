@@ -24,6 +24,9 @@ export type DocumentRow = {
   latest_version: number;
   created_at: string;
   updated_at: string;
+  doc_type: string | null;
+  author_name: string | null;
+  paper_title: string | null;
 };
 
 const avg = (nums: number[]) =>
@@ -38,7 +41,7 @@ export function useWorkspaceData() {
       const [docsRes, analysesRes] = await Promise.all([
         supabase
           .from("documents")
-          .select("id,name,file_type,status,size_bytes,latest_version,created_at,updated_at")
+          .select("id,name,file_type,status,size_bytes,latest_version,created_at,updated_at,doc_type,author_name,paper_title")
           .order("created_at", { ascending: false }),
         supabase
           .from("analyses")

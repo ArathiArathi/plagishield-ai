@@ -27,7 +27,7 @@ export type PdfIssue = {
 export type ReportResults = {
   text_excerpt?: string;
   plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: PdfHighlight[] };
-  ai_detection?: { confidence?: string; reasoning?: string; matches?: Array<{ text?: string; strength?: string }>; highlights?: PdfHighlight[] };
+  ai_detection?: { confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
   grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
   composition?: PdfCompositionSlice[];
@@ -548,7 +548,7 @@ function aiSection(ctx: Ctx, input: ReportInput) {
   );
   sectionTitle(ctx, "Detector Reasoning");
   paragraph(ctx, det.reasoning?.trim() || "No detailed reasoning was returned for this submission.");
-  const aiMatches = det.matches ?? [];
+  const aiMatches = det.highlights ?? [];
   if (aiMatches.length > 0) {
     sectionTitle(ctx, "Flagged Passages");
     table(
@@ -558,7 +558,7 @@ function aiSection(ctx: Ctx, input: ReportInput) {
         { header: "Passage", width: 130 },
         { header: "Strength", width: 28, align: "right" },
       ],
-      aiMatches.map((m, i) => [String(i + 1), m.text ?? "—", m.strength ?? "—"]),
+      aiMatches.map((m, i) => [String(i + 1), m.text ?? "—", `${Math.round(Number(m.score ?? 0))}%`]),
     );
   }
 }
