@@ -32,6 +32,7 @@ async function execute(
       await supabaseAdmin
         .from("analyses")
         .update({
+          updated_at: new Date().toISOString(),
           results: { stage, stage_pct: STAGE_PCT[stage] ?? 0 },
         })
         .eq("id", data.analysisId);
@@ -47,6 +48,7 @@ async function execute(
       .update({
         status: "processing",
         error: null,
+        updated_at: new Date().toISOString(),
         results: { stage: "extracting", stage_pct: STAGE_PCT.extracting },
       })
       .eq("id", data.analysisId);
@@ -54,7 +56,7 @@ async function execute(
 
     const { error: documentUpdateError } = await supabaseAdmin
       .from("documents")
-      .update({ status: "processing" })
+      .update({ status: "processing", updated_at: new Date().toISOString() })
       .eq("id", data.documentId);
     if (documentUpdateError) throw documentUpdateError;
 
@@ -123,13 +125,14 @@ function sanitizeForPostgres<T>(val: T): T {
         citation_score: result.citations.score,
         results: cleanResults,
         error: null,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", data.analysisId);
     if (analysisSaveError) throw analysisSaveError;
 
     const { error: documentSaveError } = await supabaseAdmin
       .from("documents")
-      .update({ status: "analyzed" })
+      .update({ status: "analyzed", updated_at: new Date().toISOString() })
       .eq("id", data.documentId);
     if (documentSaveError) throw documentSaveError;
 

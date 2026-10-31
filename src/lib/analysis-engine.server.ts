@@ -220,18 +220,22 @@ async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate
 }
 
 /**
- * Build several search queries per sentence. Long quoted sentences return zero
- * hits on full-text search engines, so we use short quoted windows (verbatim
- * copy detection) plus a keyword query (paraphrase / topical detection).
+ * Build several keyword queries per sentence to query open academic repositories.
  */
 function searchQueries(sentence: string): string[] {
   const words = sentence.match(/[A-Za-z0-9'’-]+/g) ?? [];
-  if (words.length < 8) return [];
-  const win = (i: number, n = 9) => words.slice(i, i + n).join(" ");
-  const queries = [`"${win(0)}"`];
-  if (words.length >= 20) queries.push(`"${win(Math.max(0, Math.floor(words.length / 2) - 4))}"`);
-  const keywords = words.filter((w) => w.length > 4).slice(0, 12).join(" ");
-  if (keywords.split(" ").length >= 4) queries.push(keywords);
+  if (words.length < 6) return [];
+  const stopWords = new Set([
+    "this", "that", "these", "those", "with", "from", "have", "been", "were", "what",
+    "when", "where", "which", "will", "would", "could", "should", "their", "there",
+    "about", "after", "before", "between", "through", "during", "under", "above", "into",
+    "also", "such", "other", "more", "most", "some", "only", "both", "each", "than"
+  ]);
+  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 8).join(" ");
+  const queries: string[] = [];
+  if (keywords.split(" ").length >= 3) queries.push(keywords);
+  const win = words.slice(0, 7).join(" ");
+  if (win && win !== keywords) queries.push(win);
   return queries;
 }
 
@@ -246,9 +250,14 @@ async function wikipediaCandidates(sentence: string, cache: SourceCache): Promis
 }
 
 async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
-  const q = encodeURIComponent(phrase.split(/\s+/).slice(0, 16).join(" "));
+  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
+  const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "which", "will", "would", "their"]);
+  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 7).join(" ");
+  if (!keywords) return [];
+  const q = encodeURIComponent(keywords);
   const data = await getJson(
-    `https://api.openalex.org/works?search=${q}&per-page=3&select=id,doi,title,abstract_inverted_index,publication_year,primary_location`,
+    `https://api.openalex.org/works?search=${q}&per-page=2&select=id,doi,title,abstract_inverted_index,publication_year,primary_location`,
+    7000
   );
   const works: any[] = data?.results ?? [];
   return works
@@ -256,21 +265,42 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
       const abstract = openAlexAbstract(w.abstract_inverted_index);
       const body = [w.title, abstract].filter(Boolean).join(". ");
       return {
-        title: `${w.title ?? "Untitled work"}${w.publication_year ? ` (${w.publication_year})` : ""}`,
+        title: `${w.title ?? "Scholarly publication"}${w.publication_year ? ` (${w.publication_year})` : ""}`,
         url: w.doi ?? w.primary_location?.landing_page_url ?? w.id,
         text: body,
         kind: "Scholarly publication",
         provider: "OpenAlex works API",
-
       };
     })
-    .filter((c) => c.text.length > 120);
+    .filter((c) => c.text.length > 60);
+}
+
+async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
+  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
+  const keywords = words.filter((w) => w.length > 4).slice(0, 7).join(" ");
+  if (!keywords) return [];
+  const data = await getJson(
+    `https://api.crossref.org/works?rows=2&select=title,DOI,abstract,container-title&query=${encodeURIComponent(keywords)}&mailto=integrity@plagishield.app`,
+    7000
+  );
+  const items: any[] = data?.message?.items ?? [];
+  return items.map((it) => {
+    const title = it.title?.[0] ?? "Scholarly Publication";
+    const venue = it["container-title"]?.[0] ? ` (${it["container-title"][0]})` : "";
+    const abstract = (it.abstract ?? "").replace(/<[^>]+>/g, "").trim();
+    return {
+      title: `${title}${venue}`,
+      url: it.DOI ? `https://doi.org/${it.DOI}` : undefined,
+      text: [title, abstract].filter(Boolean).join(". "),
+      kind: "Academic Journal / Conference Proceedings",
+      provider: "Crossref Scholarly Index",
+    };
+  }).filter((c) => c.text.length > 40);
 }
 
 async function detectPlagiarism(text: string, sentences: Sentence[]) {
   const totalWords = tokenize(text).length || 1;
   const usable = sentences.filter((s) => s.words.length >= 8 && s.words.length <= 80);
-  // Even sampling across the whole document (not just the longest sentences)
   const target = Math.min(18, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
@@ -278,19 +308,38 @@ async function detectPlagiarism(text: string, sentences: Sentence[]) {
     candidates.push(usable[Math.floor(i * step)]!);
   }
 
+  // Also query document-level key terms (title / abstract keywords)
+  const docKeywords = (text.slice(0, 1500).match(/[A-Za-z0-9]+/g) ?? [])
+    .filter((w) => w.length > 5)
+    .slice(0, 8)
+    .join(" ");
+
   const cache: SourceCache = new Map();
   let queried = 0;
-  const found = await mapLimit(candidates, 4, async (s) => {
-    const [wiki, alex] = await Promise.all([wikipediaCandidates(s.text, cache), openAlexCandidates(s.text)]);
-    const pool = [...wiki, ...alex];
+
+  // Retrieve foundational topical candidates first
+  const [docWiki, docAlex, docCross] = await Promise.all([
+    wikipediaCandidates(docKeywords, cache),
+    openAlexCandidates(docKeywords),
+    crossrefCandidates(docKeywords),
+  ]);
+  const docPool = [...docWiki, ...docAlex, ...docCross];
+  queried += docPool.length;
+
+  const found = await mapLimit(candidates, 3, async (s) => {
+    const [wiki, alex, cross] = await Promise.all([
+      wikipediaCandidates(s.text, cache),
+      openAlexCandidates(s.text),
+      crossrefCandidates(s.text),
+    ]);
+    const pool = [...docPool, ...wiki, ...alex, ...cross];
     queried += pool.length;
     let best: { c: Candidate; score: number } | null = null;
     for (const c of pool) {
-      // 4-gram containment catches verbatim copies, 3-gram catches light edits.
       const score = Math.max(containment(s.words, c.text, 4), Math.round(containment(s.words, c.text, 3) * 0.85));
       if (score > (best?.score ?? 0)) best = { c, score };
     }
-    if (!best || best.score < 28) return null;
+    if (!best || best.score < 24) return null;
     return {
       sentence: s,
       source: best.c,
@@ -709,6 +758,51 @@ async function llmJudgement(sample: string, docType: string) {
 
 /* ------------------------------------------------------- 3. grammar (LT) */
 
+function isProperNounOrDomainTerm(
+  word: string,
+  context: string,
+  author?: string | null,
+  title?: string | null,
+): boolean {
+  const clean = word.trim().replace(/^['"“‘`]+|['"”’`.,;:]+$/g, "");
+  if (!clean || clean.length <= 1) return true;
+
+  // Check author or title
+  if (author && author.toLowerCase().includes(clean.toLowerCase())) return true;
+  if (title && title.toLowerCase().includes(clean.toLowerCase())) return true;
+
+  // Acronyms (e.g. SOC, SOCs, FL, IDS, PCAP, GDPR, HIPAA, MLSys, CICIDS, CICIDS2017, PyTorch, RTX, TON_IoT, FedAvg, NIDS)
+  if (/^[A-Z0-9_]{2,}s?$/.test(clean)) return true;
+  if (/[a-z]+[A-Z0-9]/.test(clean)) return true; // CamelCase
+  if (/^[A-Z][a-z0-9]+[A-Z]/.test(clean)) return true;
+
+  // Hyphenated compound terms (e.g. non-repudiable, privacy-preserving, tree-explainer)
+  if (/^[a-zA-Z0-9]+-[a-zA-Z0-9]+(-[a-zA-Z0-9]+)?$/.test(clean)) return true;
+
+  // Capitalized proper nouns inside sentences (names, locations, institutions)
+  if (/^[A-Z][a-z]+/.test(clean)) {
+    const idx = context.indexOf(clean);
+    if (idx > 0) {
+      const prev = context.slice(0, idx).trim();
+      // If previous char is NOT sentence terminator, it's mid-sentence proper noun
+      if (!/[.!?]$/.test(prev) && !/\n\s*$/.test(prev)) {
+        return true;
+      }
+    }
+  }
+
+  // Common academic header keywords
+  if (
+    /(department|college|university|institute|faculty|school|bangalore|karnataka|india|delhi|mumbai|chennai|california|ieee|acm|springer|elsevier|proc\.|proceedings)/i.test(
+      context,
+    )
+  ) {
+    if (/^[A-Z]/.test(clean)) return true;
+  }
+
+  return false;
+}
+
 const SEVERITY_BY_CATEGORY: Record<string, "high" | "medium" | "low"> = {
   TYPOS: "high",
   GRAMMAR: "high",
@@ -722,7 +816,7 @@ const SEVERITY_BY_CATEGORY: Record<string, "high" | "medium" | "low"> = {
   SEMANTICS: "high",
 };
 
-async function checkGrammar(text: string) {
+async function checkGrammar(text: string, author?: string | null, title?: string | null) {
   const chunks: Array<{ text: string; offset: number }> = [];
   const limit = 1600;
   for (let i = 0; i < text.length && chunks.length < 6; i += limit) {
@@ -755,8 +849,17 @@ async function checkGrammar(text: string) {
     ok += 1;
     for (const m of r.matches as any[]) {
       const category = String(m.rule?.category?.id ?? "GRAMMAR");
+      const ruleId = String(m.rule?.id ?? "");
       const excerpt = String(m.context?.text ?? "").slice(0, 220);
       const flagged = chunk_slice(r.chunk.text, m.offset, m.length);
+
+      // Filter proper nouns, domain terminology, and acronyms from false typo penalties
+      if (category === "TYPOS" || ruleId.includes("SPELLING") || ruleId.includes("MORFOLOGIK")) {
+        if (isProperNounOrDomainTerm(flagged || excerpt, excerpt, author, title)) {
+          continue;
+        }
+      }
+
       issues.push({
         type: String(m.rule?.category?.name ?? category).slice(0, 40),
         severity: SEVERITY_BY_CATEGORY[category] ?? "medium",
@@ -775,14 +878,13 @@ async function checkGrammar(text: string) {
         provider: "LanguageTool API",
         confidence: "high",
       });
-
     }
   }
   if (ok === 0) provider = "Stylometric fallback (LanguageTool unavailable)";
 
   const checkedWords = tokenize(chunks.map((c) => c.text).join(" ")).length || 1;
   const density = (issues.length / checkedWords) * 100; // issues per 100 words
-  const score = Math.max(20, Math.min(100, Math.round(100 - density * 9)));
+  const score = Math.max(25, Math.min(100, Math.round(100 - density * 3.5)));
 
   return { score, provider, issues: issues.slice(0, 80), highlights: highlights.slice(0, 120) };
 }
@@ -806,6 +908,13 @@ function extractReferences(text: string) {
   return { refs, inText, hasSection: refIndex >= 0 };
 }
 
+function extractTitleFromRef(raw: string): string {
+  const quoted = raw.match(/["“]([^"”]+)["”]/);
+  if (quoted && quoted[1].length > 10) return quoted[1].trim();
+  const parts = raw.split(/[.,]/).map((p) => p.trim()).filter((p) => p.length > 15);
+  return parts[0] || raw;
+}
+
 function titleSimilarity(a: string, b: string) {
   const A = new Set(tokenize(a));
   const B = new Set(tokenize(b));
@@ -820,32 +929,66 @@ async function verifyCitations(text: string) {
   const issues: string[] = [];
 
   const references = await mapLimit(refs, 3, async (raw) => {
-    const data = await getJson(
-      `https://api.crossref.org/works?rows=1&select=title,DOI,issued&query.bibliographic=${encodeURIComponent(raw.slice(0, 300))}&mailto=integrity@plagishield.app`,
+    const extractedTitle = extractTitleFromRef(raw);
+    let verified = false;
+    let matchedTitle: string | undefined = undefined;
+    let doi: string | undefined = undefined;
+    let year: number | undefined = undefined;
+
+    // 1. Crossref rows=3 by title
+    const crData = await getJson(
+      `https://api.crossref.org/works?rows=3&select=title,DOI,issued&query.title=${encodeURIComponent(extractedTitle)}&mailto=integrity@plagishield.app`,
+      7000,
     );
-    const item = data?.message?.items?.[0];
-    const title: string = item?.title?.[0] ?? "";
-    const sim = title ? titleSimilarity(raw, title) : 0;
-    const verified = sim >= 0.45;
-    if (!verified) issues.push(`Could not verify reference against Crossref: "${raw.slice(0, 90)}…"`);
+    for (const item of crData?.message?.items ?? []) {
+      const itTitle: string = item?.title?.[0] ?? "";
+      if (titleSimilarity(extractedTitle, itTitle) >= 0.45) {
+        verified = true;
+        matchedTitle = itTitle;
+        doi = item?.DOI;
+        year = item?.issued?.["date-parts"]?.[0]?.[0];
+        break;
+      }
+    }
+
+    // 2. OpenAlex fallback
+    if (!verified) {
+      const oaData = await getJson(
+        `https://api.openalex.org/works?search=${encodeURIComponent(extractedTitle)}&per-page=3&select=id,doi,title,publication_year`,
+        7000,
+      );
+      for (const w of oaData?.results ?? []) {
+        const wTitle: string = w?.title ?? "";
+        if (titleSimilarity(extractedTitle, wTitle) >= 0.45) {
+          verified = true;
+          matchedTitle = wTitle;
+          doi = w?.doi ?? w?.id;
+          year = w?.publication_year;
+          break;
+        }
+      }
+    }
+
+    if (!verified) issues.push(`Could not verify reference against scholarly index: "${raw.slice(0, 90)}…"`);
     if (!/\(?(19|20)\d{2}\)?/.test(raw)) issues.push(`Missing publication year: "${raw.slice(0, 70)}…"`);
+
     return {
       raw,
       verified,
-      matched_title: verified ? title : undefined,
-      doi: verified ? item?.DOI : undefined,
-      year: item?.issued?.["date-parts"]?.[0]?.[0],
+      matched_title: matchedTitle,
+      doi,
+      year,
     };
   });
 
-  if (!hasSection) issues.push("No dedicated References/Bibliography section was detected.");
+  if (!hasSection && refs.length > 0) issues.push("No dedicated References/Bibliography section header detected.");
   if (refs.length === 0) issues.push("No parsable reference entries were found in the submission.");
   if (inText === 0 && refs.length > 0) issues.push("Reference list present but no in-text citations were detected.");
 
   const verified = references.filter((r) => r.verified).length;
   const base = refs.length > 0 ? (verified / refs.length) * 100 : 25;
-  const penalty = Math.min(30, issues.length * 6) + (inText === 0 ? 15 : 0);
-  const score = Math.max(0, Math.min(100, Math.round(base - penalty + (hasSection ? 8 : 0))));
+  const penalty = (inText === 0 ? 15 : 0) + (!hasSection && refs.length > 0 ? 8 : 0);
+  const score = Math.max(20, Math.min(100, Math.round(base - penalty + (verified > 0 ? 5 : 0))));
 
   return { score, total: refs.length, verified, in_text: inText, references, issues: issues.slice(0, 25) };
 }
@@ -879,7 +1022,7 @@ export async function analyzeDocument(
   await stage("retrieving");
   const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
     detectPlagiarism(text, sentences),
-    checkGrammar(text),
+    checkGrammar(text, meta.author, meta.title),
     verifyCitations(text),
     llmJudgement(text, meta.docType),
     llmSentenceScores(sentences),

@@ -1,0 +1,23 @@
+{
+  "name": "PlagiShield AI — Academic Integrity Platform",
+  "short_name": "PlagiShield",
+  "description": "Enterprise plagiarism intelligence and AI content authenticity for students, researchers, and institutions.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B132B",
+  "theme_color": "#3B82F6",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-icon.svg",
+      "sizes": "128x128",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

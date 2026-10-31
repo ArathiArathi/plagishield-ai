@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="liBg" x1="16" y1="8" x2="112" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B132B" />
+      <stop offset="100%" stop-color="#050814" />
+    </linearGradient>
+    <linearGradient id="liBorder" x1="24" y1="12" x2="104" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#A855F7" />
+    </linearGradient>
+    <linearGradient id="liSpark" x1="48" y1="36" x2="80" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="60%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="32" fill="url(#liBg)" />
+  <rect width="128" height="128" rx="32" stroke="url(#liBorder)" stroke-width="2.5" stroke-opacity="0.4" />
+
+  <path d="M64 18L97 29.5C97 61 84.5 91 64 108C43.5 91 31 61 31 29.5L64 18Z" 
+        fill="#3B82F6" fill-opacity="0.12" stroke="url(#liBorder)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- AI Star Core -->
+  <path d="M64 35C64 51 68 55 84 55C68 55 64 59 64 75C64 59 60 55 44 55C60 55 64 51 64 35Z" fill="url(#liSpark)" />
+
+  <!-- Verification Check -->
+  <path d="M51 72L61 82L79 62" stroke="#10B981" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M51 72L61 82L79 62" stroke="#6EE7B7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

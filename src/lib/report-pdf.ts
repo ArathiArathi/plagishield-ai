@@ -79,12 +79,21 @@ function header(ctx: Ctx) {
   const { doc } = ctx;
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, W, 22, "F");
+
+  // Logo shield crest
+  doc.setFillColor(...ACCENT);
+  doc.roundedRect(M, 5.5, 9, 11, 2, 2, "F");
+  doc.setFillColor(255, 255, 255);
+  doc.setFont("helvetica", "bold").setFontSize(7.5);
+  doc.text("P", M + 4.5, 13, { align: "center" });
+
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold").setFontSize(13);
-  doc.text("PlagiShield AI", M, 12);
-  doc.setFont("helvetica", "normal").setFontSize(8.5);
+  doc.text("PlagiShield AI", M + 12.5, 12);
+  doc.setFont("helvetica", "normal").setFontSize(8);
   doc.setTextColor(200, 214, 235);
-  doc.text("Academic Integrity & Forensic Audit Report", M, 17.5);
+  doc.text("Academic Integrity & Forensic Audit Report", M + 12.5, 17.5);
+
   doc.setFont("helvetica", "bold").setFontSize(10);
   doc.setTextColor(255, 255, 255);
   doc.text(ctx.title, W - M, 12, { align: "right" });

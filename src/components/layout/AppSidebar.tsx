@@ -28,6 +28,7 @@ import { useSubscription } from "@/hooks/use-subscription";
 import { UpgradeModal } from "@/components/subscription/UpgradeModal";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -42,15 +43,9 @@ export function AppSidebar() {
       <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader className="border-b border-sidebar-border">
           <div className="flex items-center gap-2 px-2 py-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-              <ShieldCheck className="h-4.5 w-4.5" strokeWidth={2.4} />
-            </div>
-            {!collapsed && (
-              <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold text-sidebar-foreground">PlagiShield</span>
-                <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60">AI Integrity</span>
-              </div>
-            )}
+            <Link to="/dashboard" className="flex items-center">
+              <Logo size="sm" showText={!collapsed} />
+            </Link>
           </div>
         </SidebarHeader>
         <SidebarContent>
