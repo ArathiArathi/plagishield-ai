@@ -6,6 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
+import { Logo } from "@/components/brand/Logo";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,11 +45,8 @@ function WelcomePage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-6">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <ShieldCheck className="h-4 w-4" strokeWidth={2.4} />
-            </div>
-            <span className="font-semibold text-foreground">PlagiShield AI</span>
+          <Link to="/" className="flex items-center">
+            <Logo size="sm" />
           </Link>
           <div className="flex items-center gap-2">
             {!loading && isAuthenticated ? (
@@ -118,8 +116,12 @@ function WelcomePage() {
       </main>
 
       <footer className="border-t border-border py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 text-xs text-muted-foreground md:flex-row md:px-6">
-          <p>© 2026 PlagiShield AI. All rights reserved.</p>
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-xs text-muted-foreground md:flex-row md:px-6">
+          <div className="flex items-center gap-3">
+            <Logo size="xs" />
+            <span className="text-muted-foreground/60">·</span>
+            <span>© 2026 PlagiShield AI. All rights reserved.</span>
+          </div>
           <div className="flex items-center gap-4">
             <Link to="/login" className="hover:text-foreground">Login</Link>
             <Link to="/register" className="hover:text-foreground">Register</Link>

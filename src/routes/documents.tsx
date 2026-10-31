@@ -94,6 +94,10 @@ function DocumentsPage() {
   const docsQ = useQuery({
     queryKey: ["documents", user?.id],
     enabled: !!user,
+    refetchInterval: (query) => {
+      const items = query.state.data as DocRow[] | undefined;
+      return items?.some((d) => d.status === "processing" || d.status === "queued") ? 1500 : false;
+    },
     queryFn: async () => {
       return secureUserCache.getOrFetch<DocRow[]>(
         "documents_list",
@@ -110,6 +114,11 @@ function DocumentsPage() {
   const analysesQ = useQuery({
     queryKey: ["analyses-latest", user?.id],
     enabled: !!user,
+    refetchInterval: (query) => {
+      const map = query.state.data as Map<string, AnalysisRow> | undefined;
+      if (!map) return false;
+      return [...map.values()].some((a) => a.status === "processing" || a.status === "pending") ? 1500 : false;
+    },
     queryFn: async () => {
       const list = await secureUserCache.getOrFetch<AnalysisRow[]>(
         "analyses_latest_raw",

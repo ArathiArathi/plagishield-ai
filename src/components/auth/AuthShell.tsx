@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
+import { Logo } from "@/components/brand/Logo";
 
 export function AuthShell({ title, subtitle, footer, children }: {
   title: string; subtitle: string; children: ReactNode; footer?: ReactNode;
@@ -8,11 +8,8 @@ export function AuthShell({ title, subtitle, footer, children }: {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="hidden flex-col justify-between bg-sidebar p-10 text-sidebar-foreground lg:flex" style={{ backgroundImage: "var(--gradient-primary)" }}>
-        <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15 backdrop-blur">
-            <ShieldCheck className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-base font-semibold text-white">PlagiShield AI</span>
+        <Link to="/" className="flex items-center">
+          <Logo size="md" />
         </Link>
         <div>
           <h2 className="text-3xl font-semibold leading-tight text-white">Plagiarism intelligence for the modern academic.</h2>
@@ -23,12 +20,9 @@ export function AuthShell({ title, subtitle, footer, children }: {
       <div className="flex items-center justify-center bg-background p-6 md:p-10">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <span className="font-semibold text-foreground">PlagiShield AI</span>
-            </div>
+            <Link to="/" className="flex items-center">
+              <Logo size="sm" />
+            </Link>
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
