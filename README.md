@@ -1,122 +1,256 @@
-# PlagiShield AI
+# 🛡️ PlagiShield AI
+### Intelligent Academic Integrity & Document Analysis Platform
 
-> AI-powered plagiarism intelligence and content authenticity platform for students, researchers, universities, publishers, and enterprises.
+<p align="center">
+  <strong>Analyze. Understand. Improve.</strong><br/>
+  A modern platform for academic document analysis, similarity insights, AI-generated content assessment, and writing quality improvement.
+</p>
 
-PlagiShield AI combines plagiarism detection, AI-generated content detection, grammar analysis, and citation verification into a single enterprise-grade workspace — built with the polish of Grammarly, the rigor of Turnitin, and the clarity of modern SaaS.
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Active%20Development-blue?style=for-the-badge" alt="Project Status"/>
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React"/>
+  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/TanStack-Start-000000?style=for-the-badge" alt="TanStack Start"/>
+</p>
 
----
-
-## ✨ Features
-
-### Content Integrity
-- **Plagiarism Detection** — Source matching against academic, web, and internal repositories with similarity scoring and side-by-side source comparison.
-- **AI Content Detection** — Probability heatmap identifying AI-generated passages (GPT, Claude, Gemini, and more).
-- **Grammar & Style Analysis** — Severity-ranked issues with one-click fixes, tone insights, and readability scoring.
-- **Citation Verification** — APA, MLA, IEEE, and Chicago citation validation with auto-correction suggestions.
-
-### Workspace
-- **Document Management** — Drag-and-drop upload (PDF, DOCX, TXT) with version history and secure download links.
-- **Analysis Workspace** — Multi-tab review interface for plagiarism, AI, grammar, and citations.
-- **Reports** — Export branded PDF reports with full source attribution.
-- **Repository** — Indexed institutional repository with searchable historical submissions.
-
-### Enterprise
-- **Role-Based Access Control** — Student, Faculty, Institution Admin, and Super Admin roles.
-- **Team Management** — Invite members, assign roles, monitor usage.
-- **Analytics** — Submission trends, AI detection rates, writing quality radar.
-- **Subscription Tiers** — Free, Pro, Institution, and Enterprise plans.
+<p align="center">
+  <img src="https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Supabase-Backend-3FCF8E?style=flat-square&logo=supabase&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white"/>
+  <img src="https://img.shields.io/badge/License-Not_Specified-lightgrey?style=flat-square"/>
+</p>
 
 ---
 
-## 🛠 Tech Stack
+## 📌 Overview
 
-| Layer | Technology |
-|------|------------|
-| Framework | TanStack Start v1 (React 19, SSR) |
-| Build | Vite 7 |
-| Styling | Tailwind CSS v4 + custom design tokens (oklch) |
-| UI | shadcn/ui + Radix primitives |
-| Charts | Recharts |
-| Backend | Lovable Cloud (Supabase: Postgres, Auth, Storage, RLS) |
-| Hosting | Cloudflare Workers (edge) |
+**PlagiShield AI** is an academic document analysis platform designed to help students, educators, and institutions examine written submissions and gain useful insights into document originality and quality.
+
+The platform brings together similarity analysis, AI-generated content assessment, writing and grammar feedback, and citation completeness checks in one workspace.
+
+It also provides dashboards, document management, reports, and role-based access for different types of users.
+
+> **Our goal:** Make academic document review more accessible, understandable, and efficient.
 
 ---
 
-## 🚀 Getting Started
+## ✨ Key Features
 
-### Prerequisites
-- Node.js 20+ or Bun
-- A Lovable Cloud–enabled project (for auth, database, storage)
+<table>
+<tr>
+<td width="50%">
 
-### Install & Run
+### 🔍 Similarity Analysis
+- Similarity and source-match insights
+- Stored analysis results
+- Source-match review
 
-```bash
-bun install
-bun dev
+</td>
+<td width="50%">
+
+### 🤖 AI Content Assessment
+- AI-generated content probability
+- Confidence information
+- Explanations and reasoning
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### ✍️ Writing Quality
+- Grammar issue identification
+- Suggested corrections
+- Writing improvement insights
+
+</td>
+<td width="50%">
+
+### 📚 Citation Review
+- Citation completeness insights
+- Reference review support
+- Academic writing assistance
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📊 Analytics & Reports
+- Analysis dashboards
+- Document-level reporting
+- Analytics and activity views
+
+</td>
+<td width="50%">
+
+### 🔐 Secure Document Management
+- Private document storage
+- Document version tracking
+- Role-based access control
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🧭 How It Works
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[User Authentication]
+    B --> C[Upload Academic Document]
+    C --> D[Secure Document Storage]
+    D --> E[Server-side Text Extraction]
+    E --> F[Analysis Pipeline]
+    F --> G[Similarity & Source Insights]
+    F --> H[AI Content Assessment]
+    F --> I[Grammar & Citation Review]
+    G --> J[Persist Analysis Results]
+    H --> J
+    I --> J
+    J --> K[Dashboard & Reports]
+    K --> L([Review Results])
 ```
 
-The app boots at `http://localhost:8080`.
+### Analysis lifecycle
 
-### Environment Variables
-
-| Variable | Scope | Purpose |
-|---------|-------|---------|
-| `VITE_SUPABASE_URL` | client | Lovable Cloud project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | client | Publishable API key |
-| `SUPABASE_SERVICE_ROLE_KEY` | server | Admin operations (never exposed) |
+| Stage | Description |
+|---|---|
+| `UPLOADED` | Document has been submitted |
+| `PROCESSING` | Document is being prepared and analyzed |
+| `ANALYZED` | Analysis results are available |
+| `FAILED` | Processing encountered an error |
 
 ---
 
-## 🗂 Project Structure
+## 👥 User Roles
 
+PlagiShield AI supports role-based access for different users.
+
+| Role | Purpose |
+|---|---|
+| 🎓 Student | Submit and review academic documents |
+| 👨‍🏫 Faculty | Review submissions and analysis insights |
+| 🏛️ Institution Admin | Manage institutional-level access and oversight |
+| ⚙️ Super Admin | Administrative platform management |
+
+Access permissions are enforced through application-level role checks and database security policies.
+
+---
+
+## 🛠️ Technology Stack
+
+### Frontend
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
+
+- React
+- TypeScript
+- TanStack Start
+- TanStack Router
+- Tailwind CSS
+- shadcn/ui
+- Radix UI
+- Recharts
+
+### Backend & Data
+![Supabase](https://img.shields.io/badge/Supabase-Backend-3FCF8E?logo=supabase&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
+
+- Supabase
+- PostgreSQL
+- Supabase Authentication
+- Supabase Storage
+- Row Level Security (RLS)
+- Server-side analysis functions
+
+### Development Tools
+
+- Bun
+- Vite
+- ESLint
+- Git
+- GitHub
+
+---
+
+## 🏗️ Application Architecture
+
+```mermaid
+flowchart TB
+    U[Users] --> UI[React Application]
+    UI --> ROUTES[TanStack Routes]
+    ROUTES --> AUTH[Authentication & Role Guards]
+    ROUTES --> API[Server Functions]
+    API --> ENGINE[Analysis Engine]
+    ENGINE --> EXTRACT[Text Extraction]
+    ENGINE --> AI[AI Analysis Gateway]
+    API --> DB[(Supabase PostgreSQL)]
+    API --> STORAGE[Private Document Storage]
+    DB --> RESULTS[Persisted Analysis Results]
+    RESULTS --> UI
 ```
-src/
-├── components/
-│   ├── auth/        # AuthShell, sign-in UI
-│   ├── layout/      # AppSidebar, AppTopbar, PageHeader, StatCard
-│   └── ui/          # shadcn primitives
-├── lib/
-│   └── mock-data.ts # Sample documents, charts, recommendations
-├── routes/          # File-based routing (TanStack Start)
-│   ├── index.tsx        # Dashboard
-│   ├── analysis.tsx     # Analysis workspace
-│   ├── documents.tsx    # Upload & manage
-│   ├── analytics.tsx
-│   ├── repository.tsx
-│   ├── team.tsx
-│   ├── subscription.tsx
-│   ├── reports.tsx
-│   ├── settings.tsx
-│   ├── login.tsx / register.tsx / forgot-password.tsx
-│   └── __root.tsx
-└── styles.css       # Design tokens (oklch), gradients, shadows
-```
+
+The application separates the user interface, server-side processing, database operations, and private document storage. This supports a structured approach to document handling and access control.
 
 ---
 
-## 👥 Roles & Permissions
+## 🔐 Security
 
-| Role | Capabilities |
-|------|--------------|
-| **Student** | Upload own documents, view own analyses & reports |
-| **Faculty** | All student capabilities + review assigned class submissions |
-| **Institution Admin** | Manage members, configure org settings, view org-wide analytics |
-| **Super Admin** | Platform-wide configuration, audit logs, billing |
+Security is an important part of the platform.
 
-Roles are stored in a dedicated `user_roles` table and enforced via `SECURITY DEFINER` functions and RLS policies — never on the profile table (prevents privilege escalation).
+Current implementation includes:
 
----
+- Authentication and protected application routes.
+- Role-based authorization.
+- Private document storage.
+- Owner-scoped storage access policies.
+- Short-lived signed URLs for document access.
+- Database-level Row Level Security policies.
+- Server-side handling of privileged operations.
 
-## 🔒 Security
-
-- Row-Level Security (RLS) on all user-data tables
-- Role checks via `has_role(user_id, role)` security-definer function
-- Secure signed-URL downloads from Supabase Storage
-- Server-side analysis pipeline (no service-role key in client)
-- HIBP password leak protection on signup
+**Important:** Keep service-role credentials on the server. Never expose privileged keys through frontend environment variables or commit secrets to Git.
 
 ---
 
-## 📜 License
+## ⚠️ Important Notes
 
-Proprietary © 2026 PlagiShield AI. All rights reserved.
+- Similarity analysis and AI-content assessment provide indicators, not definitive proof of plagiarism or AI authorship.
+- Results should be interpreted by qualified reviewers and considered alongside the original document and relevant context.
+- Cross-submission institutional matching is planned development, not a feature to assume is currently available.
+- Native PDF/DOCX parsing capabilities and export functionality may evolve as development progresses.
+- No license file is currently included in the repository.
+
+---
+
+## 🤝 Contributing
+
+Contributions, suggestions, and bug reports are welcome.
+
+1. Fork the repository.
+2. Create a feature branch.
+3. Make your changes.
+4. Test your changes.
+5. Submit a pull request with a clear description.
+
+For significant changes, consider opening an issue first to discuss the proposed implementation.
+
+---
+
+## 👩‍💻 Project
+
+**Repository:** [ArathiArathi / plagishield-ai](https://github.com/ArathiArathi/plagishield-ai)
+
+**Project:** PlagiShield AI
+
+---
+
+<p align="center">
+  <strong>🛡️ PlagiShield AI</strong><br/>
+  <sub>Promoting originality, strengthening academic integrity, and improving academic writing.</sub>
+</p>
