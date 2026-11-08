@@ -69,6 +69,21 @@ function SettingsPage() {
     }
   }, [profile]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billingResult = params.get("billing");
+    if (billingResult === "success") {
+      toast.success("Payment completed. Your plan will update after Stripe confirms the subscription.");
+    } else if (billingResult === "cancelled") {
+      toast.info("Checkout was cancelled. No plan change was made.");
+    }
+    if (billingResult) {
+      params.delete("billing");
+      const query = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    }
+  }, []);
+
   // Load cache stats
   const refreshStats = () => {
     setCacheStats(secureUserCache.getStats());
