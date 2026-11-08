@@ -116,7 +116,7 @@ export function UpgradeModal({
                     {p.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/month</span>}
                   </div>
                   {billingCycle === "annual" && p.priceAnnual > 0 && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">Billed ${p.priceAnnual} once a year</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Billed ₹{p.priceAnnual.toLocaleString("en-IN")} once a year</p>
                   )}
                   <p className="mt-3 rounded-md bg-muted/60 p-2 text-center text-xs">
                     <strong className="text-sm text-foreground">{p.docLimit}</strong>{" "}
