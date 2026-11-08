@@ -57,9 +57,13 @@ export type AnalysisResults = {
     checked_at: string;
   };
   text_excerpt: string;
+  /** Full extracted text, retained so highlights and exports use original offsets. */
+  document_text: string;
   plagiarism: {
     score: number;
     matched_words: number;
+    eligible_words: number;
+    excluded_words: number;
     matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
     highlights: Highlight[];
     source_coverage: { sources_retrieved: number; providers: string[]; matching_method: string; limitation: string };
@@ -333,7 +337,7 @@ async function detectPlagiarism(
   // Sample across the full document rather than relying only on the opening
   // paragraphs. This improves retrieval diversity without claiming exhaustive
   // crawling of the web or licensed academic databases.
-  const target = Math.min(12, usable.length);
+  const target = Math.min(24, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
   for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
@@ -370,14 +374,15 @@ async function detectPlagiarism(
   const docPool = [...docWiki, ...docAlex, ...docCross, ...docSemantic, ...docEuropePmc];
   queried += docPool.length;
 
-  await mapLimit(candidates, 3, async (sentence) => {
-    const [wiki, alex, cross] = await Promise.all([
+  await mapLimit(candidates, 4, async (sentence) => {
+    const [wiki, alex, cross, europePmc] = await Promise.all([
       wikipediaCandidates(sentence.text, cache),
       openAlexCandidates(sentence.text),
       crossrefCandidates(sentence.text),
+      europePmcCandidates(sentence.text),
     ]);
-    docPool.push(...wiki, ...alex, ...cross);
-    queried += wiki.length + alex.length + cross.length;
+    docPool.push(...wiki, ...alex, ...cross, ...europePmc);
+    queried += wiki.length + alex.length + cross.length + europePmc.length;
   });
 
   const poolMap = new Map<string, Candidate>();
@@ -397,8 +402,8 @@ async function detectPlagiarism(
     source_coverage: {
       sources_retrieved: uniquePool.length,
       providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
-      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words)",
-      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
+      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words); clearly quoted passages and a recognised references section are excluded.",
+      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected. Quote and bibliography exclusions use conservative text-format and heading rules and may not identify every citation style.",
     },
   };
 }
@@ -1171,28 +1176,16 @@ export async function analyzeDocument(
 
 
   const totalWords = words.length || 1;
-  const plagWords = Math.min(totalWords, plag.matched_words);
-  const quotedWords = Math.min(
-    totalWords - plagWords,
-    Math.round(tokenize((text.match(/[“"][^”"]{25,400}[”"]/g) ?? []).join(" ")).length),
-  );
-  const aiWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords),
-    Math.round(((totalWords - plagWords) * aiScore) / 100),
-  );
-  const grammarWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords - aiWords),
-    grammar.issues.length * 6,
-  );
-  const unmatchedWords = Math.max(0, totalWords - plagWords - quotedWords - aiWords - grammarWords);
-  const pct = (w: number) => Number(((w / totalWords) * 100).toFixed(1));
+  const comparedWords = Math.max(1, plag.eligible_words);
+  const matchedWords = Math.min(comparedWords, plag.matched_words);
+  const unmatchedWords = Math.max(0, comparedWords - matchedWords);
+  const pct = (count: number) => Number(((count / comparedWords) * 100).toFixed(1));
 
+  // Composition is a factual partition of the compared text only. It does not
+  // assign arbitrary portions of the paper to AI, grammar, or human authorship.
   const composition: CompositionSlice[] = [
-    { category: "Plagiarised / matched", percent: pct(plagWords), words: plagWords },
-    { category: "AI-style indicators (estimated)", percent: pct(aiWords), words: aiWords },
-    { category: "Quoted & attributed", percent: pct(quotedWords), words: quotedWords },
-    { category: "Language issues", percent: pct(grammarWords), words: grammarWords },
-    { category: "Unmatched in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
+    { category: "Matched in retrieved sources", percent: pct(matchedWords), words: matchedWords },
+    { category: "No match in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
   ];
 
   await stage("rendering");
@@ -1244,9 +1237,12 @@ export async function analyzeDocument(
       checked_at: new Date().toISOString(),
     },
     text_excerpt: text.slice(0, 24000),
+    document_text: text,
     plagiarism: {
       score: plag.score,
       matched_words: plag.matched_words,
+      eligible_words: plag.eligible_words,
+      excluded_words: plag.excluded_words,
       matches: plag.matches,
       highlights: plag.highlights,
       source_coverage: plag.source_coverage,
