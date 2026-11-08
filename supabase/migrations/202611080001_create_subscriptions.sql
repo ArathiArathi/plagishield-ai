@@ -37,6 +37,9 @@ declare
   v_limit integer := 10;
   v_count integer := 0;
 begin
+  -- Do not let clients backdate created_at to bypass the monthly allowance.
+  new.created_at := now();
+
   -- Serialize inserts for a user so concurrent uploads cannot exceed the limit.
   perform pg_advisory_xact_lock(hashtextextended(new.owner_id::text, 0));
 
