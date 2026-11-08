@@ -23,10 +23,10 @@ export const Route = createFileRoute("/")({
 });
 
 const plans = [
-  { name: "Free", price: "$0", allowance: "10 documents", note: "For a first review" },
-  { name: "Pro", price: "$14", allowance: "15 documents", note: "For regular coursework", popular: true },
-  { name: "Plus", price: "$29", allowance: "25 documents", note: "For ongoing research" },
-  { name: "Premium", price: "$49", allowance: "35 documents", note: "For heavier workloads" },
+  { name: "Free", price: "$0", allowance: "10 reviews / month", note: "For a first review" },
+  { name: "Pro", price: "$14", allowance: "15 reviews / month", note: "For regular coursework", popular: true },
+  { name: "Plus", price: "$29", allowance: "25 reviews / month", note: "For ongoing research" },
+  { name: "Premium", price: "$49", allowance: "35 reviews / month", note: "For heavier workloads" },
 ];
 
 function WelcomePage() {
