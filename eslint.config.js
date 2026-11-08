@@ -7,6 +7,13 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   { ignores: ["dist", ".output", ".vinxi"] },
+  eslintPluginPrettier,
+  {
+    rules: {
+      // Formatting is handled by the explicit Prettier script; keep lint focused on code issues.
+      "prettier/prettier": "off",
+    },
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -34,7 +41,7 @@ export default tseslint.config(
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      "prettier/prettier": "off",
     },
   },
-  eslintPluginPrettier,
 );

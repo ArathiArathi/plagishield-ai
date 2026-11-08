@@ -63,7 +63,7 @@ function AnalyticsPage() {
 
   const grammarRadar = [
     { subject: "Originality", score: 100 - (stats?.similarity ?? 0) },
-    { subject: "Human voice", score: 100 - (stats?.aiDetection ?? 0) },
+    { subject: "Writing signals", score: 100 - (stats?.aiDetection ?? 0) },
     { subject: "Grammar", score: stats?.grammar ?? 0 },
     { subject: "Citations", score: stats?.citation ?? 0 },
     { subject: "Overall", score: stats?.qualityScore ?? 0 },
@@ -78,8 +78,8 @@ function AnalyticsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Documents" value={String(stats?.totalDocuments ?? 0)} icon={FileText} tone="primary" />
         <StatCard label="Avg Similarity" value={`${stats?.similarity ?? 0}%`} icon={Activity} tone="success" />
-        <StatCard label="Avg AI Detection" value={`${stats?.aiDetection ?? 0}%`} icon={Sparkles} tone="info" />
-        <StatCard label="Flagged Documents" value={String(flagged)} icon={AlertTriangle} tone="warning" />
+        <StatCard label="Avg AI-style signal" value={`${stats?.aiDetection ?? 0}%`} icon={Sparkles} tone="info" />
+        <StatCard label="Documents for Review" value={String(flagged)} icon={AlertTriangle} tone="warning" />
       </div>
 
       {!hasData ? (

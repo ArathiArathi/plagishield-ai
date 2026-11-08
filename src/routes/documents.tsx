@@ -155,7 +155,7 @@ function DocumentsPage() {
   const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
     if (!user) return;
     if (!existingDocId && isLimitReached) {
-      toast.error(`${plan.name} limit of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium.`);
+      toast.error(`${plan.name} monthly allowance of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium.`);
       setUpgradeOpen(true);
       return;
     }
@@ -232,7 +232,7 @@ function DocumentsPage() {
 
   const startUpload = useCallback((file: File, existingDocId?: string) => {
     if (!existingDocId && isLimitReached) {
-      toast.error(`${plan.name} limit of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium to upload more.`);
+      toast.error(`${plan.name} monthly allowance of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium to upload more.`);
       setUpgradeOpen(true);
       return;
     }
@@ -356,7 +356,7 @@ function DocumentsPage() {
               size="sm"
               onClick={() => {
                 if (isLimitReached) {
-                  toast.error(`${plan.name} limit of ${docLimit} documents reached. Upgrade your plan to upload more.`);
+                  toast.error(`${plan.name} monthly allowance of ${docLimit} documents reached. Upgrade your plan to upload more.`);
                   setUpgradeOpen(true);
                 } else {
                   fileRef.current?.click();

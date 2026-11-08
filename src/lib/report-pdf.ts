@@ -1,3 +1,4 @@
+/* eslint-disable no-control-regex */
 import { jsPDF } from "jspdf";
 import { buildSegments, type Highlight } from "@/components/analysis/analysis-shared";
 

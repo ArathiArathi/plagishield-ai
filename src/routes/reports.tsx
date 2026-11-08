@@ -122,7 +122,7 @@ function ReportsPage() {
 
   const bundle: Array<{ kind: ReportKind; title: string; desc: string; icon: typeof FileSearch; metric: string }> = [
     { kind: "similarity", title: "Similarity Report", desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`, icon: FileSearch, metric: `${similarity}% similarity` },
-    { kind: "ai", title: "AI Content Report", desc: "AI likelihood, detector confidence, reasoning and flagged passages.", icon: Bot, metric: `${ai}% AI` },
+    { kind: "ai", title: "Writing-pattern Report", desc: "Estimated writing-pattern signals, detector notes and passages for a closer human review.", icon: Bot, metric: `${ai}% signal` },
     { kind: "grammar", title: "Grammar & Language Report", desc: `Readability score with categorised issue breakdown (${grammarIssues.length} issue${grammarIssues.length === 1 ? "" : "s"}).`, icon: SpellCheck, metric: `${grammar}/100` },
     { kind: "citation", title: "Citation Verification Report", desc: `Reference verification status and formatting issues (${citationIssues.length} issue${citationIssues.length === 1 ? "" : "s"}).`, icon: Quote, metric: `${citation}/100` },
     { kind: "full", title: "Comprehensive Report", desc: "All four modules combined into a single institutional integrity dossier.", icon: FileStack, metric: "All modules" },
@@ -224,15 +224,15 @@ function ReportsPage() {
         <div className="space-y-8 p-6">
           <Section title="Executive Summary">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              This document shows {similarity}% similarity against matched sources and {ai}% likelihood of
-              AI-generated content{results.ai_detection?.confidence ? ` (${results.ai_detection.confidence} confidence)` : ""}.
+              This document shows {similarity}% observed overlap against retrieved sources and an {ai}% AI-style
+              signal score. The signal is not a probability of authorship.
               Writing quality scores {grammar}/100 and citation completeness {citation}/100.
               {grammarIssues.length > 0 ? ` ${grammarIssues.length} grammar issue(s)` : " No grammar issues"} and
               {citationIssues.length > 0 ? ` ${citationIssues.length} citation issue(s)` : " no citation issues"} were detected.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <KPI label="Similarity" value={`${similarity}%`} />
-              <KPI label="AI Detection" value={`${ai}%`} />
+              <KPI label="AI-style signal" value={`${ai}%`} />
               <KPI label="Grammar" value={String(grammar)} />
               <KPI label="Citation" value={String(citation)} />
             </div>
@@ -372,7 +372,7 @@ function buildRecommendations({
 }) {
   const recs: Array<{ group: string; action: string; priority: string; impact: string }> = [];
   if (similarity >= 25) recs.push({ group: "Originality", action: "Paraphrase or quote the matched passages and cite their sources.", priority: "high", impact: `−${Math.min(similarity, 20)}% similarity` });
-  if (ai >= 50) recs.push({ group: "AI detection", action: "Rewrite flagged sections in your own voice with concrete detail.", priority: "high", impact: `−${Math.min(ai, 30)}% AI likelihood` });
+  if (ai >= 50) recs.push({ group: "Writing-pattern review", action: "Read passages with stronger automated writing-pattern signals and check them against your own drafting process.", priority: "high", impact: "Human review recommended" });
   if (grammarIssues.length > 0) recs.push({ group: "Grammar", action: `Resolve ${grammarIssues.length} flagged grammar issue(s).`, priority: grammar < 70 ? "high" : "medium", impact: "+ readability" });
   if (citationIssues.length > 0) recs.push({ group: "Citations", action: `Fix ${citationIssues.length} citation issue(s) and verify every reference.`, priority: citation < 70 ? "high" : "medium", impact: `+${Math.max(100 - citation, 5)} citation score` });
   if (recs.length === 0) recs.push({ group: "Overall", action: "No action required — this document meets integrity thresholds.", priority: "low", impact: "ready to submit" });

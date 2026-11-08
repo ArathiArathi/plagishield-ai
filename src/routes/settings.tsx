@@ -41,7 +41,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { profile, fullName, role, updateProfile, isUpdating } = useUserProfile();
-  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent, changePlan } = useSubscription();
+  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent, subscriptionStatus, currentPeriodEnd, hasBillingCustomer, openBillingPortal } = useSubscription();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const [form, setForm] = useState({
@@ -68,6 +68,21 @@ function SettingsPage() {
       });
     }
   }, [profile]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billingResult = params.get("billing");
+    if (billingResult === "success") {
+      toast.success("Payment completed. Your plan will update after Stripe confirms the subscription.");
+    } else if (billingResult === "cancelled") {
+      toast.info("Checkout was cancelled. No plan change was made.");
+    }
+    if (billingResult) {
+      params.delete("billing");
+      const query = params.toString();
+      window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    }
+  }, []);
 
   // Load cache stats
   const refreshStats = () => {
@@ -100,6 +115,8 @@ function SettingsPage() {
   };
 
   const initials = (fullName.slice(0, 2) || "··").toUpperCase();
+  const billingStatusLabel = subscriptionStatus === "inactive" ? "Free plan" : subscriptionStatus.replaceAll("_", " ");
+  const periodEndLabel = currentPeriodEnd ? new Date(currentPeriodEnd).toLocaleDateString() : null;
 
   return (
     <div className="space-y-6">
@@ -132,6 +149,7 @@ function SettingsPage() {
                   <Badge variant="outline" className="border-primary/40 text-primary font-semibold">
                     {plan.name}
                   </Badge>
+                  <Badge variant="secondary" className="capitalize">{billingStatusLabel}</Badge>
                   {plan.badge && (
                     <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
                       {plan.badge}
@@ -139,28 +157,37 @@ function SettingsPage() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  You are currently on the <span className="font-medium text-foreground">{plan.name}</span>. Documents analyzed reset with your active quota.
+                  You are on the <span className="font-medium text-foreground">{plan.name}</span>. Document uploads this month are counted against your plan's allowance.
+                  {periodEndLabel && <span className="block mt-1">Current billing period ends {periodEndLabel}.</span>}
                 </p>
               </div>
-              <Button onClick={() => setUpgradeOpen(true)} className="gap-2 shadow-sm shrink-0">
-                <Sparkles className="h-4 w-4" />
-                Change Plan / Upgrade
-              </Button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button onClick={() => setUpgradeOpen(true)} className="gap-2 shadow-sm">
+                  <Sparkles className="h-4 w-4" />
+                  {planId === "free" ? "Choose a plan" : "View plans"}
+                </Button>
+                {hasBillingCustomer && (
+                  <Button variant="outline" onClick={() => void openBillingPortal()} className="gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Manage billing
+                  </Button>
+                )}
+              </div>
             </div>
 
             <Separator className="my-5" />
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-foreground">Document Usage</span>
+                <span className="font-medium text-foreground">Monthly Document Usage</span>
                 <span className="font-semibold text-foreground">
-                  {docsUsed} / {docLimit} documents used ({Math.max(0, docLimit - docsUsed)} remaining)
+                  {docsUsed} / {docLimit} documents used this month ({Math.max(0, docLimit - docsUsed)} remaining)
                 </span>
               </div>
               <Progress value={usagePercent} className="h-3" />
               <p className="text-xs text-muted-foreground">
                 {isLimitReached
-                  ? "You have reached your document limit. Upgrade to Pro, Plus, or Premium to analyze more documents."
+                  ? "You have used this month's document allowance. Upgrade to Pro, Plus, or Premium for a higher monthly allowance."
                   : `${Math.round(100 - usagePercent)}% of your document quota is still available.`}
               </p>
             </div>
@@ -196,7 +223,7 @@ function SettingsPage() {
                       </div>
                       <div className="mt-2 flex items-baseline gap-1">
                         <span className="text-2xl font-bold text-foreground">
-                          {tier.priceMonthly === 0 ? "Free" : `$${tier.priceMonthly}`}
+                          {tier.priceMonthly === 0 ? "Free" : `₹${tier.priceMonthly.toLocaleString("en-IN")}`}
                         </span>
                         {tier.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
                       </div>
@@ -226,12 +253,9 @@ function SettingsPage() {
                           variant={tier.popular ? "default" : "outline"}
                           size="sm"
                           className="w-full"
-                          onClick={() => {
-                            changePlan(tier.id);
-                            toast.success(`Switched to ${tier.name}! Limit updated to ${tier.docLimit} documents.`);
-                          }}
+                          onClick={() => setUpgradeOpen(true)}
                         >
-                          Switch to {tier.name.split(" ")[0]}
+                          View secure checkout
                         </Button>
                       )}
                     </div>

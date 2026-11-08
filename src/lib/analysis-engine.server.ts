@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
 
 /**
