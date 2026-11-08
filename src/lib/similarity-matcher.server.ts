@@ -85,7 +85,7 @@ function buildSourceIndex(words: Token[], size: number): Map<string, number[]> {
     // A repeated boilerplate phrase can occur thousands of times. Keep a
     // bounded sample of positions to avoid quadratic blow-ups on templates.
     if (positions) {
-      if (positions.length < 40) positions.push(i);
+      if (positions.length < 200) positions.push(i);
     } else {
       index.set(key, [i]);
     }
@@ -204,7 +204,7 @@ export function matchDocumentAgainstSources(
     !overlapsExcludedRange(word.start, word.end, excludedRanges)
   );
   const totalWords = eligibleWords.length || 1;
-  if (documentWords.length < MIN_MATCH_WORDS || sources.length === 0) {
+  if (eligibleWords.length < MIN_MATCH_WORDS || sources.length === 0) {
     return { score: 0, matched_words: 0, matches: [], highlights: [] };
   }
 
