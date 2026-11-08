@@ -17,6 +17,7 @@ export type AnalysisRow = {
   results: unknown;
   error: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type DocumentRow = {
@@ -113,7 +114,7 @@ export function useWorkspaceData() {
           .order("created_at", { ascending: false }),
         supabase
           .from("analyses")
-          .select("id,document_id,version_id,status,similarity_score,ai_score,grammar_score,citation_score,results,error,created_at")
+          .select("id,document_id,version_id,status,similarity_score,ai_score,grammar_score,citation_score,results,error,created_at,updated_at")
           .order("created_at", { ascending: false }),
       ]);
       if (docsRes.error) throw docsRes.error;
