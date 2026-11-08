@@ -267,7 +267,7 @@ function ReportsPage() {
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
               Providers: {(results.plagiarism?.source_coverage?.providers ?? []).join(", ") || "Not recorded"}.
-              Excluded words: {Number(results.plagiarism?.excluded_words ?? 0).toLocaleString()} (clearly quoted passages and detected reference section).
+              Excluded words: {Number(results.plagiarism?.excluded_words ?? 0).toLocaleString()} (clearly quoted passages, inline citation markers and detected reference section).
             </p>
           </Section>
 
@@ -311,7 +311,7 @@ function ReportsPage() {
                       </div>
                     )}
                     <p className="mt-2 text-[11px] text-muted-foreground">
-                      {Number(m.match_count ?? 0)} exact passage match(es) · source overlap may overlap with other sources
+                      {Number(m.match_count ?? 0)} exact passage match(es) · the same passage may appear in multiple source records
                     </p>
                   </li>
                 ))}
