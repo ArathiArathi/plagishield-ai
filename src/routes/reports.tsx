@@ -237,6 +237,7 @@ function ReportsPage() {
           <Section title="Highlighted Submission Text">
             {!results.document_text && <p className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs leading-5 text-muted-foreground">This saved analysis contains only a stored excerpt. Re-run the analysis to include the complete extracted paper in the report.</p>}
             <HighlightedDocument text={results.document_text || results.text_excerpt || ""} highlights={allHighlights} />
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">The report reproduces extracted text in reading order. Original page layout, embedded images and typography are not retained by the current text extractor.</p>
           </Section>
 
           <Separator />
