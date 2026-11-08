@@ -21,7 +21,6 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RepositoryRouteImport } from './routes/repository'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as TeamRouteImport } from './routes/team'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthGoogleCallbackRouteImport } from './routes/auth.google.callback'
@@ -86,11 +85,6 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const TeamRoute = TeamRouteImport.update({
-  id: '/team',
-  path: '/team',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
@@ -120,7 +114,6 @@ export interface FileRoutesByFullPath {
   '/repository': typeof RepositoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
-  '/team': typeof TeamRoute
   '/verify-email': typeof VerifyEmailRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
@@ -177,7 +170,6 @@ export interface FileRouteTypes {
     | '/repository'
     | '/reset-password'
     | '/settings'
-    | '/team'
     | '/verify-email'
     | '/auth/callback'
     | '/auth/google/callback'
@@ -232,7 +224,6 @@ export interface RootRouteChildren {
   RepositoryRoute: typeof RepositoryRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
-  TeamRoute: typeof TeamRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthGoogleCallbackRoute: typeof AuthGoogleCallbackRoute
@@ -324,13 +315,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/team': {
-      id: '/team'
-      path: '/team'
-      fullPath: '/team'
-      preLoaderRoute: typeof TeamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/verify-email': {
       id: '/verify-email'
       path: '/verify-email'
@@ -368,7 +352,6 @@ const rootRouteChildren: RootRouteChildren = {
   RepositoryRoute: RepositoryRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
-  TeamRoute: TeamRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthGoogleCallbackRoute: AuthGoogleCallbackRoute,
