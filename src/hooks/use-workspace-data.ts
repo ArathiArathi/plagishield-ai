@@ -193,12 +193,30 @@ export function useWorkspaceData() {
 
       const recentActivity = documents.slice(0, 6).map((doc) => {
         const analysis = analyses.find((item) => item.document_id === doc.id);
-        const matchedWords = analysis ? matchedWordCount(analysis) : 0;
+        const matched = analysis ? matchedWordCount(analysis) : 0;
         const status =
           doc.status === "failed" ? "error" :
-          doc.status === "analyzed" && matchedWords > 0 ? "warning" :
+          doc.status === "analyzed" && matched > 0 ? "warning" :
           doc.status === "analyzed" ? "success" : "info";
         return {
+          id: doc.id,
+          title: doc.name,
+          action:
+            doc.status === "analyzed"
+              ? matched > 0
+                ? `Analysis complete · ${matched.toLocaleString()} matched words`
+                : "No exact matches in retrieved sources"
+              : doc.status === "failed"
+                ? "Analysis failed"
+                : doc.status === "processing"
+                  ? "Analysis running"
+                  : "Uploaded",
+          time: new Date(doc.updated_at).toLocaleString(),
+          status,
+        };
+      });
+
+      return {
         documents,
         analyses,
         summaryStats: {
