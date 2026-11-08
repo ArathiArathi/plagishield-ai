@@ -35,7 +35,7 @@ export const Route = createFileRoute("/analysis")({
   head: () => ({
     meta: [
       { title: "Analysis — PlagiShield AI" },
-      { name: "description", content: "Plagiarism, AI detection, grammar, and citation analysis workspace." },
+      { name: "description", content: "Text similarity, experimental writing-pattern review, grammar and reference checks." },
       { property: "og:title", content: "Analysis workspace — PlagiShield AI" },
       { property: "og:description", content: "Review similarity, AI-generation, grammar, and citation results per document." },
       { property: "og:type", content: "website" },
@@ -201,7 +201,7 @@ function AnalysisPage() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground">Nothing to analyze yet</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Upload a document to see plagiarism, AI, grammar, and citation results.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Upload a document to review source overlap, experimental writing-pattern signals, language notes and references.</p>
           </div>
           <Button size="sm" asChild><Link to="/documents">Go to documents</Link></Button>
         </Card>
@@ -301,7 +301,7 @@ function AnalysisPage() {
                         : currentStage === "retrieving"
                           ? "Stage 2/4: Live literature retrieval (Wikipedia, OpenAlex, Crossref)"
                           : currentStage === "scoring"
-                            ? "Stage 3/4: Forensic AI stylometrics & grammar syntax review"
+                            ? "Stage 3/4: Experimental writing-pattern checks and language review"
                             : currentStage === "rendering"
                               ? "Stage 4/4: Bibliographic cross-matching & evidence compilation"
                               : "Multi-signal analysis pipeline actively processing in real time…"
@@ -385,7 +385,7 @@ function AnalysisPage() {
                 <TabsTrigger value="highlights" className="flex-col gap-1 py-2 text-[11px]"><Highlighter className="h-4 w-4" />Highlights</TabsTrigger>
                 <TabsTrigger value="evidence" className="flex-col gap-1 py-2 text-[11px]"><Quote className="h-4 w-4" />Evidence</TabsTrigger>
                 <TabsTrigger value="issues" className="flex-col gap-1 py-2 text-[11px]"><ListChecks className="h-4 w-4" />Issues</TabsTrigger>
-                <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Plagiarism</TabsTrigger>
+                <TabsTrigger value="plagiarism" className="flex-col gap-1 py-2 text-[11px]"><FileText className="h-4 w-4" />Text similarity</TabsTrigger>
                 <TabsTrigger value="ai" className="flex-col gap-1 py-2 text-[11px]"><Sparkles className="h-4 w-4" />AI Detection</TabsTrigger>
                 <TabsTrigger value="grammar" className="flex-col gap-1 py-2 text-[11px]"><Check className="h-4 w-4" />Grammar</TabsTrigger>
                 <TabsTrigger value="citation" className="flex-col gap-1 py-2 text-[11px]"><BookOpen className="h-4 w-4" />Citation</TabsTrigger>
