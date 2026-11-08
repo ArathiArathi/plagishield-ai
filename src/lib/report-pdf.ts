@@ -370,7 +370,7 @@ function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; simi
   const topMatches = matches.slice(0, 5);
   ensure(ctx, topMatches.length * 9 + 25);
 
-  sectionTitle(ctx, "Matched Sources — Overlap Distribution Chart");
+  sectionTitle(ctx, "Eligible Words Matched by Source");
 
   const startY = ctx.y;
   const labelW = 60;
@@ -378,8 +378,8 @@ function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; simi
 
   topMatches.forEach((m, idx) => {
     const y = startY + idx * 8.5;
-    const sim = Math.min(100, Math.max(1, Math.round(Number(m.similarity ?? 0))));
-    const tone: [number, number, number] = sim >= 25 ? BAD : sim >= 12 ? WARN : ACCENT;
+    const sim = Math.min(100, Math.max(0, Number(m.similarity ?? 0)));
+    const tone: [number, number, number] = ACCENT;
 
     // Source Name
     doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
@@ -394,13 +394,13 @@ function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; simi
     doc.roundedRect(barX, y, barMaxW, 5, 1, 1, "F");
 
     // Proportional filled bar
-    const filledW = Math.max(3, (barMaxW * sim) / 100);
+    const filledW = Math.max(0.5, (barMaxW * sim) / 100);
     doc.setFillColor(...tone);
     doc.roundedRect(barX, y, filledW, 5, 1, 1, "F");
 
     // Percentage value text
     doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...tone);
-    doc.text(`${sim}%`, barX + barMaxW + 4, y + 4);
+    doc.text(`${sim.toFixed(1)}%`, barX + barMaxW + 4, y + 4);
   });
 
   ctx.y = startY + topMatches.length * 8.5 + 4;
@@ -515,7 +515,12 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
   const issues = categories ? all.filter((i) => categories.some((c) => i.category?.toLowerCase().includes(c.toLowerCase()))) : all;
   sectionTitle(ctx, "Detailed Issue & Forensic Action Log");
   if (issues.length === 0) {
-    paragraph(ctx, "No integrity or stylistic issues were flagged for this submission.");
+    const message = categories?.includes("plagiarism")
+      ? "No exact source passages meeting the matching rule were returned. This does not establish originality."
+      : categories?.includes("grammar")
+        ? "The configured language checker returned no findings for the text it processed."
+        : "No findings were returned by the enabled checks.";
+    paragraph(ctx, message);
     return;
   }
   const bySeverity = issues.reduce<Record<string, number>>((acc, i) => {
@@ -605,9 +610,10 @@ function similaritySection(ctx: Ctx, input: ReportInput) {
   const scopeRows: Array<[string, string]> = [
     ["Source records compared", String(coverage?.sources_retrieved ?? matches.length)],
     ["Retrieval providers", providers],
+    ["Eligible words compared", Number(coverage?.comparison_words ?? 0).toLocaleString()],
     ["Matching rule", coverage?.matching_method || "Not recorded"],
-    ["Quoted passages", "Included — quote exclusion is not currently applied"],
-    ["Bibliography / references", "Included — bibliography exclusion is not currently applied"],
+    ["Quoted passages", Number(coverage?.excluded_quoted_words ?? 0).toLocaleString() + " detected quoted words excluded"],
+    ["Bibliography / references", Number(coverage?.excluded_bibliography_words ?? 0).toLocaleString() + " detected bibliography words excluded"],
     ["Private student-paper repository", "Not connected"],
     ["Licensed publisher full-text corpus", "Not connected"],
   ];
@@ -722,7 +728,7 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
   const ctx: Ctx = { doc, y: 0, title: KIND_TITLE[kind], input, page: 1 };
   header(ctx);
 
-  // Academic Paper Header format (Authors, Affiliation, Abstract Callout, Keywords)
+  // Submission title and author, only where supplied by the uploaded document.
   academicPaperHeader(ctx, input);
 
   // Document metadata block
