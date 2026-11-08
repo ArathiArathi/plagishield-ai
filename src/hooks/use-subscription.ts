@@ -32,7 +32,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanId, SubscriptionPlan> = 
     docLimit: 10,
     priceMonthly: 0,
     priceAnnual: 0,
-    features: [...commonFeatures, "10 document allowance"],
+    features: [...commonFeatures, "10 document reviews each month"],
   },
   pro: {
     id: "pro",
@@ -42,7 +42,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanId, SubscriptionPlan> = 
     priceAnnual: 120,
     badge: "For regular use",
     popular: true,
-    features: [...commonFeatures, "15 document allowance"],
+    features: [...commonFeatures, "15 document reviews each month"],
   },
   plus: {
     id: "plus",
@@ -51,7 +51,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanId, SubscriptionPlan> = 
     priceMonthly: 29,
     priceAnnual: 240,
     badge: "For research projects",
-    features: [...commonFeatures, "25 document allowance"],
+    features: [...commonFeatures, "25 document reviews each month"],
   },
   premium: {
     id: "premium",
@@ -60,7 +60,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanId, SubscriptionPlan> = 
     priceMonthly: 49,
     priceAnnual: 420,
     badge: "Highest allowance",
-    features: [...commonFeatures, "35 document allowance"],
+    features: [...commonFeatures, "35 document reviews each month"],
   },
 };
 
@@ -126,7 +126,9 @@ export function useSubscription() {
       ? record.plan_id
       : "free";
   const plan = SUBSCRIPTION_PLANS[planId];
-  const docsUsed = wsData?.summaryStats?.totalDocuments ?? (wsData?.documents ?? []).length;
+  const now = new Date();
+  const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const docsUsed = (wsData?.documents ?? []).filter((document) => Date.parse(document.created_at) >= monthStart).length;
   const docLimit = plan.docLimit;
   const isLimitReached = docsUsed >= docLimit;
   const remainingDocs = Math.max(0, docLimit - docsUsed);
