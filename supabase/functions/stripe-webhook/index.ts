@@ -5,9 +5,15 @@ type StripeSubscription = {
   id: string;
   customer: string | { id: string };
   status: string;
-  current_period_start: number;
-  current_period_end: number;
-  items: { data: Array<{ price: { id: string } }> };
+  current_period_start?: number;
+  current_period_end?: number;
+  items: {
+    data: Array<{
+      price: { id: string };
+      current_period_start?: number;
+      current_period_end?: number;
+    }>;
+  };
 };
 
 type StripeEvent = {
@@ -193,14 +199,24 @@ Deno.serve(async (request) => {
       return new Response("Unknown Stripe customer", { status: 400 });
     }
 
+    const firstItem = subscription.items.data[0];
+    const periodStart = subscription.current_period_start ??
+      firstItem?.current_period_start;
+    const periodEnd = subscription.current_period_end ??
+      firstItem?.current_period_end;
+
     const { error } = await admin.from("subscriptions").upsert({
       user_id: owner.user_id,
       stripe_customer_id: customerId,
       stripe_subscription_id: subscription.id,
       plan_id: planId,
       status: subscription.status,
-      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_start: periodStart
+        ? new Date(periodStart * 1000).toISOString()
+        : null,
+      current_period_end: periodEnd
+        ? new Date(periodEnd * 1000).toISOString()
+        : null,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
 
