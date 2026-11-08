@@ -29,12 +29,6 @@ Example:
 ```sh
 supabase secrets set STRIPE_SECRET_KEY=sk_test_...
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
-supabase secrets set STRIPE_PRICE_PRO_MONTHLY=price_1UZTJCEP3hMKlBIwIIilnrzC
-supabase secrets set STRIPE_PRICE_PRO_ANNUAL=price_1UZTJEEP3hMKlBIwn5ARqR7j
-supabase secrets set STRIPE_PRICE_PLUS_MONTHLY=price_1UZTJGEP3hMKlBIwtzHPMqfs
-supabase secrets set STRIPE_PRICE_PLUS_ANNUAL=price_1UZTJIEP3hMKlBIwEtH6ofUj
-supabase secrets set STRIPE_PRICE_PREMIUM_MONTHLY=price_1UZTJKEP3hMKlBIw3EazNMVF
-supabase secrets set STRIPE_PRICE_PREMIUM_ANNUAL=price_1UZTJLEP3hMKlBIwbtyQdVv2
 supabase secrets set APP_URL=https://your-domain.example
 ```
 
