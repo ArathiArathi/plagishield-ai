@@ -667,10 +667,12 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const SLICE_COLOR: Record<string, [number, number, number]> = {
   "Plagiarised / matched": BAD,
-  "AI generated": WARN,\n  "AI-style indicators (estimated)": WARN,
+  "AI generated": WARN,
+  "AI-style indicators (estimated)": WARN,
   "Quoted & attributed": ACCENT,
   "Language issues": [120, 90, 200],
-  "Original human writing": OK,\n  "Unmatched in retrieved sources": OK,
+  "Original human writing": OK,
+  "Unmatched in retrieved sources": OK,
 };
 
 function compositionSection(ctx: Ctx, input: ReportInput) {
