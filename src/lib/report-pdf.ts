@@ -293,7 +293,7 @@ const CATEGORY_FILL: Record<string, [number, number, number]> = {
 
 const CATEGORY_LABEL: Record<string, string> = {
   plagiarism: "Text similarity match",
-  ai: "AI-style indicator",
+  ai: "Writing-pattern signal",
   grammar: "Language & grammar issue",
   citation: "Scholarly citation",
 };
@@ -535,7 +535,6 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
 
   if (kind === "ai") {
     aiSection(ctx, input);
-    compositionSection(ctx, input);
     highlightedBody(ctx, input, ["ai"]);
     issuesSection(ctx, input, ["ai"]);
   }
