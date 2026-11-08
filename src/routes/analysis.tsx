@@ -20,7 +20,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
 import { secureUserCache } from "@/lib/cache/secure-cache";
@@ -38,9 +37,9 @@ export const Route = createFileRoute("/analysis")({
   head: () => ({
     meta: [
       { title: "Analysis — PlagiShield AI" },
-      { name: "description", content: "Plagiarism, AI detection, grammar, and citation analysis workspace." },
+      { name: "description", content: "Source-linked text comparison, language review, and reference verification." },
       { property: "og:title", content: "Analysis workspace — PlagiShield AI" },
-      { property: "og:description", content: "Review similarity, AI-generation, grammar, and citation results per document." },
+      { property: "og:description", content: "Review exact text matches, language findings, and reference records." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -302,9 +301,9 @@ function AnalysisPage() {
                       ? currentStage === "extracting"
                         ? "Stage 1/4: Ingesting text & tokenizing sentence structures"
                         : currentStage === "retrieving"
-                          ? "Stage 2/4: Live literature retrieval (Wikipedia, OpenAlex, Crossref)"
+                          ? "Stage 2/4: Public source retrieval"
                           : currentStage === "scoring"
-                            ? "Stage 3/4: Forensic AI stylometrics & grammar syntax review"
+                            ? "Stage 3/4: Language and reference checks"
                             : currentStage === "rendering"
                               ? "Stage 4/4: Bibliographic cross-matching & evidence compilation"
                               : "Multi-signal analysis pipeline actively processing in real time…"
