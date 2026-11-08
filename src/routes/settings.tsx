@@ -187,7 +187,7 @@ function SettingsPage() {
               <Progress value={usagePercent} className="h-3" />
               <p className="text-xs text-muted-foreground">
                 {isLimitReached
-                  ? "You have reached your document limit. Upgrade to Pro, Plus, or Premium to analyze more documents."
+                  ? "You have used this month's document allowance. Upgrade to Pro, Plus, or Premium for a higher monthly allowance."
                   : `${Math.round(100 - usagePercent)}% of your document quota is still available.`}
               </p>
             </div>
