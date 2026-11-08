@@ -482,7 +482,7 @@ async function detectPlagiarism(
       sources_retrieved: uniquePool.length,
       providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
       matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words); clearly quoted passages and a recognised references section are excluded.",
-      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected. Quote and bibliography exclusions use conservative text-format and heading rules and may not identify every citation style.",
+      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected. Quote, inline citation and bibliography exclusions use conservative text-format and heading rules and may not identify every citation style.",
     },
   };
 }
