@@ -79,7 +79,7 @@ function AnalyticsPage() {
         <StatCard label="Total Documents" value={String(stats?.totalDocuments ?? 0)} icon={FileText} tone="primary" />
         <StatCard label="Avg Similarity" value={`${stats?.similarity ?? 0}%`} icon={Activity} tone="success" />
         <StatCard label="Avg AI-style signal" value={`${stats?.aiDetection ?? 0}%`} icon={Sparkles} tone="info" />
-        <StatCard label="Flagged Documents" value={String(flagged)} icon={AlertTriangle} tone="warning" />
+        <StatCard label="Documents for Review" value={String(flagged)} icon={AlertTriangle} tone="warning" />
       </div>
 
       {!hasData ? (
