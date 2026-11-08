@@ -8,11 +8,12 @@ import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
  *  1. Sentence segmentation + fingerprinting of the submitted text.
  *  2. Source retrieval over open scholarly indexes and the web, followed by
  *     offset-preserving exact phrase matching with overlapping-source evidence.
- *  3. Stylometric AI-detection classifier (logistic regression over burstiness,
- *     lexical diversity, function-word and boilerplate features) blended with an
- *     LLM judgement from Lovable AI.
- *  4. Grammar/language checking through the public LanguageTool API.
- *  5. Citation verification through Crossref bibliographic matching.
+ *  3. Grammar/language checking through LanguageTool, with a small local
+ *     fallback only when the service is unavailable.
+ *  4. Reference-list verification against Crossref and OpenAlex.
+ *
+ *  AI authorship scores are intentionally not emitted until a detector has
+ *  been independently validated on a representative, labelled dataset.
  */
 
 const UA = "PlagiShieldAI/1.0 (academic integrity analysis)";
@@ -813,60 +814,28 @@ export async function analyzeDocument(
   const words = tokenize(text);
 
   await stage("retrieving");
-  const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
+  const [plag, grammar, citations] = await Promise.all([
     detectPlagiarism(text, sentences, { title: meta.title, docType: meta.docType }),
     checkGrammar(text, meta.author, meta.title),
     verifyCitations(text),
-    llmJudgement(text, meta.docType),
-    llmSentenceScores(sentences),
   ]);
 
   await stage("scoring");
-  const sty = stylometry(text, sentences);
-
-  const modelScore = judgement?.probability ?? null;
-  const sentenceMean =
-    sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
-  const aiScore = Math.round(
-    modelScore === null && sentenceMean === null
-      ? sty.score
-      : sty.score * 0.35 + (modelScore ?? sentenceMean!) * 0.4 + (sentenceMean ?? modelScore!) * 0.25,
-  );
-  // Without an independent model assessment, heuristic-only output is low
-  // confidence. Even model-assisted text classification is capped at medium:
-  // this feature is an indicator, not a validated authorship detector.
-  const confidence = judgement
-    ? (judgement.confidence === "low" ? "low" : "medium")
-    : "low";
-
-
   const totalWords = words.length || 1;
-  const plagWords = Math.min(totalWords, plag.matched_words);
-  const quotedWords = Math.min(
-    totalWords - plagWords,
-    Math.round(tokenize((text.match(/[“"][^”"]{25,400}[”"]/g) ?? []).join(" ")).length),
-  );
-  const aiWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords),
-    Math.round(((totalWords - plagWords) * aiScore) / 100),
-  );
-  const grammarWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords - aiWords),
-    grammar.issues.length * 6,
-  );
-  const unmatchedWords = Math.max(0, totalWords - plagWords - quotedWords - aiWords - grammarWords);
-  const pct = (w: number) => Number(((w / totalWords) * 100).toFixed(1));
+  const matchedWords = Math.min(totalWords, plag.matched_words);
+  const unmatchedWords = Math.max(0, totalWords - matchedWords);
+  const pct = (count: number) => Number(((count / totalWords) * 100).toFixed(1));
 
+  // Only measurable document categories are shown. No estimated AI share or
+  // invented "human-written" residual is inferred from unmatched text.
   const composition: CompositionSlice[] = [
-    { category: "Plagiarised / matched", percent: pct(plagWords), words: plagWords },
-    { category: "AI-style indicators (estimated)", percent: pct(aiWords), words: aiWords },
-    { category: "Quoted & attributed", percent: pct(quotedWords), words: quotedWords },
-    { category: "Language issues", percent: pct(grammarWords), words: grammarWords },
-    { category: "Unmatched in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
+    { category: "Observed source overlap", percent: pct(matchedWords), words: matchedWords },
+    { category: "No match found in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
   ];
 
   await stage("rendering");
-  const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
+  const aiReasoning = "AI authorship scoring is not reported. This deployment has no independently validated detector and representative benchmark dataset; stylistic patterns alone cannot establish authorship.";
+  const aiHl: Highlight[] = [];
 
   const issues: IssueItem[] = [];
 
@@ -876,15 +845,6 @@ export async function analyzeDocument(
       severity: h.score >= 65 ? "high" : h.score >= 45 ? "medium" : "low",
       title: `${h.score}% overlap with ${h.source ?? "an external source"}`,
       detail: h.url ? `Source: ${h.url}` : "Matched against retrieved internet source.",
-      excerpt: h.text.slice(0, 260),
-    });
-  }
-  for (const h of aiHl.slice(0, 12)) {
-    issues.push({
-      category: "AI content",
-      severity: h.score >= 75 ? "high" : "medium",
-      title: `Passage reads as machine generated (${h.score}%)`,
-      detail: h.note ?? "Stylometric markers of LLM output.",
       excerpt: h.text.slice(0, 260),
     });
   }
@@ -913,7 +873,9 @@ export async function analyzeDocument(
       sources_queried: plag.queried,
       checked_at: new Date().toISOString(),
     },
-    text_excerpt: text.slice(0, 24000),
+    // Preserve the complete extracted text (up to the 120k ingestion limit).
+    // PDF and on-screen highlights use offsets into this exact string.
+    text_excerpt: text,
     plagiarism: {
       score: plag.score,
       matched_words: plag.matched_words,
@@ -922,12 +884,12 @@ export async function analyzeDocument(
       source_coverage: plag.source_coverage,
     },
     ai_detection: {
-      score: aiScore,
-      confidence,
-      reasoning: judgement?.reasoning || sty.reasoning,
-      model_score: modelScore,
-      stylometry_score: sty.score,
-      features: sty.features,
+      score: null,
+      confidence: "not_assessed",
+      reasoning: aiReasoning,
+      model_score: null,
+      stylometry_score: null,
+      features: {},
       highlights: aiHl,
     },
     grammar,
