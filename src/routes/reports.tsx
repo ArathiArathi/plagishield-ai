@@ -122,7 +122,7 @@ function ReportsPage() {
 
   const bundle: Array<{ kind: ReportKind; title: string; desc: string; icon: typeof FileSearch; metric: string }> = [
     { kind: "similarity", title: "Similarity Report", desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`, icon: FileSearch, metric: `${similarity}% similarity` },
-    { kind: "ai", title: "AI Content Report", desc: "AI likelihood, detector confidence, reasoning and flagged passages.", icon: Bot, metric: `${ai}% AI` },
+    { kind: "ai", title: "Writing-pattern Report", desc: "Estimated writing-pattern signals, detector notes and passages for a closer human review.", icon: Bot, metric: `${ai}% signal` },
     { kind: "grammar", title: "Grammar & Language Report", desc: `Readability score with categorised issue breakdown (${grammarIssues.length} issue${grammarIssues.length === 1 ? "" : "s"}).`, icon: SpellCheck, metric: `${grammar}/100` },
     { kind: "citation", title: "Citation Verification Report", desc: `Reference verification status and formatting issues (${citationIssues.length} issue${citationIssues.length === 1 ? "" : "s"}).`, icon: Quote, metric: `${citation}/100` },
     { kind: "full", title: "Comprehensive Report", desc: "All four modules combined into a single institutional integrity dossier.", icon: FileStack, metric: "All modules" },
@@ -232,7 +232,7 @@ function ReportsPage() {
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <KPI label="Similarity" value={`${similarity}%`} />
-              <KPI label="AI Detection" value={`${ai}%`} />
+              <KPI label="AI-style signal" value={`${ai}%`} />
               <KPI label="Grammar" value={String(grammar)} />
               <KPI label="Citation" value={String(citation)} />
             </div>
