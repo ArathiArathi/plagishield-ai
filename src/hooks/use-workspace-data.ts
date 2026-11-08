@@ -123,7 +123,6 @@ export function useWorkspaceData() {
       return hasActive ? 1200 : false;
     },
     queryFn: async () => {
-      const session = (await supabase.auth.getSession()).data.session;
 
       const [docsRes, analysesRes] = await Promise.all([
         supabase
