@@ -100,9 +100,21 @@ async function execute(
     const buf = await file.arrayBuffer();
     const { text, method } = await extractText(buf, doc.name);
 
-    if (text.replace(/\s+/g, " ").trim().length < 50) {
+    const normalizedText = text.replace(/\s+/g, " ").trim();
+    const extractedWords = normalizedText.match(/[\p{L}\p{N}]+/gu) ?? [];
+    const visibleCharacters = normalizedText.replace(/\s/g, "");
+    const readableCharacters = (visibleCharacters.match(/[\p{L}\p{N}.,;:!?'"()\-]/gu) ?? []).length;
+    const readableRatio = visibleCharacters.length > 0 ? readableCharacters / visibleCharacters.length : 0;
+    const replacementCharacters = (normalizedText.match(/�/g) ?? []).length;
+
+    if (
+      normalizedText.length < 50 ||
+      extractedWords.length < 10 ||
+      readableRatio < 0.55 ||
+      replacementCharacters > Math.max(2, normalizedText.length * 0.01)
+    ) {
       throw new Error(
-        "Not enough readable text could be extracted from this file. Upload a text-based PDF, DOCX, TXT or MD file (scanned images are not supported).",
+        "The document text could not be extracted reliably. This can happen with scanned PDFs, custom-encoded fonts, or image-only pages. Please upload a text-based PDF or DOCX, or convert the document to DOCX/TXT before analysis. No similarity score or report was generated from unreadable text.",
       );
     }
 
