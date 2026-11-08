@@ -52,7 +52,7 @@ supabase functions deploy create-customer-portal
 supabase functions deploy stripe-webhook
 ```
 
-The migration creates a subscription table with row-level security. Signed-in users can read only their own subscription. Client roles cannot write billing state. A database trigger also enforces the 10 / 15 / 25 / 35 document allowance, so direct API requests cannot bypass the upload-page check.
+The migration creates a subscription table with row-level security. Signed-in users can read only their own subscription. Client roles cannot write billing state. A database trigger also enforces the 10 / 15 / 25 / 35 document allowance each calendar month, so direct API requests cannot bypass the upload-page check.
 
 ## 4. Register the Stripe webhook
 
