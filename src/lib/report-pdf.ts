@@ -36,7 +36,7 @@ export type ReportResults = {
   };
   ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
   grammar?: { score?: number | null; provider?: string; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
-  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[] };
+  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[]; references?: Array<{ raw?: string; verified?: boolean; matched_title?: string; doi?: string; year?: number }> };
   composition?: PdfCompositionSlice[];
   issues?: PdfIssue[];
 };
@@ -729,6 +729,23 @@ function citationSection(ctx: Ctx, input: ReportInput) {
       { label: "Review notes", value: String((c.issues ?? []).length), tone: (c.issues ?? []).length > 0 ? WARN : OK },
     ]);
   }
+  if ((c.references ?? []).length > 0) {
+    sectionTitle(ctx, "Detected Reference Entries");
+    table(
+      ctx,
+      [
+        { header: "#", width: 8 },
+        { header: "Submitted Reference", width: 92 },
+        { header: "Public Index Result", width: 40 },
+      ],
+      (c.references ?? []).map((reference, index) => [
+        String(index + 1),
+        reference.raw ?? "Reference text not stored",
+        reference.verified ? (reference.matched_title ?? "Matched record") : "No public-index match",
+      ]),
+    );
+  }
+
   sectionTitle(ctx, "Bibliographic Issues & Verification Notes");
   const issues = c.issues ?? [];
   if (issues.length === 0 && total > 0) {
