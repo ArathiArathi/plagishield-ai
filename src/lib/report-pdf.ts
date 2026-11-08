@@ -34,9 +34,9 @@ export type ReportResults = {
     highlights?: PdfHighlight[];
     source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
   };
-  ai_detection?: { confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
-  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
-  citations?: { total?: number; verified?: number; issues?: string[] };
+  ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
+  grammar?: { score?: number | null; provider?: string; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
+  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[] };
   composition?: PdfCompositionSlice[];
   issues?: PdfIssue[];
 };
@@ -51,9 +51,9 @@ export type ReportInput = {
   authorName?: string | null;
   paperTitle?: string | null;
   similarity: number;
-  ai: number;
-  grammar: number;
-  citation: number;
+  ai: number | null;
+  grammar: number | null;
+  citation: number | null;
   results: ReportResults;
 };
 
@@ -124,7 +124,7 @@ function header(ctx: Ctx) {
   doc.text(sanitizePdfText(ctx.title), W - M, 12, { align: "right" });
   doc.setFont("helvetica", "normal").setFontSize(8);
   doc.setTextColor(200, 214, 235);
-  const refId = String(ctx.input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
+  const refId = ctx.input.analysisId ? ctx.input.analysisId.slice(0, 8).toUpperCase() : "Not recorded";
   doc.text(`Ref ${refId}`, W - M, 17.5, { align: "right" });
   ctx.y = 30;
 }
@@ -136,7 +136,7 @@ function footer(ctx: Ctx) {
   doc.line(M, H - 16, W - M, H - 16);
   doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED);
   const docName = sanitizePdfText(ctx.input.documentName || "document");
-  const genAt = sanitizePdfText(ctx.input.generatedAt || new Date().toLocaleString());
+  const genAt = sanitizePdfText(ctx.input.generatedAt || "Not recorded");
   doc.text(`${docName} · generated ${genAt}`, M, H - 11);
   doc.text(`Page ${ctx.page}`, W - M, H - 11, { align: "right" });
 }
@@ -308,23 +308,6 @@ function table(
   ctx.y += 6;
 }
 
-function verdictBox(ctx: Ctx, verdict: string, tone: [number, number, number], detail: string) {
-  const { doc } = ctx;
-  ensure(ctx, 24);
-  doc.setFillColor(250, 251, 253);
-  doc.setDrawColor(...tone);
-  doc.setLineWidth(0.4);
-  doc.rect(M, ctx.y, W - 2 * M, 18, "FD");
-  doc.setFillColor(...tone);
-  doc.rect(M, ctx.y, 2.5, 18, "F");
-  doc.setFont("helvetica", "bold").setFontSize(9.5).setTextColor(...tone);
-  doc.text(verdict, M + 7, ctx.y + 7);
-  doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...MUTED);
-  const lines = (doc.splitTextToSize(detail, W - 2 * M - 12) as string[]).slice(0, 2);
-  lines.forEach((l, i) => doc.text(l, M + 7, ctx.y + 12 + i * 4));
-  ctx.y += 24;
-}
-
 function titleCase(v: string) {
   return v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -335,42 +318,40 @@ function titleCase(v: string) {
  *  (Title, Authors, Affiliation, Abstract Callout, Keywords, Institutional Seal). */
 function academicPaperHeader(ctx: Ctx, input: ReportInput) {
   const { doc } = ctx;
-  ensure(ctx, 58);
-  const paperTitle = sanitizePdfText(input.paperTitle || input.documentName.replace(/\.[a-z0-9]+$/i, "") || "Untitled submission");
-  const authors = sanitizePdfText(input.authorName || "Author not provided");
-  const affiliation = sanitizePdfText(input.docType ? titleCase(input.docType) : "Submission type not provided");
+  ensure(ctx, 38);
+  const paperTitle = sanitizePdfText(input.paperTitle || input.documentName.replace(/\.[a-z0-9]+$/i, "") || "Untitled document");
   doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...ACCENT);
   doc.text("DOCUMENT SIMILARITY & WRITING REVIEW", W / 2, ctx.y, { align: "center" });
-  ctx.y += 6;
+  ctx.y += 7;
   doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...NAVY);
   const titleLines = doc.splitTextToSize(paperTitle, W - 2 * M - 10) as string[];
-  titleLines.forEach((line) => { ensure(ctx, 7); doc.text(line, W / 2, ctx.y, { align: "center" }); ctx.y += 5.2; });
-  ctx.y += 2;
-  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(40, 50, 70);
-  doc.text(authors, W / 2, ctx.y, { align: "center" });
-  ctx.y += 4.5;
-  doc.setFont("helvetica", "italic").setFontSize(8).setTextColor(...MUTED);
-  doc.text(affiliation, W / 2, ctx.y, { align: "center" });
-  ctx.y += 6;
-  const excerpt = sanitizePdfText(input.results?.text_excerpt || "");
-  sectionTitle(ctx, "Extracted Submission Excerpt");
-  if (excerpt) paragraph(ctx, excerpt.slice(0, 700).replace(/\s+/g, " ").trim() + (excerpt.length > 700 ? "..." : ""), { size: 8.5 });
-  else paragraph(ctx, "No extracted text excerpt was stored with this analysis. Review the source document alongside these results.");
-  paragraph(ctx, "Scores and passage flags are automated indicators. They are not proof of plagiarism or AI authorship; review matched-source evidence and document context before making academic decisions.", { size: 8, color: MUTED });
+  titleLines.forEach((line) => {
+    ensure(ctx, 7);
+    doc.text(line, W / 2, ctx.y, { align: "center" });
+    ctx.y += 5.2;
+  });
+  if (input.authorName) {
+    ctx.y += 2;
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(40, 50, 70);
+    doc.text(sanitizePdfText(input.authorName), W / 2, ctx.y, { align: "center" });
+    ctx.y += 5;
+  }
+  ctx.y += 4;
+  paragraph(ctx, "The submitted text is reproduced in this report with evidence-linked highlights. Review each match against its source and surrounding context.", { size: 8, color: MUTED });
 }
 
 function documentBlock(ctx: Ctx, input: ReportInput) {
   const docName = sanitizePdfText(input.documentName || "document");
-  const refId = String(input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
+  const refId = input.analysisId ? input.analysisId.slice(0, 8).toUpperCase() : "Not recorded";
   const rows: Array<[string, string]> = [
     ["Document filename", docName],
     ["Paper title", input.paperTitle || docName.replace(/\.[a-z0-9]+$/i, "")],
     ["Author", input.authorName || "Author not provided"],
     ["Submission type", input.docType ? titleCase(input.docType) : "Not provided"],
-    ["Format & version", `${String(input.fileType || "PDF").toUpperCase()} · v${input.version || 1}`],
+    ["Format & version", `${String(input.fileType || "Not recorded").toUpperCase()} · v${input.version ?? "Not recorded"}`],
     ["Analysis reference ID", refId],
     ["Analysis engine", input.results.meta?.engine_version || "Not recorded"],
-    ["Word count", Number(input.results.meta?.words ?? 0).toLocaleString()],
+    ["Word count", input.results.meta?.words != null ? Number(input.results.meta.words).toLocaleString() : "Not recorded"],
     ["Extracted text", input.results.meta?.extraction || "Not recorded"],
     ["Analysis generated", input.generatedAt || new Date().toLocaleString()],
   ];
@@ -382,135 +363,6 @@ function documentBlock(ctx: Ctx, input: ReportInput) {
 /** Visual Graph 1: Multi-metric integrity benchmark bar graph
  *  Renders an authentic vector-rendered bar chart in jsPDF with axes, gridlines,
  *  colored bars, threshold tolerance lines, and bold score callouts. */
-function benchmarkBarGraph(ctx: Ctx, input: ReportInput) {
-  const { doc } = ctx;
-  ensure(ctx, 62);
-
-  sectionTitle(ctx, "Integrity Benchmark & Tolerance Graph");
-
-  const chartW = W - 2 * M;
-  const chartH = 40;
-  const originX = M + 18;
-  const originY = ctx.y + chartH;
-  const plotW = chartW - 22;
-
-  // Background plot area
-  doc.setFillColor(252, 253, 255);
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.3);
-  doc.rect(originX, ctx.y, plotW, chartH, "FD");
-
-  // Gridlines & Y-Axis labels (0%, 25%, 50%, 75%, 100%)
-  const yTicks = [0, 25, 50, 75, 100];
-  doc.setFont("helvetica", "normal").setFontSize(6.5).setTextColor(...MUTED);
-  yTicks.forEach((tick) => {
-    const yPos = originY - (tick / 100) * chartH;
-    doc.text(`${tick}%`, originX - 3, yPos + 2, { align: "right" });
-    if (tick > 0 && tick < 100) {
-      doc.setDrawColor(235, 239, 245);
-      doc.setLineWidth(0.2);
-      doc.line(originX, yPos, originX + plotW, yPos);
-    }
-  });
-
-  // Benchmark metrics data
-  const metrics = [
-    {
-      label: "Similarity Index",
-      score: input.similarity,
-      threshold: 0,
-      thresholdLabel: "No universal cutoff",
-      inverted: true,
-      color: toneFor("similarity", input.similarity),
-    },
-    {
-      label: "AI-style Signals",
-      score: input.ai,
-      threshold: 0,
-      thresholdLabel: "Not authorship proof",
-      inverted: true,
-      color: toneFor("ai", input.ai),
-    },
-    {
-      label: "Grammar Quality",
-      score: input.grammar,
-      threshold: 75,
-      thresholdLabel: "Min 75%",
-      inverted: false,
-      color: toneFor("grammar", input.grammar),
-    },
-    {
-      label: "Citation Integrity",
-      score: input.citation,
-      threshold: 80,
-      thresholdLabel: "Min 80%",
-      inverted: false,
-      color: toneFor("citation", input.citation),
-    },
-  ];
-
-  const colWidth = plotW / metrics.length;
-  const barWidth = 16;
-
-  metrics.forEach((m, idx) => {
-    const colCenter = originX + idx * colWidth + colWidth / 2;
-    const barX = colCenter - barWidth / 2;
-    const barH = (Math.min(100, Math.max(2, m.score)) / 100) * chartH;
-    const barY = originY - barH;
-
-    // Bar body with subtle rounded aesthetic
-    doc.setFillColor(...m.color);
-    doc.roundedRect(barX, barY, barWidth, barH, 1, 1, "F");
-
-    // Top highlight rim
-    doc.setFillColor(255, 255, 255);
-    doc.rect(barX + 1, barY + 0.6, barWidth - 2, 0.8, "F");
-
-    // Numeric Score Label above bar
-    doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...m.color);
-    doc.text(`${m.score}%`, colCenter, barY - 1.8, { align: "center" });
-
-    // Threshold indicator line & label
-    if (m.threshold > 0) {
-      const threshY = originY - (m.threshold / 100) * chartH;
-      doc.setDrawColor(m.inverted ? 200 : 22, m.inverted ? 55 : 138, m.inverted ? 55 : 92);
-      doc.setLineWidth(0.4);
-      doc.line(barX - 2, threshY, barX + barWidth + 2, threshY);
-    }
-
-    // X-Axis Category Label
-    doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...NAVY);
-    doc.text(m.label, colCenter, originY + 4.5, { align: "center" });
-
-    doc.setFont("helvetica", "normal").setFontSize(6).setTextColor(...MUTED);
-    doc.text(m.thresholdLabel, colCenter, originY + 8, { align: "center" });
-  });
-
-  // Legend bar at top right
-  const legY = ctx.y - 3.5;
-  doc.setFont("helvetica", "normal").setFontSize(6.5).setTextColor(...MUTED);
-
-  // Safe dot
-  doc.setFillColor(...OK);
-  doc.circle(originX + plotW - 65, legY, 1.5, "F");
-  doc.text("Optimal", originX + plotW - 62, legY + 1);
-
-  // Warning/Review dot
-  doc.setFillColor(...WARN);
-  doc.circle(originX + plotW - 45, legY, 1.5, "F");
-  doc.text("Review", originX + plotW - 42, legY + 1);
-
-  // Threshold line
-  doc.setDrawColor(...BAD);
-  doc.setLineWidth(0.4);
-  doc.line(originX + plotW - 25, legY, originX + plotW - 19, legY);
-  doc.text("Tolerance Guide", originX + plotW - 17, legY + 1);
-
-  ctx.y = originY + 13;
-}
-
-/** Visual Graph 2: Matched Sources Horizontal Ranked Bar Chart
- *  Displays the top matched repositories and documents with comparative bars. */
 function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; similarity?: number }>) {
   const { doc } = ctx;
   if (!matches || matches.length === 0) return;
@@ -556,60 +408,6 @@ function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; simi
 
 /** Visual Graph 3: AI Likelihood Spectrum Dial
  *  Visual gradient indicator showing where the text lies on the Synthetic spectrum. */
-function aiLikelihoodSpectrumChart(ctx: Ctx, aiScore: number, confidence?: string) {
-  const { doc } = ctx;
-  ensure(ctx, 35);
-
-  sectionTitle(ctx, "AI Synthetic Content Likelihood Spectrum");
-
-  const barW = W - 2 * M;
-  const barH = 6;
-  const barY = ctx.y;
-
-  // 3 Colored spectrum zones: Green (Human), Yellow (Mixed), Red (Synthetic)
-  const zone1W = barW * 0.25;
-  const zone2W = barW * 0.35;
-  const zone3W = barW * 0.40;
-
-  doc.setFillColor(34, 197, 94); // Human
-  doc.rect(M, barY, zone1W, barH, "F");
-
-  doc.setFillColor(234, 179, 8); // Mixed
-  doc.rect(M + zone1W, barY, zone2W, barH, "F");
-
-  doc.setFillColor(239, 68, 68); // Synthetic
-  doc.rect(M + zone1W + zone2W, barY, zone3W, barH, "F");
-
-  // Border
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.3);
-  doc.rect(M, barY, barW, barH);
-
-  // Position of current score
-  const pointerX = M + (Math.min(100, Math.max(0, aiScore)) / 100) * barW;
-
-  // Pointer Triangle & Score Badge
-  doc.setFillColor(...NAVY);
-  doc.triangle(pointerX, barY - 1, pointerX - 2.5, barY - 5, pointerX + 2.5, barY - 5, "F");
-
-  doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...NAVY);
-  doc.text(`Score: ${aiScore}%`, pointerX, barY - 6.5, { align: "center" });
-
-  // Zone labels
-  doc.setFont("helvetica", "normal").setFontSize(6.5).setTextColor(...MUTED);
-  doc.text("Original Human (0-25%)", M + 2, barY + barH + 4);
-  doc.text("AI Assisted / Paraphrased (25-60%)", M + zone1W + 4, barY + barH + 4);
-  doc.text("Synthetic LLM Generated (60-100%)", W - M - 2, barY + barH + 4, { align: "right" });
-
-  if (confidence) {
-    doc.setFont("helvetica", "italic").setFontSize(7).setTextColor(...ACCENT);
-    doc.text(`Detector Confidence Rating: ${confidence}`, M, barY + barH + 9);
-  }
-
-  ctx.y = barY + barH + 14;
-}
-
-/** Visual Graph 4: Grammar Issue Breakdown Chart */
 function grammarCategoryGraph(ctx: Ctx, issues: Array<{ type?: string; severity?: string }>) {
   const { doc } = ctx;
   if (!issues || issues.length === 0) return;
@@ -666,84 +464,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   citation: "Scholarly citation",
 };
 
-const SLICE_COLOR: Record<string, [number, number, number]> = {
-  "Plagiarised / matched": BAD,
-  "AI generated": WARN,
-  "AI-style indicators (estimated)": WARN,
-  "Quoted & attributed": ACCENT,
-  "Language issues": [120, 90, 200],
-  "Original human writing": OK,
-  "Unmatched in retrieved sources": OK,
-};
-
-function compositionSection(ctx: Ctx, input: ReportInput) {
-  const slices = (input.results.composition ?? []).filter((s) => s && s.percent > 0);
-  sectionTitle(ctx, "Content Composition Distribution Graph");
-  if (slices.length === 0) {
-    paragraph(ctx, "No content composition data is stored for this analysis.");
-    return;
-  }
-
-  const { doc } = ctx;
-  ensure(ctx, 42);
-  const barW = W - 2 * M;
-  const barH = 8.5;
-  const totalPct = slices.reduce((s, x) => s + x.percent, 0) || 100;
-  let x = M;
-
-  // Segmented multi-colored bar
-  slices.forEach((s) => {
-    const w = (barW * s.percent) / totalPct;
-    doc.setFillColor(...(SLICE_COLOR[s.category] ?? MUTED));
-    doc.rect(x, ctx.y, w, barH, "F");
-
-    // Show percentage text inside segment if wide enough
-    if (w > 12) {
-      doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(255, 255, 255);
-      doc.text(`${s.percent}%`, x + w / 2, ctx.y + 5.5, { align: "center" });
-    }
-    x += w;
-  });
-
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.3);
-  doc.rect(M, ctx.y, barW, barH);
-  ctx.y += barH + 4;
-
-  // Legend cards below the graph
-  const cardW = (barW - 8) / Math.min(3, slices.length);
-  const startCardY = ctx.y;
-  slices.forEach((s, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const cx = M + col * (cardW + 4);
-    const cy = startCardY + row * 11;
-
-    doc.setFillColor(...(SLICE_COLOR[s.category] ?? MUTED));
-    doc.rect(cx, cy + 1, 3.5, 3.5, "F");
-
-    doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
-    doc.text(sanitizePdfText(s.category), cx + 5.5, cy + 4);
-
-    const wordCount = Number(s.words ?? 0);
-    doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(...MUTED);
-    doc.text(`${s.percent}% · ${wordCount.toLocaleString()} words`, cx + 5.5, cy + 8);
-  });
-
-  const numRows = Math.ceil(slices.length / 3);
-  ctx.y = startCardY + numRows * 11 + 6;
-
-  table(
-    ctx,
-    [
-      { header: "Category", width: 74 },
-      { header: "Share of document", width: 40, align: "right" },
-      { header: "Words count", width: 26, align: "right" },
-    ],
-    slices.map((s) => [s.category, `${s.percent}%`, (Number(s.words ?? 0)).toLocaleString()]),
-  );
-}
-
 function legendRow(ctx: Ctx, categories: string[]) {
   const { doc } = ctx;
   ensure(ctx, 10);
@@ -762,7 +482,7 @@ function legendRow(ctx: Ctx, categories: string[]) {
   ctx.y += 7;
 }
 
-const MAX_BODY_CHARS = 14000;
+const MAX_BODY_CHARS = 120000;
 
 /** Highlights issues directly in the text as per report type.
  *  Color coded: Red (Plagiarism), Amber (AI), Blue (Grammar), Green (Citations). */
@@ -823,7 +543,7 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
   }
   ctx.y += lineH + 4;
   if (raw.length > MAX_BODY_CHARS) {
-    paragraph(ctx, `Body text truncated at ${MAX_BODY_CHARS.toLocaleString()} characters for PDF export.`, { size: 7.5, color: MUTED });
+    paragraph(ctx, "The extracted text exceeded the analysis engine 120,000-character ingestion limit. The original uploaded file remains the authoritative copy.", { size: 7.5, color: MUTED });
   }
 }
 
@@ -888,12 +608,7 @@ function similaritySection(ctx: Ctx, input: ReportInput) {
     tone,
     `${Number(plagiarism.highlights?.length ?? 0)} highlighted passage(s), ${Number(plagiarism.matched_words ?? 0).toLocaleString()} matched words, and ${matches.length} retrieved source(s). Similarity is a text-overlap measure, not a plagiarism verdict.`,
   );
-  verdictBox(
-    ctx,
-    input.similarity >= 35 ? "Substantial observed text overlap — inspect the passages" : input.similarity >= 15 ? "Some observed text overlap — inspect the passages" : "Limited overlap found in the retrieved source set",
-    tone,
-    "Review the highlighted text and original source. A low score does not establish originality, and a match does not by itself establish misconduct.",
-  );
+  paragraph(ctx, "The percentage is the share of eligible document words covered by exact matches in the retrieved source set. Detected quotations and a detected reference-list section are excluded. A match is not, by itself, a plagiarism finding.", { size: 8, color: MUTED });
 
   matchedSourcesBarChart(ctx, matches);
 
@@ -947,62 +662,29 @@ function similaritySection(ctx: Ctx, input: ReportInput) {
 
 function aiSection(ctx: Ctx, input: ReportInput) {
   const det = input.results.ai_detection ?? {};
-  const tone = toneFor("ai", input.ai);
-  sectionTitle(ctx, "AI Likelihood & Detection Confidence");
-  gauge(
-    ctx,
-    "AI-style indicator score (not an authorship probability)",
-    input.ai,
-    tone,
-    `Reported detector confidence: ${det.confidence ?? "low"}. This is an uncalibrated model estimate, not a validated probability.`,
-  );
-  verdictBox(
-    ctx,
-    input.ai >= 60 ? "Elevated AI-style indicators — review passages" : input.ai >= 30 ? "Some AI-style indicators — review passages" : "Fewer AI-style indicators observed",
-    tone,
-    "Automated style signals cannot establish authorship. Human and AI writing can share these patterns; do not use this score alone for academic decisions.",
-  );
-
-  aiLikelihoodSpectrumChart(ctx, input.ai, det.confidence);
-
-  sectionTitle(ctx, "Forensic Detector Reasoning");
-  paragraph(ctx, det.reasoning?.trim() || "No detector explanation was stored for this analysis. Treat the score as an uncertain indicator.");
-
-  const aiMatches = det.highlights ?? [];
-  if (aiMatches.length > 0) {
-    sectionTitle(ctx, "Passages with AI-style signals");
-    table(
-      ctx,
-      [
-        { header: "#", width: 8 },
-        { header: "Flagged Sentence / Passage", width: 130 },
-        { header: "AI Prob.", width: 28, align: "right" },
-      ],
-      aiMatches.map((m, i) => [String(i + 1), m.text ?? "—", `${Math.round(Number(m.score ?? 0))}%`]),
-    );
+  sectionTitle(ctx, "AI Authorship Assessment");
+  paragraph(ctx, "Not assessed. This deployment does not have an independently validated AI-authorship detector and representative benchmark dataset. PlagiShield therefore does not invent an AI probability or label passages as AI-written.", { size: 9 });
+  if (det.reasoning?.trim()) {
+    sectionTitle(ctx, "Assessment Status");
+    paragraph(ctx, det.reasoning.trim());
   }
 }
 
 function grammarSection(ctx: Ctx, input: ReportInput) {
   const issues = input.results.grammar?.issues ?? [];
-  const tone = toneFor("grammar", input.grammar);
-  sectionTitle(ctx, "Academic Writing Quality");
-  gauge(ctx, "Grammar, syntax & readability score", input.grammar, tone, `${issues.length} language and stylistic issues identified.`);
-
-  grammarCategoryGraph(ctx, issues);
-
+  sectionTitle(ctx, "Grammar & Language Review");
+  paragraph(ctx, issues.length + " issue(s) were returned by " + (input.results.grammar?.provider ?? "the configured language checker") + ". No overall writing-quality score is calculated.");
   sectionTitle(ctx, "Detected Grammar & Language Corrections");
   if (issues.length === 0) {
-    paragraph(ctx, "No grammar or language issues were detected. Writing adheres to high scholarly standards.");
+    paragraph(ctx, "The configured checker returned no issues for the text it processed. This is not a guarantee that the document is error-free.");
   } else {
-    table(
-      ctx,
+    table(ctx,
       [
         { header: "#", width: 8 },
         { header: "Type", width: 24 },
         { header: "Sev.", width: 18 },
         { header: "Original Passage", width: 57 },
-        { header: "Academic Suggestion", width: 57 },
+        { header: "Suggested Change", width: 57 },
       ],
       issues.map((i, n) => [String(n + 1), i.type ?? "—", i.severity ?? "—", i.text ?? "—", i.suggestion ?? "—"]),
     );
@@ -1011,24 +693,27 @@ function grammarSection(ctx: Ctx, input: ReportInput) {
 
 function citationSection(ctx: Ctx, input: ReportInput) {
   const c = input.results.citations ?? {};
-  const tone = toneFor("citation", input.citation);
   const total = Number(c.total ?? 0);
   const verified = Number(c.verified ?? 0);
-  sectionTitle(ctx, "Citation Integrity & Crossref Verification");
-  gauge(ctx, "Citation completeness & DOI verification score", input.citation, tone, `${verified} of ${total} bibliographic references verified.`);
-  scoreCards(ctx, [
-    { label: "References found", value: String(total), tone: ACCENT },
-    { label: "Verified DOIs", value: String(verified), tone: OK },
-    { label: "Unverified", value: String(Math.max(0, total - verified)), tone: total - verified > 0 ? WARN : OK },
-    { label: "Format Issues", value: String((c.issues ?? []).length), tone: (c.issues ?? []).length > 0 ? BAD : OK },
-  ]);
-  sectionTitle(ctx, "Bibliographic Issues & Formatting Warnings");
-  const issues = c.issues ?? [];
-  if (issues.length === 0) {
-    paragraph(ctx, "No citation issues were detected. All references conform to IEEE / ACM standards with verifiable identifiers.");
+  sectionTitle(ctx, "Reference Verification");
+  if (total === 0) {
+    paragraph(ctx, "Not assessed: no reference-list entries were detected. No citation-quality percentage is inferred.");
   } else {
-    table(
-      ctx,
+    scoreCards(ctx, [
+      { label: "References found", value: String(total), tone: ACCENT },
+      { label: "Verified titles", value: String(verified), tone: OK },
+      { label: "Not verified", value: String(Math.max(0, total - verified)), tone: total - verified > 0 ? WARN : OK },
+      { label: "Review notes", value: String((c.issues ?? []).length), tone: (c.issues ?? []).length > 0 ? WARN : OK },
+    ]);
+  }
+  sectionTitle(ctx, "Bibliographic Issues & Verification Notes");
+  const issues = c.issues ?? [];
+  if (issues.length === 0 && total > 0) {
+    paragraph(ctx, "No additional verification notes were returned. Check each reference against its publisher record before relying on it.");
+  } else if (issues.length === 0) {
+    paragraph(ctx, "No citation verification data is available.");
+  } else {
+    table(ctx,
       [
         { header: "#", width: 8 },
         { header: "Bibliographic Issue / Warning", width: 132 },
@@ -1040,13 +725,13 @@ function citationSection(ctx: Ctx, input: ReportInput) {
 
 function recommendations(input: ReportInput): Array<[string, string, string]> {
   const out: Array<[string, string, string]> = [];
-  const g = input.results.grammar?.issues?.length ?? 0;
-  const ci = input.results.citations?.issues?.length ?? 0;
-  if (input.similarity >= 15) out.push(["Originality", "Paraphrase or quote matched passages and attribute all scholarly sources.", input.similarity >= 35 ? "High" : "Medium"]);
-  if (input.ai >= 30) out.push(["AI content", "Rewrite flagged passages with personal voice, specific methodologies, and concrete research data.", input.ai >= 60 ? "High" : "Medium"]);
-  if (g > 0) out.push(["Grammar & Style", `Resolve ${g} flagged language and phrasing issue(s) before journal submission.`, input.grammar < 70 ? "High" : "Medium"]);
-  if (ci > 0) out.push(["Citations", `Verify ${ci} citation reference(s) with valid Crossref or OpenAlex DOIs.`, input.citation < 70 ? "High" : "Medium"]);
-  if (out.length === 0) out.push(["Overall", "No issues were returned by the enabled checks. This is not certification of originality or authorship.", "Review"]);
+  const matches = input.results.plagiarism?.matches?.length ?? 0;
+  const grammarIssues = input.results.grammar?.issues?.length ?? 0;
+  const citationIssues = input.results.citations?.issues?.length ?? 0;
+  if (matches > 0) out.push(["Similarity", "Review each highlighted passage beside its linked source and check quotation and citation context.", "Review"]);
+  if (grammarIssues > 0) out.push(["Language", "Review the " + grammarIssues + " language issue(s) returned by the configured checker.", "Review"]);
+  if (citationIssues > 0) out.push(["References", "Review the " + citationIssues + " reference verification note(s).", "Review"]);
+  if (out.length === 0) out.push(["Review", "No findings were returned by the enabled checks. This does not certify originality or authorship.", "Review"]);
   return out;
 }
 
@@ -1064,13 +749,9 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
   sectionTitle(ctx, "Submission & Audit Record");
   documentBlock(ctx, input);
 
-  // Multi-Metric Integrity Benchmark Bar Graph (visual vector chart)
-  benchmarkBarGraph(ctx, input);
-
   // Specialized sections and highlighted issues based on report type
   if (kind === "similarity") {
     similaritySection(ctx, input);
-    compositionSection(ctx, input);
     highlightedBody(ctx, input, ["plagiarism"]);
     issuesSection(ctx, input, ["plagiarism"]);
   }
