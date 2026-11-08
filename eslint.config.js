@@ -9,6 +9,12 @@ export default tseslint.config(
   { ignores: ["dist", ".output", ".vinxi"] },
   eslintPluginPrettier,
   {
+    rules: {
+      // Formatting is handled by the explicit Prettier script; keep lint focused on code issues.
+      "prettier/prettier": "off",
+    },
+  },
+  {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
