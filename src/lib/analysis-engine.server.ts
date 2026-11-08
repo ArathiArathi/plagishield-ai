@@ -429,7 +429,7 @@ async function detectPlagiarism(
   // Sample across the full document rather than relying only on the opening
   // paragraphs. This improves retrieval diversity without claiming exhaustive
   // crawling of the web or licensed academic databases.
-  const target = Math.min(18, usable.length);
+  const target = Math.min(12, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
   for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
@@ -682,7 +682,7 @@ async function checkGrammar(text: string, author?: string | null, title?: string
   const highlights: Highlight[] = [];
   let provider = "LanguageTool (api.languagetool.org)";
 
-  const results = await mapLimit(chunks, 2, async (chunk) => {
+  const results = await mapLimit(chunks, 4, async (chunk) => {
     try {
       const res = await fetch("https://api.languagetool.org/v2/check", {
         method: "POST",
