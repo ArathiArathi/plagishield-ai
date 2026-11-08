@@ -91,13 +91,8 @@ export function sanitizePdfText(str: unknown): string {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 }
 
-function toneFor(kind: ReportKind, value: number): [number, number, number] {
-  // Similarity and AI-style indicators have no universal pass/fail threshold.
-  // Keep their visual treatment neutral instead of assigning a misleading grade.
-  if (kind === "similarity" || kind === "ai") return ACCENT;
-  const good = value >= 80;
-  const mid = value >= 60;
-  return good ? OK : mid ? WARN : BAD;
+function toneFor(_kind: ReportKind, _value: number): [number, number, number] {
+  return ACCENT;
 }
 
 function header(ctx: Ctx) {
@@ -358,11 +353,7 @@ function documentBlock(ctx: Ctx, input: ReportInput) {
   metaTable(ctx, rows);
 }
 
-/* ------------------------------------------- visual graphs & charts in jsPDF */
-
-/** Visual Graph 1: Multi-metric integrity benchmark bar graph
- *  Renders an authentic vector-rendered bar chart in jsPDF with axes, gridlines,
- *  colored bars, threshold tolerance lines, and bold score callouts. */
+/* ------------------------------------------- source contribution summary */
 function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; similarity?: number }>) {
   const { doc } = ctx;
   if (!matches || matches.length === 0) return;
@@ -405,9 +396,6 @@ function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; simi
 
   ctx.y = startY + topMatches.length * 8.5 + 4;
 }
-
-/** Visual Graph 3: AI Likelihood Spectrum Dial
- *  Visual gradient indicator showing where the text lies on the Synthetic spectrum. */
 
 function legendRow(ctx: Ctx, categories: string[]) {
   const { doc } = ctx;
@@ -513,7 +501,7 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
 function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
   const all = input.results.issues ?? [];
   const issues = categories ? all.filter((i) => categories.some((c) => i.category?.toLowerCase().includes(c.toLowerCase()))) : all;
-  sectionTitle(ctx, "Detailed Issue & Forensic Action Log");
+  sectionTitle(ctx, "Detailed Findings");
   if (issues.length === 0) {
     const message = categories?.includes("plagiarism")
       ? "No exact source passages meeting the matching rule were returned. This does not establish originality."
@@ -556,11 +544,11 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
 /* ------------------------------------------------------------- report body */
 
 const KIND_TITLE: Record<ReportKind, string> = {
-  similarity: "Similarity & Plagiarism Report",
+  similarity: "Text Similarity Report",
   ai: "AI Authorship Assessment Status",
   grammar: "Grammar & Academic Language Report",
   citation: "Citation Verification Report",
-  full: "Comprehensive Integrity Dossier",
+  full: "Full Document Review Report",
 };
 
 function similaritySection(ctx: Ctx, input: ReportInput) {
@@ -732,7 +720,7 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
   academicPaperHeader(ctx, input);
 
   // Document metadata block
-  sectionTitle(ctx, "Submission & Audit Record");
+  sectionTitle(ctx, "Submission Details");
   documentBlock(ctx, input);
 
   // Specialized sections and highlighted issues based on report type
@@ -767,7 +755,7 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
   }
 
   // Recommendations table
-  sectionTitle(ctx, "Audit Recommendations & Action Items");
+  sectionTitle(ctx, "Suggested Follow-up");
   table(
     ctx,
     [
