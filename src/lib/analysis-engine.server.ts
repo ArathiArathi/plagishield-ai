@@ -247,21 +247,38 @@ async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate
 /**
  * Build several keyword queries per sentence to query open academic repositories.
  */
+const QUERY_STOP_WORDS = new Set([
+  "this", "that", "these", "those", "with", "from", "have", "been", "were", "what",
+  "when", "where", "which", "will", "would", "could", "should", "their", "there",
+  "about", "after", "before", "between", "through", "during", "under", "above", "into",
+  "also", "such", "other", "more", "most", "some", "only", "both", "each", "than",
+  "paper", "study", "research", "results", "method", "methods", "analysis", "approach",
+  "using", "used", "based", "shown", "demonstrate", "demonstrates", "proposed",
+]);
+
+function informativeTerms(phrase: string, limit = 8): string[] {
+  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const word of words) {
+    const normalized = word.toLowerCase();
+    if (normalized.length < 4 || QUERY_STOP_WORDS.has(normalized) || seen.has(normalized)) continue;
+    seen.add(normalized);
+    terms.push(normalized);
+  }
+  return terms.slice(0, limit);
+}
+
 function searchQueries(sentence: string): string[] {
   const words = sentence.match(/[A-Za-z0-9'’-]+/g) ?? [];
   if (words.length < 6) return [];
-  const stopWords = new Set([
-    "this", "that", "these", "those", "with", "from", "have", "been", "were", "what",
-    "when", "where", "which", "will", "would", "could", "should", "their", "there",
-    "about", "after", "before", "between", "through", "during", "under", "above", "into",
-    "also", "such", "other", "more", "most", "some", "only", "both", "each", "than"
-  ]);
-  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 8).join(" ");
-  const queries: string[] = [];
-  if (keywords.split(" ").length >= 3) queries.push(keywords);
-  const win = words.slice(0, 7).join(" ");
-  if (win && win !== keywords) queries.push(win);
-  return queries;
+  const keywords = informativeTerms(sentence, 8).join(" ");
+  const middle = Math.max(0, Math.floor(words.length / 2) - 4);
+  const centralPhrase = words.slice(middle, middle + 8).join(" ");
+  const queries = [keywords, centralPhrase]
+    .map((query) => query.trim())
+    .filter((query, index, all) => query.split(/\s+/).length >= 3 && all.indexOf(query) === index);
+  return queries.slice(0, 2);
 }
 
 async function wikipediaCandidates(sentence: string, cache: SourceCache): Promise<Candidate[]> {
@@ -275,9 +292,7 @@ async function wikipediaCandidates(sentence: string, cache: SourceCache): Promis
 }
 
 async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
-  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
-  const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "which", "will", "would", "their"]);
-  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 7).join(" ");
+  const keywords = informativeTerms(phrase, 8).join(" ");
   if (!keywords) return [];
   const q = encodeURIComponent(keywords);
   const data = await getJson(
@@ -301,7 +316,7 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
 }
 
 async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
-  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+  const query = informativeTerms(phrase, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=3&fields=title,abstract,url,year,externalIds`,
@@ -356,8 +371,7 @@ async function europePmcCandidates(phrase: string, includeFullText = false): Pro
 }
 
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
-  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
-  const keywords = words.filter((w) => w.length > 4).slice(0, 7).join(" ");
+  const keywords = informativeTerms(phrase, 8).join(" ");
   if (!keywords) return [];
   const data = await getJson(
     `https://api.crossref.org/works?rows=2&select=title,DOI,abstract,container-title&query=${encodeURIComponent(keywords)}&mailto=integrity@plagishield.app`,
