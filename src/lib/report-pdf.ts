@@ -68,9 +68,6 @@ const NAVY: [number, number, number] = [16, 36, 71];
 const ACCENT: [number, number, number] = [37, 99, 235];
 const MUTED: [number, number, number] = [110, 122, 140];
 const LINE: [number, number, number] = [222, 228, 236];
-const OK: [number, number, number] = [22, 138, 92];
-const WARN: [number, number, number] = [201, 138, 4];
-const BAD: [number, number, number] = [200, 55, 55];
 
 const M = 15; // page margin
 const W = 210;
@@ -301,11 +298,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   citation: "Scholarly citation",
 };
 
-const SLICE_COLOR: Record<string, [number, number, number]> = {
-  "Matched in retrieved sources": BAD,
-  "No match in retrieved sources": OK,
-};
-
 function compositionSection(ctx: Ctx, input: ReportInput) {
   const slices = (input.results.composition ?? []).filter((slice) => slice && slice.words >= 0);
   sectionTitle(ctx, "Compared Text Coverage");
@@ -341,7 +333,7 @@ function legendRow(ctx: Ctx, categories: string[]) {
   ctx.y += 7;
 }
 
-function highlightedBody(function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
+function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
   const raw = input.results.document_text || input.results.text_excerpt || "";
   const highlights = ([] as PdfHighlight[])
     .concat(input.results.plagiarism?.highlights ?? [])
@@ -407,17 +399,12 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
     paragraph(ctx, "No integrity or stylistic issues were flagged for this submission.");
     return;
   }
-  const bySeverity = issues.reduce<Record<string, number>>((acc, i) => {
-    const k = (i.severity ?? "low").toLowerCase();
-    acc[k] = (acc[k] ?? 0) + 1;
+  const bySeverity = issues.reduce<Record<string, number>>((acc, issue) => {
+    const severity = (issue.severity ?? "low").toLowerCase();
+    acc[severity] = (acc[severity] ?? 0) + 1;
     return acc;
   }, {});
-  scoreCards(ctx, [
-    { label: "Total issues", value: String(issues.length), tone: ACCENT },
-    { label: "High severity", value: String(bySeverity.high ?? 0), tone: (bySeverity.high ?? 0) > 0 ? BAD : OK },
-    { label: "Medium", value: String(bySeverity.medium ?? 0), tone: (bySeverity.medium ?? 0) > 0 ? WARN : OK },
-    { label: "Low", value: String(bySeverity.low ?? 0), tone: OK },
-  ]);
+  paragraph(ctx, `${issues.length} issue(s) were returned: ${bySeverity.high ?? 0} high, ${bySeverity.medium ?? 0} medium, and ${bySeverity.low ?? 0} low severity.`, { size: 8, color: MUTED });
   table(
     ctx,
     [
