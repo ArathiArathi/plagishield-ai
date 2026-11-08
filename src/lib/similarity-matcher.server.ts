@@ -172,6 +172,19 @@ function documentExclusions(text: string): Range[] {
     /„[^“]{1,10000}“/g,
     /‘[^’]{1,10000}’/g,
   ];
+  // Common numeric and author-date in-text citation markers are excluded as
+  // markers only; the surrounding sentence remains eligible for comparison.
+  const citationPatterns = [
+    /\\[[0-9]+(?:[,;\\s–-]+[0-9]+)*\\]/g,
+    /\\([A-Z][A-Za-z'’\\-]+(?:\\s+et\\s+al\\.)?,\\s*(?:19|20)\\d{2}[a-z]?\\)/g,
+    /\\b[A-Z][A-Za-z'’\\-]+(?:\\s+et\\s+al\\.)?\\s+\\((?:19|20)\\d{2}[a-z]?\\)/g,
+  ];
+  for (const pattern of citationPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
   for (const pattern of quotePatterns) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(text)) !== null) {
