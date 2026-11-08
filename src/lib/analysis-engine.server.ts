@@ -1223,7 +1223,9 @@ export async function analyzeDocument(
     }
   };
 
-  const text = rawText.replace(/\r/g, "").slice(0, 120000);
+  const normalizedRawText = rawText.replace(/\r/g, "");
+  const textTruncated = normalizedRawText.length > 120000;
+  const text = normalizedRawText.slice(0, 120000);
   const sentences = splitSentences(text);
   const words = tokenize(text);
 
