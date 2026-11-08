@@ -111,7 +111,7 @@ export function UpgradeModal({
                   </div>
                   <div className="mt-3 flex items-baseline gap-1">
                     <span className="text-2xl font-semibold tracking-tight text-foreground">
-                      {p.priceMonthly === 0 ? "Free" : `$${monthlyEquivalent}`}
+                      {p.priceMonthly === 0 ? "Free" : `₹${monthlyEquivalent.toLocaleString("en-IN")}`}
                     </span>
                     {p.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/month</span>}
                   </div>
