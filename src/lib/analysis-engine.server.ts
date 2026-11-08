@@ -37,7 +37,6 @@ export type Highlight = {
   alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
-
 export type IssueItem = {
   category: "Plagiarism" | "AI content" | "Grammar" | "Citation";
   severity: "high" | "medium" | "low";
@@ -68,9 +67,26 @@ export type AnalysisResults = {
     matched_words: number;
     eligible_words: number;
     excluded_words: number;
-    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
+    matches: Array<{
+      source: string;
+      url?: string;
+      similarity: number;
+      snippet: string;
+      type: string;
+      matched_snippet?: string;
+      provider?: string;
+      matched_words?: number;
+      match_count?: number;
+      match_strength?: number;
+      domain?: string;
+    }>;
     highlights: Highlight[];
-    source_coverage: { sources_retrieved: number; providers: string[]; matching_method: string; limitation: string };
+    source_coverage: {
+      sources_retrieved: number;
+      providers: string[];
+      matching_method: string;
+      limitation: string;
+    };
   };
   ai_detection: {
     score: number;
@@ -84,7 +100,14 @@ export type AnalysisResults = {
   grammar: {
     score: number;
     provider: string;
-    issues: Array<{ type: string; severity: string; text: string; suggestion: string; message?: string; offset?: number }>;
+    issues: Array<{
+      type: string;
+      severity: string;
+      text: string;
+      suggestion: string;
+      message?: string;
+      offset?: number;
+    }>;
     highlights: Highlight[];
   };
   citations: {
@@ -92,7 +115,13 @@ export type AnalysisResults = {
     total: number;
     verified: number;
     in_text: number;
-    references: Array<{ raw: string; verified: boolean; matched_title?: string; doi?: string; year?: number }>;
+    references: Array<{
+      raw: string;
+      verified: boolean;
+      matched_title?: string;
+      doi?: string;
+      year?: number;
+    }>;
     issues: string[];
   };
   composition: CompositionSlice[];
@@ -149,12 +178,20 @@ async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
 function xmlToPlainText(xml: string): string {
   const body = xml.match(/<body[ >][\s\S]*?<\/body>/i)?.[0] ?? xml;
   return body
-    .replace(/<(?:ref-list|fig|table-wrap|supplementary-material|ack)[\s\S]*?<\/(?:ref-list|fig|table-wrap|supplementary-material|ack)>/gi, " ")
+    .replace(
+      /<(?:ref-list|fig|table-wrap|supplementary-material|ack)[\s\S]*?<\/(?:ref-list|fig|table-wrap|supplementary-material|ack)>/gi,
+      " ",
+    )
     .replace(/<\/(?:p|title|sec|list-item|caption)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code: string) => {
-      const value = code[0]?.toLowerCase() === "x" ? parseInt(code.slice(1), 16) : parseInt(code, 10);
-      try { return Number.isFinite(value) ? String.fromCodePoint(value) : " "; } catch { return " "; }
+      const value =
+        code[0]?.toLowerCase() === "x" ? parseInt(code.slice(1), 16) : parseInt(code, 10);
+      try {
+        return Number.isFinite(value) ? String.fromCodePoint(value) : " ";
+      } catch {
+        return " ";
+      }
     })
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -166,7 +203,11 @@ function xmlToPlainText(xml: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
   const out: R[] = new Array(items.length) as R[];
   let cursor = 0;
   await Promise.all(
@@ -229,9 +270,11 @@ function bestWindow(sentence: string[], sourceText: string, n = 4): string {
     for (const g of ngrams(windowWords, n)) if (grams.has(g)) hits++;
     if (hits > best.hits) best = { i, hits };
   }
-  return srcWords.slice(best.i, best.i + size).join(" ").trim();
+  return srcWords
+    .slice(best.i, best.i + size)
+    .join(" ")
+    .trim();
 }
-
 
 /** OpenAlex stores abstracts as an inverted index — rebuild the plain text. */
 function openAlexAbstract(inverted: Record<string, number[]> | null | undefined): string {
@@ -245,7 +288,6 @@ function openAlexAbstract(inverted: Record<string, number[]> | null | undefined)
 
 /** Cache of retrieved source documents for the current analysis run. */
 type SourceCache = Map<string, Candidate | null>;
-
 
 async function wikiSearch(query: string): Promise<string[]> {
   const data = await getJson(
@@ -269,7 +311,6 @@ async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate
         text: page.extract.slice(0, 120000),
         kind: "Encyclopaedia",
         provider: "Wikipedia REST/API",
-
       }
     : null;
   cache.set(key, candidate);
@@ -283,12 +324,49 @@ function searchQueries(sentence: string): string[] {
   const words = sentence.match(/[A-Za-z0-9'’-]+/g) ?? [];
   if (words.length < 6) return [];
   const stopWords = new Set([
-    "this", "that", "these", "those", "with", "from", "have", "been", "were", "what",
-    "when", "where", "which", "will", "would", "could", "should", "their", "there",
-    "about", "after", "before", "between", "through", "during", "under", "above", "into",
-    "also", "such", "other", "more", "most", "some", "only", "both", "each", "than"
+    "this",
+    "that",
+    "these",
+    "those",
+    "with",
+    "from",
+    "have",
+    "been",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "will",
+    "would",
+    "could",
+    "should",
+    "their",
+    "there",
+    "about",
+    "after",
+    "before",
+    "between",
+    "through",
+    "during",
+    "under",
+    "above",
+    "into",
+    "also",
+    "such",
+    "other",
+    "more",
+    "most",
+    "some",
+    "only",
+    "both",
+    "each",
+    "than",
   ]);
-  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 8).join(" ");
+  const keywords = words
+    .filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase()))
+    .slice(0, 8)
+    .join(" ");
   const queries: string[] = [];
   if (keywords.split(" ").length >= 3) queries.push(keywords);
   const win = words.slice(0, 7).join(" ");
@@ -308,13 +386,28 @@ async function wikipediaCandidates(sentence: string, cache: SourceCache): Promis
 
 async function openAlexCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
   const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
-  const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "which", "will", "would", "their"]);
-  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 7).join(" ");
+  const stopWords = new Set([
+    "this",
+    "that",
+    "with",
+    "from",
+    "have",
+    "been",
+    "were",
+    "which",
+    "will",
+    "would",
+    "their",
+  ]);
+  const keywords = words
+    .filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase()))
+    .slice(0, 7)
+    .join(" ");
   if (!keywords) return [];
   const q = encodeURIComponent(keywords);
   const data = await getJson(
     `https://api.openalex.org/works?search=${q}&per-page=2&select=id,doi,title,abstract_inverted_index,publication_year,primary_location,best_oa_location`,
-    7000
+    7000,
   );
   const works: any[] = data?.results ?? [];
   return mapLimit(works, 2, async (work): Promise<Candidate | null> => {
@@ -325,7 +418,11 @@ async function openAlexCandidates(phrase: string, fetchFullText = false): Promis
     if (body.length < 60) return null;
     return {
       title: `${work.title ?? "Scholarly publication"}${work.publication_year ? ` (${work.publication_year})` : ""}`,
-      url: work.doi ?? work.best_oa_location?.landing_page_url ?? work.primary_location?.landing_page_url ?? work.id,
+      url:
+        work.doi ??
+        work.best_oa_location?.landing_page_url ??
+        work.primary_location?.landing_page_url ??
+        work.id,
       text: [work.title, body].filter(Boolean).join(". "),
       kind: fullText ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
       provider: fullText ? "OpenAlex open-access PDF" : "OpenAlex works API",
@@ -333,8 +430,15 @@ async function openAlexCandidates(phrase: string, fetchFullText = false): Promis
   }).then((items) => items.filter(Boolean) as Candidate[]);
 }
 
-async function semanticScholarCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
-  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+async function semanticScholarCandidates(
+  phrase: string,
+  fetchFullText = false,
+): Promise<Candidate[]> {
+  const query = phrase
+    .match(/[A-Za-z0-9]+/g)
+    ?.filter((word) => word.length > 3)
+    .slice(0, 8)
+    .join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=3&fields=title,abstract,url,year,externalIds,openAccessPdf`,
@@ -349,7 +453,8 @@ async function semanticScholarCandidates(phrase: string, fetchFullText = false):
     if (body.length < 80) return null;
     return {
       title: `${paper.title ?? "Scholarly paper"}${paper.year ? ` (${paper.year})` : ""}`,
-      url: paper.url ?? (paper.externalIds?.DOI ? `https://doi.org/${paper.externalIds.DOI}` : pdfUrl),
+      url:
+        paper.url ?? (paper.externalIds?.DOI ? `https://doi.org/${paper.externalIds.DOI}` : pdfUrl),
       text: [paper.title, body].filter(Boolean).join(". "),
       kind: fullText ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
       provider: fullText ? "Semantic Scholar open-access PDF" : "Semantic Scholar Graph API",
@@ -358,7 +463,11 @@ async function semanticScholarCandidates(phrase: string, fetchFullText = false):
 }
 
 async function europePmcCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
-  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+  const query = phrase
+    .match(/[A-Za-z0-9]+/g)
+    ?.filter((word) => word.length > 3)
+    .slice(0, 8)
+    .join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(`${query} AND OPEN_ACCESS:Y`)}&format=json&pageSize=3&resultType=core`,
@@ -368,9 +477,13 @@ async function europePmcCandidates(phrase: string, fetchFullText = false): Promi
 
   return mapLimit(results, 2, async (item): Promise<Candidate | null> => {
     const pmcid = String(item.pmcid ?? "");
-    const fullTextXml = fetchFullText && pmcid
-      ? await getText(`https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(pmcid)}/fullTextXML`, 8000)
-      : null;
+    const fullTextXml =
+      fetchFullText && pmcid
+        ? await getText(
+            `https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(pmcid)}/fullTextXML`,
+            8000,
+          )
+        : null;
     const fullText = fullTextXml ? xmlToPlainText(fullTextXml) : "";
     const abstract = String(item.abstractText ?? "");
     const body = fullText.length > 500 ? fullText.slice(0, 120000) : abstract;
@@ -378,9 +491,18 @@ async function europePmcCandidates(phrase: string, fetchFullText = false): Promi
 
     return {
       title: `${item.title ?? "Biomedical publication"}${item.pubYear ? ` (${item.pubYear})` : ""}`,
-      url: item.doi ? `https://doi.org/${item.doi}` : pmcid ? `https://europepmc.org/articles/${pmcid}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
+      url: item.doi
+        ? `https://doi.org/${item.doi}`
+        : pmcid
+          ? `https://europepmc.org/articles/${pmcid}`
+          : item.pmid
+            ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/`
+            : undefined,
       text: [item.title, body].filter(Boolean).join(". "),
-      kind: fullText.length > 500 ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
+      kind:
+        fullText.length > 500
+          ? "Open-access scholarly full text"
+          : "Scholarly publication (abstract)",
       provider: fullText.length > 500 ? "Europe PMC Open Access Full Text" : "Europe PMC REST API",
     };
   }).then((items) => items.filter(Boolean) as Candidate[]);
@@ -388,31 +510,36 @@ async function europePmcCandidates(phrase: string, fetchFullText = false): Promi
 
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
   const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
-  const keywords = words.filter((w) => w.length > 4).slice(0, 7).join(" ");
+  const keywords = words
+    .filter((w) => w.length > 4)
+    .slice(0, 7)
+    .join(" ");
   if (!keywords) return [];
   const data = await getJson(
     `https://api.crossref.org/works?rows=2&select=title,DOI,abstract,container-title&query=${encodeURIComponent(keywords)}&mailto=integrity@plagishield.app`,
-    7000
+    7000,
   );
   const items: any[] = data?.message?.items ?? [];
-  return items.map((it) => {
-    const title = it.title?.[0] ?? "Scholarly Publication";
-    const venue = it["container-title"]?.[0] ? ` (${it["container-title"][0]})` : "";
-    const abstract = (it.abstract ?? "").replace(/<[^>]+>/g, "").trim();
-    return {
-      title: `${title}${venue}`,
-      url: it.DOI ? `https://doi.org/${it.DOI}` : undefined,
-      text: [title, abstract].filter(Boolean).join(". "),
-      kind: "Academic Journal / Conference Proceedings",
-      provider: "Crossref Scholarly Index",
-    };
-  }).filter((c) => c.text.length > 40);
+  return items
+    .map((it) => {
+      const title = it.title?.[0] ?? "Scholarly Publication";
+      const venue = it["container-title"]?.[0] ? ` (${it["container-title"][0]})` : "";
+      const abstract = (it.abstract ?? "").replace(/<[^>]+>/g, "").trim();
+      return {
+        title: `${title}${venue}`,
+        url: it.DOI ? `https://doi.org/${it.DOI}` : undefined,
+        text: [title, abstract].filter(Boolean).join(". "),
+        kind: "Academic Journal / Conference Proceedings",
+        provider: "Crossref Scholarly Index",
+      };
+    })
+    .filter((c) => c.text.length > 40);
 }
 
 async function detectPlagiarism(
   text: string,
   sentences: Sentence[],
-  meta?: { title?: string | null; docType?: string | null }
+  meta?: { title?: string | null; docType?: string | null },
 ) {
   const usable = sentences.filter((s) => s.words.length >= 8 && s.words.length <= 80);
   // Sample across the full document rather than relying only on the opening
@@ -426,16 +553,62 @@ async function detectPlagiarism(
   }
 
   const stopWords = new Set([
-    "about", "above", "after", "again", "also", "among", "because", "been", "before",
-    "being", "between", "could", "during", "each", "from", "have", "into", "more",
-    "most", "other", "over", "same", "such", "than", "that", "their", "there",
-    "these", "they", "this", "those", "through", "under", "very", "were", "which",
-    "while", "will", "with", "would", "your", "using", "used", "paper", "study",
-    "research", "results", "method", "methods", "analysis", "approach",
+    "about",
+    "above",
+    "after",
+    "again",
+    "also",
+    "among",
+    "because",
+    "been",
+    "before",
+    "being",
+    "between",
+    "could",
+    "during",
+    "each",
+    "from",
+    "have",
+    "into",
+    "more",
+    "most",
+    "other",
+    "over",
+    "same",
+    "such",
+    "than",
+    "that",
+    "their",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "through",
+    "under",
+    "very",
+    "were",
+    "which",
+    "while",
+    "will",
+    "with",
+    "would",
+    "your",
+    "using",
+    "used",
+    "paper",
+    "study",
+    "research",
+    "results",
+    "method",
+    "methods",
+    "analysis",
+    "approach",
   ]);
   const frequency = new Map<string, number>();
   for (const word of tokenize(text)) {
-    if (word.length >= 5 && !stopWords.has(word)) frequency.set(word, (frequency.get(word) ?? 0) + 1);
+    if (word.length >= 5 && !stopWords.has(word))
+      frequency.set(word, (frequency.get(word) ?? 0) + 1);
   }
   const topicalTerms = [...frequency.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -483,12 +656,13 @@ async function detectPlagiarism(
     source_coverage: {
       sources_retrieved: uniquePool.length,
       providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
-      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words); clearly quoted passages, common inline citation markers and a recognised references section are excluded.",
-      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected. Quote, inline citation and bibliography exclusions use conservative text-format and heading rules and may not identify every citation style.",
+      matching_method:
+        "Normalized exact word-sequence matching (minimum 8 consecutive words); clearly quoted passages, common inline citation markers and a recognised references section are excluded.",
+      limitation:
+        "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected. Quote, inline citation and bibliography exclusions use conservative text-format and heading rules and may not identify every citation style.",
     },
   };
 }
-
 
 /* --------------------------------------------- 2. AI content detection */
 
@@ -540,10 +714,28 @@ const AI_SPECIFIC_PHRASES = [
 ];
 
 const AI_KEYWORDS = [
-  "delve", "delving", "pivotal", "multifaceted", "holistic", "tapestry", "seamlessly",
-  "underscores", "fosters", "cornerstone", "linchpin", "navigating",
-  "transformative", "burgeoning", "intertwined", "unravel", "myriad",
-  "paramount", "imperative", "catalyst", "overarching", "bespoke"
+  "delve",
+  "delving",
+  "pivotal",
+  "multifaceted",
+  "holistic",
+  "tapestry",
+  "seamlessly",
+  "underscores",
+  "fosters",
+  "cornerstone",
+  "linchpin",
+  "navigating",
+  "transformative",
+  "burgeoning",
+  "intertwined",
+  "unravel",
+  "myriad",
+  "paramount",
+  "imperative",
+  "catalyst",
+  "overarching",
+  "bespoke",
 ];
 
 function stylometry(text: string, sentences: Sentence[]) {
@@ -564,7 +756,7 @@ function stylometry(text: string, sentences: Sentence[]) {
   for (let i = 0; i < lens.length - 1; i++) {
     jumpSum += Math.abs(lens[i + 1]! - lens[i]!);
   }
-  const deltaBurstiness = lens.length > 1 ? (jumpSum / (lens.length - 1)) / meanLen : 0.35;
+  const deltaBurstiness = lens.length > 1 ? jumpSum / (lens.length - 1) / meanLen : 0.35;
 
   // 2. AI Multi-word phrase matches
   let aiPhraseHits = 0;
@@ -595,19 +787,38 @@ function stylometry(text: string, sentences: Sentence[]) {
   let transitionOpeners = 0;
   for (const s of sentences) {
     const st = s.text.trim().toLowerCase();
-    if (/^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(st)) {
+    if (
+      /^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(
+        st,
+      )
+    ) {
       transitionOpeners++;
     }
   }
   const transitionOpenerRatio = transitionOpeners / numSentences;
 
   // 6. Positive Human Research & Scholarly Indicators
-  const empiricalMetrics = (text.match(/\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/gi) ?? []).length;
-  const artifactRefs = (text.match(/\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm|appendix)\s+\d+([a-z]|\.\d+)?\b/gi) ?? []).length;
-  const authorialAgency = (text.match(/\b(we\s+(propose|evaluate|investigate|demonstrate|observe|implement|collected|conducted|designed|developed|found|measured|analyzed|tested)|our\s+(framework|approach|system|model|dataset|experiments?|findings?|results?|prototype|pipeline|architecture|analysis|methodology)|in\s+this\s+(work|paper|study|section))\b/gi) ?? []).length;
-  const citations = (text.match(/\[\d+(?:[,\s–-]+\d+)*\]|\([A-Z][a-z]+(?:\s+et\s+al\.)?,\s*\d{4}\)/g) ?? []).length;
+  const empiricalMetrics = (
+    text.match(
+      /\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/gi,
+    ) ?? []
+  ).length;
+  const artifactRefs = (
+    text.match(
+      /\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm|appendix)\s+\d+([a-z]|\.\d+)?\b/gi,
+    ) ?? []
+  ).length;
+  const authorialAgency = (
+    text.match(
+      /\b(we\s+(propose|evaluate|investigate|demonstrate|observe|implement|collected|conducted|designed|developed|found|measured|analyzed|tested)|our\s+(framework|approach|system|model|dataset|experiments?|findings?|results?|prototype|pipeline|architecture|analysis|methodology)|in\s+this\s+(work|paper|study|section))\b/gi,
+    ) ?? []
+  ).length;
+  const citations = (
+    text.match(/\[\d+(?:[,\s–-]+\d+)*\]|\([A-Z][a-z]+(?:\s+et\s+al\.)?,\s*\d{4}\)/g) ?? []
+  ).length;
 
-  const humanEvidenceCount = empiricalMetrics * 1.5 + artifactRefs * 2 + authorialAgency * 2 + citations * 1.5;
+  const humanEvidenceCount =
+    empiricalMetrics * 1.5 + artifactRefs * 2 + authorialAgency * 2 + citations * 1.5;
   const humanEvidenceRate = (humanEvidenceCount / totalWords) * 1000;
 
   // Dampen phrase penalty if text contains substantial human empirical research evidence
@@ -630,8 +841,8 @@ function stylometry(text: string, sentences: Sentence[]) {
   // Sentence variation is a weak stylistic feature, not proof of human
   // authorship. Keep its contribution bounded and do not treat citations,
   // numbers, or research terminology as evidence that a person wrote the text.
-  if (burstiness > 0.30) {
-    z -= Math.min(0.8, (burstiness - 0.30) * 1.5);
+  if (burstiness > 0.3) {
+    z -= Math.min(0.8, (burstiness - 0.3) * 1.5);
   }
   if (deltaBurstiness > 0.32) {
     z -= Math.min(0.8, (deltaBurstiness - 0.32) * 1.3);
@@ -680,7 +891,7 @@ function aiHighlights(
 ): Highlight[] {
   const scored = sentences.map((s, i) => {
     const lower = s.text.toLowerCase();
-    
+
     // Check for AI phrases
     let phraseHits = 0;
     let matchedPhrase = "";
@@ -698,13 +909,19 @@ function aiHighlights(
     }
 
     // Check for transition opener
-    const isOpener = /^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(s.text.trim());
+    const isOpener =
+      /^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(
+        s.text.trim(),
+      );
 
     // Check for triadic pattern
     const hasTriad = /\b\w{4,},\s+\w{4,},\s+and\s+\w{4,}\b/.test(s.text);
 
     // Check for empirical numbers / research metrics (human credit)
-    const hasEmpirical = /\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/i.test(s.text) ||
+    const hasEmpirical =
+      /\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/i.test(
+        s.text,
+      ) ||
       /\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm)\s+\d+/i.test(s.text) ||
       /\[\d+(?:[,\s–-]+\d+)*\]/.test(s.text);
 
@@ -719,7 +936,7 @@ function aiHighlights(
     local = Math.max(0, Math.min(100, local));
 
     const verdict = model?.get(i);
-    const finalScore = verdict ? Math.round(verdict.p * 0.70 + local * 0.30) : local;
+    const finalScore = verdict ? Math.round(verdict.p * 0.7 + local * 0.3) : local;
 
     let note = "Formulaic LLM sentence structure";
     if (matchedPhrase) note = `Contains stereotypical LLM phrase "${matchedPhrase}"`;
@@ -735,22 +952,29 @@ function aiHighlights(
     };
   });
 
-  return scored
-    // A high document-level score alone must not paint every sentence as AI.
-    // A passage needs its own model verdict or observable heuristic signal.
-    .filter((x) => x.score >= 60 && (x.fromModel || x.hasAiSignatures))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 14)
-    .map((x) => ({
-      start: x.s.start,
-      end: x.s.end,
-      text: x.s.text,
-      category: "ai" as const,
-      score: Math.round(x.score),
-      note: x.why,
-      provider: x.fromModel ? `Language-model sentence classifier (${AI_MODEL})` : "Forensic stylometric classifier",
-      confidence: (x.score >= 75 ? "high" : x.score >= 60 ? "medium" : "low") as "high" | "medium" | "low",
-    }));
+  return (
+    scored
+      // A high document-level score alone must not paint every sentence as AI.
+      // A passage needs its own model verdict or observable heuristic signal.
+      .filter((x) => x.score >= 60 && (x.fromModel || x.hasAiSignatures))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 14)
+      .map((x) => ({
+        start: x.s.start,
+        end: x.s.end,
+        text: x.s.text,
+        category: "ai" as const,
+        score: Math.round(x.score),
+        note: x.why,
+        provider: x.fromModel
+          ? `Language-model sentence classifier (${AI_MODEL})`
+          : "Forensic stylometric classifier",
+        confidence: (x.score >= 75 ? "high" : x.score >= 60 ? "medium" : "low") as
+          | "high"
+          | "medium"
+          | "low",
+      }))
+  );
 }
 
 const AI_MODEL = "google/gemini-2.5-flash";
@@ -764,7 +988,11 @@ async function callGateway(body: unknown, timeoutMs = 35000): Promise<any | null
   try {
     const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: { "Lovable-API-Key": apiKey, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
+      headers: {
+        "Lovable-API-Key": apiKey,
+        "Content-Type": "application/json",
+        "X-Lovable-AIG-SDK": "fetch",
+      },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -774,7 +1002,11 @@ async function callGateway(body: unknown, timeoutMs = 35000): Promise<any | null
     }
     const json: any = await res.json();
     const rawContent = json.choices?.[0]?.message?.content ?? "{}";
-    const cleanContent = rawContent.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+    const cleanContent = rawContent
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
     return JSON.parse(cleanContent);
   } catch (e) {
     console.error("[engine] AI gateway call failed", e);
@@ -812,11 +1044,13 @@ async function llmSentenceScores(sentences: Sentence[]): Promise<Map<number, Sen
   for (const item of (parsed?.items ?? []) as Array<{ i: number; p: number; why?: string }>) {
     const p = Number(item.p);
     if (!Number.isFinite(p) || !sentences[Number(item.i)]) continue;
-    out.set(Number(item.i), { p: Math.max(0, Math.min(100, p)), why: String(item.why ?? "").slice(0, 90) });
+    out.set(Number(item.i), {
+      p: Math.max(0, Math.min(100, p)),
+      why: String(item.why ?? "").slice(0, 90),
+    });
   }
   return out;
 }
-
 
 async function llmJudgement(sample: string, docType: string) {
   const parsed = await callGateway({
@@ -842,7 +1076,6 @@ async function llmJudgement(sample: string, docType: string) {
     summary: String(parsed.summary ?? ""),
   };
 }
-
 
 /* ------------------------------------------------------- 3. grammar (LT) */
 
@@ -1018,7 +1251,11 @@ async function checkGrammar(text: string, author?: string | null, title?: string
       const res = await fetch("https://api.languagetool.org/v2/check", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA },
-        body: new URLSearchParams({ text: chunk.text, language: "en-US", level: "picky" }).toString(),
+        body: new URLSearchParams({
+          text: chunk.text,
+          language: "en-US",
+          level: "picky",
+        }).toString(),
         signal: AbortSignal.timeout(12000),
       });
       if (!res.ok) return null;
@@ -1102,14 +1339,21 @@ function extractReferences(text: string) {
     .filter((l) => l.length > 40 && /\(?(19|20)\d{2}\)?/.test(l) && /[A-Z][a-z]+/.test(l))
     .map((l) => l.replace(/^\[\d+\]\s*/, "").replace(/^\d+\.\s*/, ""))
     .slice(0, 20);
-  const inText = (text.match(/\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g) ?? []).length;
+  const inText = (
+    text.match(
+      /\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g,
+    ) ?? []
+  ).length;
   return { refs, inText, hasSection: refIndex >= 0 };
 }
 
 function extractTitleFromRef(raw: string): string {
   const quoted = raw.match(/["“]([^"”]+)["”]/);
   if (quoted && quoted[1].length > 10) return quoted[1].trim();
-  const parts = raw.split(/[.,]/).map((p) => p.trim()).filter((p) => p.length > 15);
+  const parts = raw
+    .split(/[.,]/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 15);
   return parts[0] || raw;
 }
 
@@ -1167,8 +1411,10 @@ async function verifyCitations(text: string) {
       }
     }
 
-    if (!verified) issues.push(`Could not verify reference against scholarly index: "${raw.slice(0, 90)}…"`);
-    if (!/\(?(19|20)\d{2}\)?/.test(raw)) issues.push(`Missing publication year: "${raw.slice(0, 70)}…"`);
+    if (!verified)
+      issues.push(`Could not verify reference against scholarly index: "${raw.slice(0, 90)}…"`);
+    if (!/\(?(19|20)\d{2}\)?/.test(raw))
+      issues.push(`Missing publication year: "${raw.slice(0, 70)}…"`);
 
     return {
       raw,
@@ -1179,9 +1425,11 @@ async function verifyCitations(text: string) {
     };
   });
 
-  if (!hasSection && refs.length > 0) issues.push("No dedicated References/Bibliography section header detected.");
+  if (!hasSection && refs.length > 0)
+    issues.push("No dedicated References/Bibliography section header detected.");
   if (refs.length === 0) issues.push("No parsable reference entries were found in the submission.");
-  if (inText === 0 && refs.length > 0) issues.push("Reference list present but no in-text citations were detected.");
+  if (inText === 0 && refs.length > 0)
+    issues.push("Reference list present but no in-text citations were detected.");
 
   const verified = references.filter((r) => r.verified).length;
   let base: number;
@@ -1191,15 +1439,26 @@ async function verifyCitations(text: string) {
     penalty = (inText === 0 ? 15 : 0) + (!hasSection ? 8 : 0);
   } else {
     // If no references, check if document is an academic paper or standard prose
-    const isAcademic = /(abstract|methodology|dataset|references|bibliography|ieee|acm|doi:)/i.test(text);
+    const isAcademic = /(abstract|methodology|dataset|references|bibliography|ieee|acm|doi:)/i.test(
+      text,
+    );
     base = isAcademic ? 45 : 85;
     if (isAcademic) {
-      issues.push("Academic paper structure detected, but no reference list found. Scholarly submissions should include bibliography entries.");
+      issues.push(
+        "Academic paper structure detected, but no reference list found. Scholarly submissions should include bibliography entries.",
+      );
     }
   }
   const score = Math.max(20, Math.min(100, Math.round(base - penalty + (verified > 0 ? 5 : 0))));
 
-  return { score, total: refs.length, verified, in_text: inText, references, issues: issues.slice(0, 25) };
+  return {
+    score,
+    total: refs.length,
+    verified,
+    in_text: inText,
+    references,
+    issues: issues.slice(0, 25),
+  };
 }
 
 /* --------------------------------------------------------- orchestration */
@@ -1244,19 +1503,20 @@ export async function analyzeDocument(
 
   const modelScore = judgement?.probability ?? null;
   const sentenceMean =
-    sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
+    sentenceModel.size > 0
+      ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size
+      : null;
   const aiScore = Math.round(
     modelScore === null && sentenceMean === null
       ? sty.score
-      : sty.score * 0.35 + (modelScore ?? sentenceMean!) * 0.4 + (sentenceMean ?? modelScore!) * 0.25,
+      : sty.score * 0.35 +
+          (modelScore ?? sentenceMean!) * 0.4 +
+          (sentenceMean ?? modelScore!) * 0.25,
   );
   // Without an independent model assessment, heuristic-only output is low
   // confidence. Even model-assisted text classification is capped at medium:
   // this feature is an indicator, not a validated authorship detector.
-  const confidence = judgement
-    ? (judgement.confidence === "low" ? "low" : "medium")
-    : "low";
-
+  const confidence = judgement ? (judgement.confidence === "low" ? "low" : "medium") : "low";
 
   const totalWords = words.length || 1;
   const comparedWords = Math.max(1, plag.eligible_words);
@@ -1268,7 +1528,11 @@ export async function analyzeDocument(
   // assign arbitrary portions of the paper to AI, grammar, or human authorship.
   const composition: CompositionSlice[] = [
     { category: "Matched in retrieved sources", percent: pct(matchedWords), words: matchedWords },
-    { category: "No match in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
+    {
+      category: "No match in retrieved sources",
+      percent: pct(unmatchedWords),
+      words: unmatchedWords,
+    },
   ];
 
   await stage("rendering");
@@ -1306,8 +1570,6 @@ export async function analyzeDocument(
   for (const c of citations.issues) {
     issues.push({ category: "Citation", severity: "medium", title: "Citation issue", detail: c });
   }
-
-
 
   return {
     meta: {

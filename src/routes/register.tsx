@@ -146,7 +146,7 @@ function RegisterPage() {
       }
 
       toast.success("Account created. Check your email to confirm it.");
-      navigate({ to: "/verify-email" });
+      navigate({ to: "/verify-email", search: { email: form.email.trim() } });
     } catch (err) {
       toast.error(
         err instanceof Error && err.message.includes("fetch")

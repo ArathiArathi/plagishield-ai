@@ -24,7 +24,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useUserProfile } from "@/hooks/use-user-profile";
-import { useSubscription, SUBSCRIPTION_PLANS, type SubscriptionPlanId } from "@/hooks/use-subscription";
+import {
+  useSubscription,
+  SUBSCRIPTION_PLANS,
+  type SubscriptionPlanId,
+} from "@/hooks/use-subscription";
 import { UpgradeModal } from "@/components/subscription/UpgradeModal";
 import { secureUserCache, type CacheStats } from "@/lib/cache/secure-cache";
 import { Sparkles, CheckCircle, CreditCard, Check } from "lucide-react";
@@ -41,7 +45,18 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { profile, fullName, role, updateProfile, isUpdating } = useUserProfile();
-  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent, subscriptionStatus, currentPeriodEnd, hasBillingCustomer, openBillingPortal } = useSubscription();
+  const {
+    planId,
+    plan,
+    docsUsed,
+    docLimit,
+    isLimitReached,
+    usagePercent,
+    subscriptionStatus,
+    currentPeriodEnd,
+    hasBillingCustomer,
+    openBillingPortal,
+  } = useSubscription();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const [form, setForm] = useState({
@@ -73,14 +88,20 @@ function SettingsPage() {
     const params = new URLSearchParams(window.location.search);
     const billingResult = params.get("billing");
     if (billingResult === "success") {
-      toast.success("Payment completed. Your plan will update after Stripe confirms the subscription.");
+      toast.success(
+        "Payment completed. Your plan will update after Stripe confirms the subscription.",
+      );
     } else if (billingResult === "cancelled") {
       toast.info("Checkout was cancelled. No plan change was made.");
     }
     if (billingResult) {
       params.delete("billing");
       const query = params.toString();
-      window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+      );
     }
   }, []);
 
@@ -115,7 +136,8 @@ function SettingsPage() {
   };
 
   const initials = (fullName.slice(0, 2) || "··").toUpperCase();
-  const billingStatusLabel = subscriptionStatus === "inactive" ? "Free plan" : subscriptionStatus.replaceAll("_", " ");
+  const billingStatusLabel =
+    subscriptionStatus === "inactive" ? "Free plan" : subscriptionStatus.replaceAll("_", " ");
   const periodEndLabel = currentPeriodEnd ? new Date(currentPeriodEnd).toLocaleDateString() : null;
 
   return (
@@ -149,16 +171,26 @@ function SettingsPage() {
                   <Badge variant="outline" className="border-primary/40 text-primary font-semibold">
                     {plan.name}
                   </Badge>
-                  <Badge variant="secondary" className="capitalize">{billingStatusLabel}</Badge>
+                  <Badge variant="secondary" className="capitalize">
+                    {billingStatusLabel}
+                  </Badge>
                   {plan.badge && (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                    <Badge
+                      variant="secondary"
+                      className="bg-primary/10 text-primary border-primary/20"
+                    >
                       {plan.badge}
                     </Badge>
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  You are on the <span className="font-medium text-foreground">{plan.name}</span>. Document uploads this month are counted against your plan's allowance.
-                  {periodEndLabel && <span className="block mt-1">Current billing period ends {periodEndLabel}.</span>}
+                  You are on the <span className="font-medium text-foreground">{plan.name}</span>.
+                  Document uploads this month are counted against your plan's allowance.
+                  {periodEndLabel && (
+                    <span className="block mt-1">
+                      Current billing period ends {periodEndLabel}.
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
@@ -167,7 +199,11 @@ function SettingsPage() {
                   {planId === "free" ? "Choose a plan" : "View plans"}
                 </Button>
                 {hasBillingCustomer && (
-                  <Button variant="outline" onClick={() => void openBillingPortal()} className="gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void openBillingPortal()}
+                    className="gap-2"
+                  >
                     <CreditCard className="h-4 w-4" />
                     Manage billing
                   </Button>
@@ -181,7 +217,8 @@ function SettingsPage() {
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium text-foreground">Monthly Document Usage</span>
                 <span className="font-semibold text-foreground">
-                  {docsUsed} / {docLimit} documents used this month ({Math.max(0, docLimit - docsUsed)} remaining)
+                  {docsUsed} / {docLimit} documents used this month (
+                  {Math.max(0, docLimit - docsUsed)} remaining)
                 </span>
               </div>
               <Progress value={usagePercent} className="h-3" />
@@ -196,8 +233,12 @@ function SettingsPage() {
           {/* Tier comparison cards */}
           <div>
             <div className="mb-4">
-              <h4 className="text-base font-semibold text-foreground">Available Subscription Tiers</h4>
-              <p className="text-xs text-muted-foreground">Select a plan tailored to your academic or institutional research volume.</p>
+              <h4 className="text-base font-semibold text-foreground">
+                Available Subscription Tiers
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                Select a plan tailored to your academic or institutional research volume.
+              </p>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {(Object.keys(SUBSCRIPTION_PLANS) as SubscriptionPlanId[]).map((tierKey) => {
@@ -216,16 +257,23 @@ function SettingsPage() {
                       <div className="flex items-center justify-between">
                         <h5 className="font-semibold text-foreground">{tier.name}</h5>
                         {isCurrent && (
-                          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                          <Badge
+                            variant="secondary"
+                            className="bg-primary/10 text-primary border-primary/20 text-[10px]"
+                          >
                             Current
                           </Badge>
                         )}
                       </div>
                       <div className="mt-2 flex items-baseline gap-1">
                         <span className="text-2xl font-bold text-foreground">
-                          {tier.priceMonthly === 0 ? "Free" : `₹${tier.priceMonthly.toLocaleString("en-IN")}`}
+                          {tier.priceMonthly === 0
+                            ? "Free"
+                            : `₹${tier.priceMonthly.toLocaleString("en-IN")}`}
                         </span>
-                        {tier.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
+                        {tier.priceMonthly > 0 && (
+                          <span className="text-xs text-muted-foreground">/mo</span>
+                        )}
                       </div>
                       <p className="mt-1 text-xs font-medium text-primary">
                         {tier.docLimit} document limit
@@ -282,7 +330,9 @@ function SettingsPage() {
                     <Badge variant="outline" className="capitalize text-xs font-normal">
                       {role.replace("_", " ")}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">{form.institution || "Academic User"}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {form.institution || "Academic User"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -311,7 +361,9 @@ function SettingsPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
                   <Input id="email" value={profile?.email || ""} disabled className="bg-muted/50" />
-                  <p className="text-[11px] text-muted-foreground">Linked to Supabase authentication</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Linked to Supabase authentication
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="institution">Institution / Organization</Label>
@@ -341,14 +393,17 @@ function SettingsPage() {
                 <div className="flex items-center gap-2">
                   <Cpu className="h-5 w-5 text-primary" />
                   <h3 className="text-base font-semibold text-foreground">Secure Cache Memory</h3>
-                  <Badge variant="secondary" className="bg-success/15 text-success border-success/30">
+                  <Badge
+                    variant="secondary"
+                    className="bg-success/15 text-success border-success/30"
+                  >
                     Active (RAM + Storage)
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground max-w-xl">
-                  User data, document catalogs, and workspace metrics are cached in high-speed memory so the
-                  system avoids repeated database requests. Cached records are cryptographically salted, SHA-256
-                  hashed, and AES-256-GCM encrypted.
+                  User data, document catalogs, and workspace metrics are cached in high-speed
+                  memory so the system avoids repeated database requests. Cached records are
+                  cryptographically salted, SHA-256 hashed, and AES-256-GCM encrypted.
                 </p>
               </div>
               <div className="flex gap-2">
@@ -379,12 +434,16 @@ function SettingsPage() {
               </div>
               <div className="rounded-lg border border-border bg-muted/20 p-3.5">
                 <p className="text-xs text-muted-foreground">In-Memory (L1)</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{cacheStats.memoryEntries}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">
+                  {cacheStats.memoryEntries}
+                </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Sub-ms RAM objects</p>
               </div>
               <div className="rounded-lg border border-border bg-muted/20 p-3.5">
                 <p className="text-xs text-muted-foreground">Encrypted Storage (L2)</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{cacheStats.storageEntries}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">
+                  {cacheStats.storageEntries}
+                </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">AES-GCM items at rest</p>
               </div>
             </div>
@@ -404,7 +463,8 @@ function SettingsPage() {
                   <div>
                     <p className="text-xs font-medium text-foreground">SHA-256 Key Salting</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                      Cache keys are hashed deterministically so internal database identifiers and queries are never stored in plaintext.
+                      Cache keys are hashed deterministically so internal database identifiers and
+                      queries are never stored in plaintext.
                     </p>
                   </div>
                 </div>
@@ -416,7 +476,8 @@ function SettingsPage() {
                   <div>
                     <p className="text-xs font-medium text-foreground">Anti-Tamper Digest</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                      Each payload includes an HMAC/SHA-256 checksum. Any tampered or corrupted record is automatically rejected and evicted.
+                      Each payload includes an HMAC/SHA-256 checksum. Any tampered or corrupted
+                      record is automatically rejected and evicted.
                     </p>
                   </div>
                 </div>
@@ -428,7 +489,8 @@ function SettingsPage() {
                   <div>
                     <p className="text-xs font-medium text-foreground">AES-256-GCM at Rest</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                      Web Crypto API encrypts persisted cache items with random 12-byte initialization vectors per entry.
+                      Web Crypto API encrypts persisted cache items with random 12-byte
+                      initialization vectors per entry.
                     </p>
                   </div>
                 </div>
@@ -470,7 +532,11 @@ function SettingsPage() {
               title="Active session"
               desc="Session encrypted and authenticated with JWT Bearer tokens."
               control={
-                <Button variant="outline" size="sm" onClick={() => toast.info("Your current session is active and secure.")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toast.info("Your current session is active and secure.")}
+                >
                   Inspect Session
                 </Button>
               }
@@ -493,7 +559,11 @@ function SettingsPage() {
               control={<Switch defaultChecked />}
             />
             <Separator />
-            <Row title="Weekly digest" desc="Summary of workspace activity each Monday." control={<Switch />} />
+            <Row
+              title="Weekly digest"
+              desc="Summary of workspace activity each Monday."
+              control={<Switch />}
+            />
           </Card>
         </TabsContent>
 
@@ -503,9 +573,16 @@ function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">API Keys</h3>
-                <p className="text-xs text-muted-foreground">Generate keys to integrate PlagiShield into your stack.</p>
+                <p className="text-xs text-muted-foreground">
+                  Generate keys to integrate PlagiShield into your stack.
+                </p>
               </div>
-              <Button size="sm" onClick={() => toast.info("API key generation is managed by institution administrators.")}>
+              <Button
+                size="sm"
+                onClick={() =>
+                  toast.info("API key generation is managed by institution administrators.")
+                }
+              >
                 Generate key
               </Button>
             </div>
@@ -514,16 +591,25 @@ function SettingsPage() {
                 <code className="text-xs text-foreground">ps_live_••••••••••••••2f8a</code>
                 <Badge variant="secondary">Production</Badge>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Connected to Supabase project efqiekytujylkcnlxnod</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Connected to Supabase project efqiekytujylkcnlxnod
+              </p>
             </div>
             <Separator />
             <div>
               <h3 className="text-sm font-semibold text-foreground">Integrations</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {["Google Drive", "Microsoft 365", "Canvas LMS", "Moodle"].map((n) => (
-                  <div key={n} className="flex items-center justify-between rounded-md border border-border p-3">
+                  <div
+                    key={n}
+                    className="flex items-center justify-between rounded-md border border-border p-3"
+                  >
                     <span className="text-sm font-medium text-foreground">{n}</span>
-                    <Button variant="outline" size="sm" onClick={() => toast.info(`${n} connector configured.`)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => toast.info(`${n} connector configured.`)}
+                    >
                       Connected
                     </Button>
                   </div>

@@ -19,16 +19,19 @@ function initAuth() {
   if (isInitialized || typeof window === "undefined") return;
   isInitialized = true;
 
-  supabase.auth.getSession().then(({ data }) => {
-    sharedSession = data.session;
-    sharedUser = data.session?.user ?? null;
-    sharedLoading = false;
-    notify();
-  }).catch((err) => {
-    console.error("[useAuth] Failed getting initial session:", err);
-    sharedLoading = false;
-    notify();
-  });
+  supabase.auth
+    .getSession()
+    .then(({ data }) => {
+      sharedSession = data.session;
+      sharedUser = data.session?.user ?? null;
+      sharedLoading = false;
+      notify();
+    })
+    .catch((err) => {
+      console.error("[useAuth] Failed getting initial session:", err);
+      sharedLoading = false;
+      notify();
+    });
 
   supabase.auth.onAuthStateChange((event, session) => {
     sharedSession = session;

@@ -4,7 +4,12 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export function StatCard({
-  label, value, suffix, icon: Icon, delta, tone = "primary",
+  label,
+  value,
+  suffix,
+  icon: Icon,
+  delta,
+  tone = "primary",
 }: {
   label: string;
   value: string | number;
@@ -25,15 +30,27 @@ export function StatCard({
     <Card className="p-5 hover:shadow-[var(--shadow-elegant)] transition-shadow">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
           <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
             {value}
-            {suffix && <span className="ml-0.5 text-lg font-medium text-muted-foreground">{suffix}</span>}
+            {suffix && (
+              <span className="ml-0.5 text-lg font-medium text-muted-foreground">{suffix}</span>
+            )}
           </p>
           {typeof delta === "number" && (
-            <div className={cn("mt-2 inline-flex items-center gap-1 text-xs font-medium",
-              positive ? "text-success" : "text-destructive")}>
-              {positive ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+            <div
+              className={cn(
+                "mt-2 inline-flex items-center gap-1 text-xs font-medium",
+                positive ? "text-success" : "text-destructive",
+              )}
+            >
+              {positive ? (
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              ) : (
+                <ArrowDownRight className="h-3.5 w-3.5" />
+              )}
               {Math.abs(delta)}% vs last month
             </div>
           )}

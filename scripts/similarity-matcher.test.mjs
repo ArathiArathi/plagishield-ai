@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { matchDocumentAgainstSources } from "../src/lib/similarity-matcher.server.ts";
 import { buildSegments } from "../src/components/analysis/analysis-shared.ts";
 
-const phrase = "The proposed framework combines secure key management with mutual authentication across distributed services";
+const phrase =
+  "The proposed framework combines secure key management with mutual authentication across distributed services";
 const source = {
   title: "A source about secure distributed services",
   url: "https://example.org/research/security",
@@ -65,7 +66,10 @@ test("keeps every character and resolves overlapping highlights without dropping
   ];
   const segments = buildSegments(text, highlights);
   assert.equal(segments.map((segment) => segment.text).join(""), text);
-  assert.equal(segments.find((segment) => segment.highlight?.category === "plagiarism")?.text, "23456789");
+  assert.equal(
+    segments.find((segment) => segment.highlight?.category === "plagiarism")?.text,
+    "23456789",
+  );
   assert.equal(segments.find((segment) => segment.highlight?.category === "grammar")?.text, "abcd");
 });
 

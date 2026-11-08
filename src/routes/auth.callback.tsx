@@ -63,7 +63,9 @@ export function AuthCallbackPage() {
         }
 
         // Setup onAuthStateChange listener FIRST so any parallel exchange is caught immediately
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange((event, s) => {
           if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && s) {
             subscription.unsubscribe();
             secureUserCache.clearAll();
@@ -162,7 +164,8 @@ export function AuthCallbackPage() {
             friendly.toLowerCase().includes("code verifier") ||
             friendly.toLowerCase().includes("validation_failed")
           ) {
-            friendly = "Your login session expired or was already processed. Please try signing in again.";
+            friendly =
+              "Your login session expired or was already processed. Please try signing in again.";
           }
           if (active) setErrorMsg(friendly);
           toast.error(friendly);
@@ -210,17 +213,20 @@ export function AuthCallbackPage() {
               <h1 className="text-base font-semibold">Authentication Notice</h1>
             </div>
 
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {errorMsg}
-            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{errorMsg}</p>
 
             {providerError && (
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200/90 space-y-2">
                 <p className="font-medium text-amber-300">How to enable Google in Supabase:</p>
                 <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
                   <li>Open your Supabase Project Dashboard</li>
-                  <li>Navigate to <strong>Authentication</strong> → <strong>Providers</strong></li>
-                  <li>Toggle <strong>Google</strong> to enabled and input your Google OAuth credentials</li>
+                  <li>
+                    Navigate to <strong>Authentication</strong> → <strong>Providers</strong>
+                  </li>
+                  <li>
+                    Toggle <strong>Google</strong> to enabled and input your Google OAuth
+                    credentials
+                  </li>
                 </ol>
               </div>
             )}

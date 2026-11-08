@@ -20,7 +20,6 @@ export type Highlight = {
   alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
-
 export type CompositionSlice = { category: string; percent: number; words: number };
 
 export type IssueItem = {
@@ -31,7 +30,10 @@ export type IssueItem = {
   excerpt?: string;
 };
 
-export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: string; label: string }> = {
+export const CATEGORY_STYLE: Record<
+  HighlightCategory,
+  { chip: string; mark: string; label: string }
+> = {
   plagiarism: {
     chip: "border-destructive/30 bg-destructive/15 text-destructive",
     mark: "bg-destructive/20 text-foreground underline decoration-destructive decoration-2",
@@ -64,12 +66,13 @@ export type Segment = { text: string; highlight?: Highlight };
 /** Split the original text at every annotation boundary without dropping overlaps. */
 export function buildSegments(text: string, highlights: Highlight[]): Segment[] {
   const valid = highlights
-    .filter((h) =>
-      Number.isFinite(h.start) &&
-      Number.isFinite(h.end) &&
-      h.start >= 0 &&
-      h.end > h.start &&
-      h.start < text.length,
+    .filter(
+      (h) =>
+        Number.isFinite(h.start) &&
+        Number.isFinite(h.end) &&
+        h.start >= 0 &&
+        h.end > h.start &&
+        h.start < text.length,
     )
     .map((h) => ({ ...h, end: Math.min(h.end, text.length) }));
 
@@ -95,10 +98,11 @@ export function buildSegments(text: string, highlights: Highlight[]): Segment[] 
 
     const active = valid
       .filter((h) => h.start <= start && h.end >= end)
-      .sort((a, b) =>
-        priority[b.category] - priority[a.category] ||
-        (a.end - a.start) - (b.end - b.start) ||
-        b.score - a.score,
+      .sort(
+        (a, b) =>
+          priority[b.category] - priority[a.category] ||
+          a.end - a.start - (b.end - b.start) ||
+          b.score - a.score,
       );
     const highlight = active[0];
     const previous = segments[segments.length - 1];

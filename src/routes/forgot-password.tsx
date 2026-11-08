@@ -29,11 +29,26 @@ function ForgotPasswordPage() {
     <AuthShell
       title="Reset your password"
       subtitle="Enter your email and we'll send a reset link."
-      footer={<Link to="/login" className="font-medium text-primary hover:underline">Back to sign in</Link>}
+      footer={
+        <Link to="/login" className="font-medium text-primary hover:underline">
+          Back to sign in
+        </Link>
+      }
     >
       <form onSubmit={onSubmit} className="space-y-4">
-        <div className="space-y-1.5"><Label>Email</Label><Input type="email" placeholder="you@university.edu" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-        <Button type="submit" className="w-full" disabled={loading}>{loading ? "Sending…" : "Send reset link"}</Button>
+        <div className="space-y-1.5">
+          <Label>Email</Label>
+          <Input
+            type="email"
+            placeholder="you@university.edu"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Sending…" : "Send reset link"}
+        </Button>
       </form>
     </AuthShell>
   );

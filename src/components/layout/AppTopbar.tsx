@@ -5,8 +5,12 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -37,18 +41,27 @@ export function AppTopbar() {
       <SidebarTrigger />
       <span className="hidden text-xs text-muted-foreground sm:inline">Your workspace</span>
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => setDark((value) => !value)} aria-label="Toggle theme">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setDark((value) => !value)}
+          aria-label="Toggle theme"
+        >
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-md px-1 py-1 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials}</AvatarFallback>
+                <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                  {initials}
+                </AvatarFallback>
               </Avatar>
               <div className="hidden max-w-[180px] text-right leading-tight sm:block">
                 <p className="truncate text-xs font-medium text-foreground">{displayName}</p>
-                <p className="text-[10px] capitalize text-muted-foreground">{role.replace("_", " ")}</p>
+                <p className="text-[10px] capitalize text-muted-foreground">
+                  {role.replace("_", " ")}
+                </p>
               </div>
             </button>
           </DropdownMenuTrigger>
@@ -60,7 +73,9 @@ export function AppTopbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>Settings & billing</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
+              Settings & billing
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
               <LogOut className="mr-2 h-4 w-4" /> Sign out

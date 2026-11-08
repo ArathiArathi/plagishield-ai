@@ -78,7 +78,12 @@ async function invokeBillingFunction(name: string, body: Record<string, unknown>
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
     const response = (error as Error & { context?: Response }).context;
-    const payload = response ? await response.clone().json().catch(() => null) : null;
+    const payload = response
+      ? await response
+          .clone()
+          .json()
+          .catch(() => null)
+      : null;
     throw new Error(payload?.error ?? error.message);
   }
   return data as { url?: string } | null;
@@ -128,7 +133,9 @@ export function useSubscription() {
   const plan = SUBSCRIPTION_PLANS[planId];
   const now = new Date();
   const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const docsUsed = (wsData?.documents ?? []).filter((document) => Date.parse(document.created_at) >= monthStart).length;
+  const docsUsed = (wsData?.documents ?? []).filter(
+    (document) => Date.parse(document.created_at) >= monthStart,
+  ).length;
   const docLimit = plan.docLimit;
   const isLimitReached = docsUsed >= docLimit;
   const remainingDocs = Math.max(0, docLimit - docsUsed);
@@ -148,23 +155,34 @@ export function useSubscription() {
     }
   }, []);
 
-  const changePlan = useCallback(async (newPlan: SubscriptionPlanId, billingCycle: BillingCycle = "monthly") => {
-    if (!SUBSCRIPTION_PLANS[newPlan]) return false;
-    if (newPlan === "free" || (record && BILLING_PORTAL_STATUSES.has(record.status))) {
-      return openBillingPortal();
-    }
+  const changePlan = useCallback(
+    async (newPlan: SubscriptionPlanId, billingCycle: BillingCycle = "monthly") => {
+      if (!SUBSCRIPTION_PLANS[newPlan]) return false;
+      if (newPlan === "free" || (record && BILLING_PORTAL_STATUSES.has(record.status))) {
+        return openBillingPortal();
+      }
 
-    try {
-      const data = await invokeBillingFunction("create-checkout-session", { planId: newPlan, billingCycle });
-      if (!data?.url) throw new Error("Checkout is not configured yet. Please contact the workspace administrator.");
-      window.location.assign(data.url);
-      return true;
-    } catch (error) {
-      console.error("Unable to start checkout:", error);
-      toast.error(error instanceof Error ? error.message : "Unable to start checkout. Please try again.");
-      return false;
-    }
-  }, [openBillingPortal, record]);
+      try {
+        const data = await invokeBillingFunction("create-checkout-session", {
+          planId: newPlan,
+          billingCycle,
+        });
+        if (!data?.url)
+          throw new Error(
+            "Checkout is not configured yet. Please contact the workspace administrator.",
+          );
+        window.location.assign(data.url);
+        return true;
+      } catch (error) {
+        console.error("Unable to start checkout:", error);
+        toast.error(
+          error instanceof Error ? error.message : "Unable to start checkout. Please try again.",
+        );
+        return false;
+      }
+    },
+    [openBillingPortal, record],
+  );
 
   return {
     planId,

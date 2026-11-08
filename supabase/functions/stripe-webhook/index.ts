@@ -33,16 +33,10 @@ function safeEqual(left: string, right: string) {
   return difference === 0;
 }
 
-async function verifyStripeSignature(
-  rawBody: string,
-  signatureHeader: string,
-  secret: string,
-) {
+async function verifyStripeSignature(rawBody: string, signatureHeader: string, secret: string) {
   const parts = signatureHeader.split(",").map((part) => part.trim().split("=", 2));
   const timestamp = parts.find(([key]) => key === "t")?.[1];
-  const signatures = parts
-    .filter(([key]) => key === "v1")
-    .map(([, value]) => value);
+  const signatures = parts.filter(([key]) => key === "v1").map(([, value]) => value);
   const timestampNumber = Number(timestamp);
 
   if (
@@ -62,15 +56,9 @@ async function verifyStripeSignature(
     ["sign"],
   );
   const digest = new Uint8Array(
-    await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(`${timestamp}.${rawBody}`),
-    ),
+    await crypto.subtle.sign("HMAC", key, encoder.encode(`${timestamp}.${rawBody}`)),
   );
-  const expected = Array.from(digest, (byte) =>
-    byte.toString(16).padStart(2, "0")
-  ).join("");
+  const expected = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
   return signatures.some((signature) => safeEqual(signature, expected));
 }
@@ -82,9 +70,10 @@ function getPlanFromPrice(priceId: string) {
     premium: ["price_1UZTJKEP3hMKlBIw3EazNMVF", "price_1UZTJLEP3hMKlBIwbtyQdVv2"],
   };
 
-  return Object.entries(configuredPricePlans).find(([, priceIds]) =>
-    priceIds.includes(priceId)
-  )?.[0] ?? null;
+  return (
+    Object.entries(configuredPricePlans).find(([, priceIds]) => priceIds.includes(priceId))?.[0] ??
+    null
+  );
 }
 
 async function retrieveSubscription(
@@ -129,8 +118,7 @@ Deno.serve(async (request) => {
   }
 
   const subscriptionEvent = event.type.startsWith("customer.subscription.");
-  const invoiceEvent = event.type === "invoice.paid" ||
-    event.type === "invoice.payment_failed";
+  const invoiceEvent = event.type === "invoice.paid" || event.type === "invoice.payment_failed";
 
   if (!subscriptionEvent && !invoiceEvent) {
     return Response.json({ received: true, ignored: true });
@@ -147,20 +135,18 @@ Deno.serve(async (request) => {
           subscription_details?: { subscription?: string | { id: string } | null };
         };
       };
-      const linkedSubscription = invoice.subscription ??
-        invoice.parent?.subscription_details?.subscription;
-      const subscriptionId = typeof linkedSubscription === "string"
-        ? linkedSubscription
-        : linkedSubscription?.id;
+      const linkedSubscription =
+        invoice.subscription ?? invoice.parent?.subscription_details?.subscription;
+      const subscriptionId =
+        typeof linkedSubscription === "string" ? linkedSubscription : linkedSubscription?.id;
       if (!subscriptionId) {
         return Response.json({ received: true, ignored: true });
       }
       subscription = await retrieveSubscription(subscriptionId, stripeSecret);
     }
 
-    const customerId = typeof subscription.customer === "string"
-      ? subscription.customer
-      : subscription.customer.id;
+    const customerId =
+      typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
     const activePriceId = subscription.items.data[0]?.price.id;
     const planId = activePriceId ? getPlanFromPrice(activePriceId) : null;
 
@@ -176,8 +162,8 @@ Deno.serve(async (request) => {
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-      Deno.env.get("SUPABASE_SECRET_KEY");
+    const serviceRoleKey =
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
     if (!supabaseUrl || !serviceRoleKey) {
       throw new Error("Supabase service credentials are not configured.");
     }
@@ -200,25 +186,22 @@ Deno.serve(async (request) => {
     }
 
     const firstItem = subscription.items.data[0];
-    const periodStart = subscription.current_period_start ??
-      firstItem?.current_period_start;
-    const periodEnd = subscription.current_period_end ??
-      firstItem?.current_period_end;
+    const periodStart = subscription.current_period_start ?? firstItem?.current_period_start;
+    const periodEnd = subscription.current_period_end ?? firstItem?.current_period_end;
 
-    const { error } = await admin.from("subscriptions").upsert({
-      user_id: owner.user_id,
-      stripe_customer_id: customerId,
-      stripe_subscription_id: subscription.id,
-      plan_id: planId,
-      status: subscription.status,
-      current_period_start: periodStart
-        ? new Date(periodStart * 1000).toISOString()
-        : null,
-      current_period_end: periodEnd
-        ? new Date(periodEnd * 1000).toISOString()
-        : null,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
+    const { error } = await admin.from("subscriptions").upsert(
+      {
+        user_id: owner.user_id,
+        stripe_customer_id: customerId,
+        stripe_subscription_id: subscription.id,
+        plan_id: planId,
+        status: subscription.status,
+        current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
+        current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
 
     if (error) throw error;
     return Response.json({ received: true });

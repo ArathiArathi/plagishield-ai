@@ -9,7 +9,10 @@ export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
       { title: "Review history — PlagiShield" },
-      { name: "description", content: "Document review totals and source evidence returned in your workspace." },
+      {
+        name: "description",
+        content: "Document review totals and source evidence returned in your workspace.",
+      },
     ],
   }),
   component: AnalyticsPage,
@@ -34,8 +37,15 @@ function AnalyticsPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Review history" description="Totals from the analyses saved in your workspace." />
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 w-full" />)}</div>
+        <PageHeader
+          title="Review history"
+          description="Totals from the analyses saved in your workspace."
+        />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 w-full" />
+          ))}
+        </div>
         <Skeleton className="h-72 w-full" />
       </div>
     );
@@ -71,24 +81,37 @@ function AnalyticsPage() {
 
   return (
     <div className="space-y-7">
-      <PageHeader title="Review history" description="A factual summary of the analyses saved in your workspace." />
+      <PageHeader
+        title="Review history"
+        description="A factual summary of the analyses saved in your workspace."
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Summary label="Documents" value={summary?.totalDocuments ?? documents.length} />
         <Summary label="Completed analyses" value={summary?.analyzed ?? completed.length} />
         <Summary label="Source records matched" value={summary?.matchedSourceRecords ?? 0} />
-        <Summary label="Matched words" value={Number(summary?.matchedWords ?? 0).toLocaleString()} />
+        <Summary
+          label="Matched words"
+          value={Number(summary?.matchedWords ?? 0).toLocaleString()}
+        />
       </div>
 
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-sm font-semibold text-foreground">Completed document reviews</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Similarity is calculated from the retrieved source records for each analysis.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Similarity is calculated from the retrieved source records for each analysis.
+          </p>
         </div>
         {rows.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-sm text-muted-foreground">No completed analyses to summarise yet.</p>
-            <Link to="/documents" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">Upload a document</Link>
+            <Link
+              to="/documents"
+              className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
+            >
+              Upload a document
+            </Link>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -106,13 +129,27 @@ function AnalyticsPage() {
                 {rows.map((row) => (
                   <tr key={row.analysis.id} className="hover:bg-muted/20">
                     <td className="px-5 py-4">
-                      <p className="max-w-[280px] truncate font-medium text-foreground">{row.documentName}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{new Date(row.analysis.created_at).toLocaleDateString()}</p>
+                      <p className="max-w-[280px] truncate font-medium text-foreground">
+                        {row.documentName}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {new Date(row.analysis.created_at).toLocaleDateString()}
+                      </p>
                     </td>
                     <td className="px-3 py-4 text-right tabular-nums">{row.similarity}%</td>
                     <td className="px-3 py-4 text-right tabular-nums">{row.sourceMatches}</td>
-                    <td className="px-3 py-4 text-right tabular-nums">{row.matchedWords.toLocaleString()}</td>
-                    <td className="px-5 py-4 text-right"><Link to="/analysis" search={{ doc: row.analysis.document_id }} className="text-xs font-medium text-primary hover:underline">Open review</Link></td>
+                    <td className="px-3 py-4 text-right tabular-nums">
+                      {row.matchedWords.toLocaleString()}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <Link
+                        to="/analysis"
+                        search={{ doc: row.analysis.document_id }}
+                        className="text-xs font-medium text-primary hover:underline"
+                      >
+                        Open review
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -125,20 +162,34 @@ function AnalyticsPage() {
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-foreground">Comparison totals</h2>
           <dl className="mt-4 space-y-3">
-            <Row label="Words included in comparison" value={Number(summary?.comparedWords ?? 0).toLocaleString()} />
-            <Row label="Words excluded by quote/reference rules" value={Number(summary?.excludedWords ?? 0).toLocaleString()} />
-            <Row label="Source records retrieved" value={Number(summary?.sourcesRetrieved ?? 0).toLocaleString()} />
+            <Row
+              label="Words included in comparison"
+              value={Number(summary?.comparedWords ?? 0).toLocaleString()}
+            />
+            <Row
+              label="Words excluded by quote/reference rules"
+              value={Number(summary?.excludedWords ?? 0).toLocaleString()}
+            />
+            <Row
+              label="Source records retrieved"
+              value={Number(summary?.sourcesRetrieved ?? 0).toLocaleString()}
+            />
           </dl>
           <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
-            Source records can overlap. Matched-word totals are deduplicated within each document, not across separate documents.
+            Source records can overlap. Matched-word totals are deduplicated within each document,
+            not across separate documents.
           </p>
         </Card>
 
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-foreground">Grammar issue categories</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Counts returned by the enabled grammar checker across completed reviews.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Counts returned by the enabled grammar checker across completed reviews.
+          </p>
           {commonIssues.length === 0 ? (
-            <p className="mt-5 text-sm text-muted-foreground">No grammar issue records were returned.</p>
+            <p className="mt-5 text-sm text-muted-foreground">
+              No grammar issue records were returned.
+            </p>
           ) : (
             <ul className="mt-4 divide-y divide-border">
               {commonIssues.map(([kind, count]) => (
@@ -153,7 +204,9 @@ function AnalyticsPage() {
       </div>
 
       <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
-        These figures describe saved analysis results only. They are not institution-wide benchmarks. A low or zero similarity result does not establish originality, because sources outside the connected indexes may not have been retrieved.
+        These figures describe saved analysis results only. They are not institution-wide
+        benchmarks. A low or zero similarity result does not establish originality, because sources
+        outside the connected indexes may not have been retrieved.
       </p>
     </div>
   );
@@ -163,11 +216,18 @@ function Summary({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="border-b border-border px-1 py-4 sm:border-b-0 sm:border-l sm:pl-4 first:border-l-0 first:pl-1">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-2 font-serif text-3xl tabular-nums tracking-tight text-foreground">{value}</p>
+      <p className="mt-2 font-serif text-3xl tabular-nums tracking-tight text-foreground">
+        {value}
+      </p>
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-center justify-between gap-3"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-sm font-medium tabular-nums text-foreground">{value}</dd></div>;
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium tabular-nums text-foreground">{value}</dd>
+    </div>
+  );
 }

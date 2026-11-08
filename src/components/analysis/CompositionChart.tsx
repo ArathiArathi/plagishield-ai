@@ -16,9 +16,19 @@ export function CompositionChart({ data }: { data: CompositionSlice[] }) {
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={slices} dataKey="percent" nameKey="category" innerRadius={45} outerRadius={78} paddingAngle={2}>
+            <Pie
+              data={slices}
+              dataKey="percent"
+              nameKey="category"
+              innerRadius={45}
+              outerRadius={78}
+              paddingAngle={2}
+            >
               {slices.map((s) => (
-                <Cell key={s.category} fill={COMPOSITION_COLOR[s.category] ?? "var(--color-muted-foreground)"} />
+                <Cell
+                  key={s.category}
+                  fill={COMPOSITION_COLOR[s.category] ?? "var(--color-muted-foreground)"}
+                />
               ))}
             </Pie>
             <Tooltip

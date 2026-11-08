@@ -6,12 +6,12 @@ This guide walks you through taking the project out of GitHub and running it on 
 
 ## 1. Prerequisites
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| **Git** | 2.30+ | To clone the repository |
-| **Node.js** | 20+ | Runtime |
-| **Bun** | 1.1+ (recommended) | Package manager & script runner. npm/pnpm work too, but the project is tuned for Bun |
-| **A Supabase project** | — | Backend: Postgres, Auth, Storage. Created in Lovable Cloud or at supabase.com |
+| Requirement            | Version            | Notes                                                                                |
+| ---------------------- | ------------------ | ------------------------------------------------------------------------------------ |
+| **Git**                | 2.30+              | To clone the repository                                                              |
+| **Node.js**            | 20+                | Runtime                                                                              |
+| **Bun**                | 1.1+ (recommended) | Package manager & script runner. npm/pnpm work too, but the project is tuned for Bun |
+| **A Supabase project** | —                  | Backend: Postgres, Auth, Storage. Created in Lovable Cloud or at supabase.com        |
 
 Check your tooling:
 
@@ -105,15 +105,15 @@ Open the SQL editor of your Supabase project and run the contents of every file 
 
 ### What the migrations create
 
-| Object | Purpose |
-|--------|---------|
-| `profiles` | Public user profile (first name, last name, institution) |
-| `user_roles` | Role mapping (`student`, `faculty`, `institution_admin`, `super_admin`) |
-| `documents` | Document records with type, author, title, status |
-| `document_versions` | Each upload revision with storage path |
-| `analyses` | Per-version results: similarity, AI, grammar, citation scores + stage progress |
-| `handle_new_user()` trigger | Assigns the `student` role on signup |
-| RLS policies | Owner-isolated access on every table — users only ever see their own rows |
+| Object                      | Purpose                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `profiles`                  | Public user profile (first name, last name, institution)                       |
+| `user_roles`                | Role mapping (`student`, `faculty`, `institution_admin`, `super_admin`)        |
+| `documents`                 | Document records with type, author, title, status                              |
+| `document_versions`         | Each upload revision with storage path                                         |
+| `analyses`                  | Per-version results: similarity, AI, grammar, citation scores + stage progress |
+| `handle_new_user()` trigger | Assigns the `student` role on signup                                           |
+| RLS policies                | Owner-isolated access on every table — users only ever see their own rows      |
 
 ---
 
@@ -161,27 +161,27 @@ You will see the public welcome page with **Login** and **Register** buttons in 
 
 ## 9. Other Scripts
 
-| Command | What it does |
-|---------|--------------|
-| `bun run build` | Production build (Vite) |
+| Command           | What it does                       |
+| ----------------- | ---------------------------------- |
+| `bun run build`   | Production build (Vite)            |
 | `bun run preview` | Serve the production build locally |
-| `bun run lint` | ESLint check |
-| `bun run format` | Prettier formatting |
+| `bun run lint`    | ESLint check                       |
+| `bun run format`  | Prettier formatting                |
 
 ---
 
 ## 10. Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `Missing Supabase environment variable(s)` in the console | `.env` missing or misnamed | Re-check section 4; the file must be at the project root and named exactly `.env` |
-| Blank page / hydration error on load | Client env vars absent | Ensure the `VITE_`-prefixed variables are set |
-| Upload fails with storage error | `documents` bucket missing or policies not applied | Re-run migrations; verify the private `documents` bucket exists |
-| "Unsupported provider" on Google sign-in | Google provider not configured | Enable the Google provider (section 7) |
+| Symptom                                                                                    | Likely cause                                                                           | Fix                                                                                                                                 |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `Missing Supabase environment variable(s)` in the console                                  | `.env` missing or misnamed                                                             | Re-check section 4; the file must be at the project root and named exactly `.env`                                                   |
+| Blank page / hydration error on load                                                       | Client env vars absent                                                                 | Ensure the `VITE_`-prefixed variables are set                                                                                       |
+| Upload fails with storage error                                                            | `documents` bucket missing or policies not applied                                     | Re-run migrations; verify the private `documents` bucket exists                                                                     |
+| "Unsupported provider" on Google sign-in                                                   | Google provider not configured                                                         | Enable the Google provider (section 7)                                                                                              |
 | Vercel asks visitors to log in / "Team owners emailed. After they approve your request..." | Vercel Deployment Protection (Vercel Authentication) is enabled on preview deployments | Turn off **Vercel Authentication** in Vercel Dashboard → Project Settings → **Deployment Protection** (or add domain to Exceptions) |
-| Analysis stuck at 0% | Queue jammed or stale job | Wait ~20s (the queue self-recovers and fails jobs older than 6 minutes) or reload the page |
-| Analysis fails immediately | `LOVABLE_API_KEY` missing/invalid or file has < 200 extractable characters | Verify the gateway key; try a plain-text-heavy document |
-| Migrations error out | Running combined statements where separate ones are required | Run each migration file individually |
+| Analysis stuck at 0%                                                                       | Queue jammed or stale job                                                              | Wait ~20s (the queue self-recovers and fails jobs older than 6 minutes) or reload the page                                          |
+| Analysis fails immediately                                                                 | `LOVABLE_API_KEY` missing/invalid or file has < 200 extractable characters             | Verify the gateway key; try a plain-text-heavy document                                                                             |
+| Migrations error out                                                                       | Running combined statements where separate ones are required                           | Run each migration file individually                                                                                                |
 
 ---
 

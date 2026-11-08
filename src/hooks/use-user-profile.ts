@@ -78,15 +78,13 @@ export function useUserProfile() {
     mutationFn: async (updates: Partial<UserProfile>) => {
       if (!userId) throw new Error("User not authenticated");
 
-      const { error } = await supabase
-        .from("profiles")
-        .upsert({
-          id: userId,
-          first_name: updates.first_name,
-          last_name: updates.last_name,
-          institution: updates.institution,
-          updated_at: new Date().toISOString(),
-        });
+      const { error } = await supabase.from("profiles").upsert({
+        id: userId,
+        first_name: updates.first_name,
+        last_name: updates.last_name,
+        institution: updates.institution,
+        updated_at: new Date().toISOString(),
+      });
 
       if (error) throw error;
 

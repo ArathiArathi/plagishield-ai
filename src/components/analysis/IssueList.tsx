@@ -3,7 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { IssueItem } from "./analysis-shared";
 
-const CATS: Array<IssueItem["category"] | "All"> = ["All", "Plagiarism", "AI content", "Grammar", "Citation"];
+const CATS: Array<IssueItem["category"] | "All"> = [
+  "All",
+  "Plagiarism",
+  "AI content",
+  "Grammar",
+  "Citation",
+];
 
 const SEVERITY: Record<IssueItem["severity"], string> = {
   high: "bg-destructive/15 text-destructive border-destructive/30",
@@ -35,10 +41,7 @@ export function IssueList({ issues }: { issues: IssueItem[] }) {
       <div className="flex flex-wrap gap-2">
         {CATS.map((c) => (
           <button key={c} type="button" onClick={() => setCat(c)}>
-            <Badge
-              variant={cat === c ? "default" : "outline"}
-              className="cursor-pointer gap-1.5"
-            >
+            <Badge variant={cat === c ? "default" : "outline"} className="cursor-pointer gap-1.5">
               {c}
               <span className="font-semibold">{counts[c] ?? 0}</span>
             </Badge>
@@ -52,10 +55,16 @@ export function IssueList({ issues }: { issues: IssueItem[] }) {
               <Badge variant="outline" className={cn(SEVERITY[i.severity] ?? SEVERITY.low)}>
                 {i.severity} severity
               </Badge>
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{i.category}</span>
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {i.category}
+              </span>
             </div>
-            <p className="text-sm font-medium text-foreground break-words [overflow-wrap:anywhere]">{i.title}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">{i.detail}</p>
+            <p className="text-sm font-medium text-foreground break-words [overflow-wrap:anywhere]">
+              {i.title}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
+              {i.detail}
+            </p>
             {i.excerpt && (
               <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs italic text-foreground/90 break-words [overflow-wrap:anywhere]">
                 “{i.excerpt}”

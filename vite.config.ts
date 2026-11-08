@@ -15,21 +15,37 @@ function vite7RolldownCompat(): Plugin {
     config(config: any) {
       if (config.environments) {
         for (const [name, env] of Object.entries(config.environments) as any[]) {
-          if (env?.build?.rolldownOptions && (!env.build?.rollupOptions || !env.build?.rollupOptions?.input)) {
+          if (
+            env?.build?.rolldownOptions &&
+            (!env.build?.rollupOptions || !env.build?.rollupOptions?.input)
+          ) {
             env.build.rollupOptions = { ...env.build.rollupOptions, ...env.build.rolldownOptions };
           }
         }
       }
     },
     configEnvironment(name: string, envConfig: any) {
-      if (envConfig?.build?.rolldownOptions && (!envConfig.build?.rollupOptions || !envConfig.build?.rollupOptions?.input)) {
-        envConfig.build.rollupOptions = { ...envConfig.build.rollupOptions, ...envConfig.build.rolldownOptions };
+      if (
+        envConfig?.build?.rolldownOptions &&
+        (!envConfig.build?.rollupOptions || !envConfig.build?.rollupOptions?.input)
+      ) {
+        envConfig.build.rollupOptions = {
+          ...envConfig.build.rollupOptions,
+          ...envConfig.build.rolldownOptions,
+        };
       }
     },
     transform(code, id) {
-      if (id.includes("@tanstack") && id.includes("history") && id.includes("index.js") && !code.includes("createServerHistory")) {
+      if (
+        id.includes("@tanstack") &&
+        id.includes("history") &&
+        id.includes("index.js") &&
+        !code.includes("createServerHistory")
+      ) {
         return {
-          code: code + "\nexport function createServerHistory(initialPath = '/') { return createMemoryHistory({ initialEntries: [initialPath] }); }\n",
+          code:
+            code +
+            "\nexport function createServerHistory(initialPath = '/') { return createMemoryHistory({ initialEntries: [initialPath] }); }\n",
           map: null,
         };
       }
@@ -45,4 +61,3 @@ export default defineConfig({
     server: { entry: "server" },
   },
 });
-

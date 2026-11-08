@@ -43,30 +43,22 @@ function attachRealtimeListener(queryClient: ReturnType<typeof useQueryClient>) 
   if (!activeChannel) {
     activeChannel = supabase
       .channel(`workspace-sync-${Date.now()}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "analyses" },
-        async () => {
-          await secureUserCache.invalidateByTag("analyses");
-          await secureUserCache.invalidateByTag("workspace");
-          activeClients.forEach((qc) => {
-            qc.invalidateQueries({ queryKey: ["workspace-data"] });
-            qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "documents" },
-        async () => {
-          await secureUserCache.invalidateByTag("documents");
-          await secureUserCache.invalidateByTag("workspace");
-          activeClients.forEach((qc) => {
-            qc.invalidateQueries({ queryKey: ["workspace-data"] });
-            qc.invalidateQueries({ queryKey: ["documents"] });
-          });
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "analyses" }, async () => {
+        await secureUserCache.invalidateByTag("analyses");
+        await secureUserCache.invalidateByTag("workspace");
+        activeClients.forEach((qc) => {
+          qc.invalidateQueries({ queryKey: ["workspace-data"] });
+          qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+        });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, async () => {
+        await secureUserCache.invalidateByTag("documents");
+        await secureUserCache.invalidateByTag("workspace");
+        activeClients.forEach((qc) => {
+          qc.invalidateQueries({ queryKey: ["workspace-data"] });
+          qc.invalidateQueries({ queryKey: ["documents"] });
+        });
+      })
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR") {
           console.warn("[Realtime] Subscription error on workspace sync channel");
@@ -110,11 +102,15 @@ export function useWorkspaceData() {
       const [docsRes, analysesRes] = await Promise.all([
         supabase
           .from("documents")
-          .select("id,name,file_type,status,size_bytes,latest_version,created_at,updated_at,doc_type,author_name,paper_title")
+          .select(
+            "id,name,file_type,status,size_bytes,latest_version,created_at,updated_at,doc_type,author_name,paper_title",
+          )
           .order("created_at", { ascending: false }),
         supabase
           .from("analyses")
-          .select("id,document_id,version_id,status,similarity_score,ai_score,grammar_score,citation_score,results,error,created_at,updated_at")
+          .select(
+            "id,document_id,version_id,status,similarity_score,ai_score,grammar_score,citation_score,results,error,created_at,updated_at",
+          )
           .order("created_at", { ascending: false }),
       ]);
       if (docsRes.error) throw docsRes.error;
@@ -123,53 +119,61 @@ export function useWorkspaceData() {
       const documents = (docsRes.data ?? []) as DocumentRow[];
       const analyses = (analysesRes.data ?? []) as AnalysisRow[];
       const done = analyses.filter((analysis) => analysis.status === "completed");
-      const resultFor = (analysis: AnalysisRow) => (analysis.results ?? {}) as {
-        plagiarism?: {
-          matched_words?: number;
-          eligible_words?: number;
-          excluded_words?: number;
-          matches?: unknown[];
-          source_coverage?: { sources_retrieved?: number };
+      const resultFor = (analysis: AnalysisRow) =>
+        (analysis.results ?? {}) as {
+          plagiarism?: {
+            matched_words?: number;
+            eligible_words?: number;
+            excluded_words?: number;
+            matches?: unknown[];
+            source_coverage?: { sources_retrieved?: number };
+          };
         };
-      };
 
-      const summaryStats = done.reduce((summary, analysis) => {
-        const plagiarism = resultFor(analysis).plagiarism;
-        summary.matchedSourceRecords += plagiarism?.matches?.length ?? 0;
-        summary.matchedWords += Number(plagiarism?.matched_words ?? 0);
-        summary.comparedWords += Number(plagiarism?.eligible_words ?? 0);
-        summary.excludedWords += Number(plagiarism?.excluded_words ?? 0);
-        summary.sourcesRetrieved += Number(plagiarism?.source_coverage?.sources_retrieved ?? 0);
-        return summary;
-      }, {
-        totalDocuments: documents.length,
-        analyzed: done.length,
-        matchedSourceRecords: 0,
-        matchedWords: 0,
-        comparedWords: 0,
-        excludedWords: 0,
-        sourcesRetrieved: 0,
-      });
+      const summaryStats = done.reduce(
+        (summary, analysis) => {
+          const plagiarism = resultFor(analysis).plagiarism;
+          summary.matchedSourceRecords += plagiarism?.matches?.length ?? 0;
+          summary.matchedWords += Number(plagiarism?.matched_words ?? 0);
+          summary.comparedWords += Number(plagiarism?.eligible_words ?? 0);
+          summary.excludedWords += Number(plagiarism?.excluded_words ?? 0);
+          summary.sourcesRetrieved += Number(plagiarism?.source_coverage?.sources_retrieved ?? 0);
+          return summary;
+        },
+        {
+          totalDocuments: documents.length,
+          analyzed: done.length,
+          matchedSourceRecords: 0,
+          matchedWords: 0,
+          comparedWords: 0,
+          excludedWords: 0,
+          sourcesRetrieved: 0,
+        },
+      );
 
       const recentActivity = documents.slice(0, 6).map((document) => {
         const analysis = analyses.find((item) => item.document_id === document.id);
         const result = analysis ? resultFor(analysis) : null;
         const matchCount = result?.plagiarism?.matches?.length ?? 0;
         const status =
-          analysis?.status === "failed" || document.status === "failed" ? "error" :
-          analysis?.status === "completed" ? "success" :
-          analysis?.status === "processing" || document.status === "processing" ? "info" :
-          "info";
+          analysis?.status === "failed" || document.status === "failed"
+            ? "error"
+            : analysis?.status === "completed"
+              ? "success"
+              : analysis?.status === "processing" || document.status === "processing"
+                ? "info"
+                : "info";
         return {
           id: document.id,
           title: document.name,
-          action: analysis?.status === "completed"
-            ? `Analysis complete · ${matchCount} source match(es)`
-            : analysis?.status === "failed" || document.status === "failed"
-              ? "Analysis failed"
-              : analysis?.status === "processing" || document.status === "processing"
-                ? "Analysis running"
-                : "Uploaded",
+          action:
+            analysis?.status === "completed"
+              ? `Analysis complete · ${matchCount} source match(es)`
+              : analysis?.status === "failed" || document.status === "failed"
+                ? "Analysis failed"
+                : analysis?.status === "processing" || document.status === "processing"
+                  ? "Analysis running"
+                  : "Uploaded",
           time: new Date(document.updated_at).toLocaleString(),
           status,
         };

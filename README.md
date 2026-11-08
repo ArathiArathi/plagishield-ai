@@ -1,4 +1,5 @@
 # 🛡️ PlagiShield AI
+
 ### Intelligent Academic Integrity & Document Analysis Platform
 
 <p align="center">
@@ -42,6 +43,7 @@ It also provides dashboards, document management, reports, and role-based access
 <td width="50%">
 
 ### 🔍 Similarity Analysis
+
 - Similarity and source-match insights
 - Stored analysis results
 - Source-match review
@@ -50,6 +52,7 @@ It also provides dashboards, document management, reports, and role-based access
 <td width="50%">
 
 ### 🤖 AI Content Assessment
+
 - AI-generated content probability
 - Confidence information
 - Explanations and reasoning
@@ -60,6 +63,7 @@ It also provides dashboards, document management, reports, and role-based access
 <td width="50%">
 
 ### ✍️ Writing Quality
+
 - Grammar issue identification
 - Suggested corrections
 - Writing improvement insights
@@ -68,6 +72,7 @@ It also provides dashboards, document management, reports, and role-based access
 <td width="50%">
 
 ### 📚 Citation Review
+
 - Citation completeness insights
 - Reference review support
 - Academic writing assistance
@@ -78,6 +83,7 @@ It also provides dashboards, document management, reports, and role-based access
 <td width="50%">
 
 ### 📊 Analytics & Reports
+
 - Analysis dashboards
 - Document-level reporting
 - Analytics and activity views
@@ -86,6 +92,7 @@ It also provides dashboards, document management, reports, and role-based access
 <td width="50%">
 
 ### 🔐 Secure Document Management
+
 - Private document storage
 - Document version tracking
 - Role-based access control
@@ -117,12 +124,12 @@ flowchart TD
 
 ### Analysis lifecycle
 
-| Stage | Description |
-|---|---|
-| `UPLOADED` | Document has been submitted |
+| Stage        | Description                             |
+| ------------ | --------------------------------------- |
+| `UPLOADED`   | Document has been submitted             |
 | `PROCESSING` | Document is being prepared and analyzed |
-| `ANALYZED` | Analysis results are available |
-| `FAILED` | Processing encountered an error |
+| `ANALYZED`   | Analysis results are available          |
+| `FAILED`     | Processing encountered an error         |
 
 ---
 
@@ -130,12 +137,12 @@ flowchart TD
 
 PlagiShield AI supports role-based access for different users.
 
-| Role | Purpose |
-|---|---|
-| 🎓 Student | Submit and review academic documents |
-| 👨‍🏫 Faculty | Review submissions and analysis insights |
+| Role                 | Purpose                                         |
+| -------------------- | ----------------------------------------------- |
+| 🎓 Student           | Submit and review academic documents            |
+| 👨‍🏫 Faculty           | Review submissions and analysis insights        |
 | 🏛️ Institution Admin | Manage institutional-level access and oversight |
-| ⚙️ Super Admin | Administrative platform management |
+| ⚙️ Super Admin       | Administrative platform management              |
 
 Access permissions are enforced through application-level role checks and database security policies.
 
@@ -144,6 +151,7 @@ Access permissions are enforced through application-level role checks and databa
 ## 🛠️ Technology Stack
 
 ### Frontend
+
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)
@@ -159,6 +167,7 @@ Access permissions are enforced through application-level role checks and databa
 - Recharts
 
 ### Backend & Data
+
 ![Supabase](https://img.shields.io/badge/Supabase-Backend-3FCF8E?logo=supabase&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
 
