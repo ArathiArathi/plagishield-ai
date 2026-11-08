@@ -38,25 +38,11 @@ export function useUserProfile() {
 
           if (profileErr) throw profileErr;
 
-          // 2. Fetch role safely (fallback to user metadata or default student role)
-          let resolvedRole: UserProfile["role"] =
+          // 2. Resolve role from user metadata (avoids 403 network failures on user_roles)
+          const resolvedRole: UserProfile["role"] =
             (user?.app_metadata?.role as UserProfile["role"]) ||
             (user?.user_metadata?.role as UserProfile["role"]) ||
             "student";
-
-          try {
-            const { data: roleData, error: roleErr } = await supabase
-              .from("user_roles")
-              .select("role")
-              .eq("user_id", userId)
-              .maybeSingle();
-
-            if (!roleErr && roleData?.role) {
-              resolvedRole = roleData.role as UserProfile["role"];
-            }
-          } catch {
-            // Fall back silently without throwing or noisy console warnings
-          }
 
           const defaultFirst = (user?.user_metadata?.first_name as string) || "";
           const defaultLast = (user?.user_metadata?.last_name as string) || "";
