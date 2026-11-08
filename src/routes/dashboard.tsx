@@ -22,7 +22,7 @@ export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — PlagiShield AI" },
-      { name: "description", content: "Overview of plagiarism, AI detection, and writing quality across your workspace." },
+      { name: "description", content: "Overview of text similarity, writing-pattern signals, and document quality across your workspace." },
       { property: "og:title", content: "Dashboard — PlagiShield AI" },
       { property: "og:description", content: "Live integrity metrics across every document in your workspace." },
       { property: "og:type", content: "website" },
@@ -72,7 +72,7 @@ function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <StatCard label="Quality Score" value={stats?.qualityScore ?? 0} suffix="/100" icon={Gauge} tone="primary" />
           <StatCard label="Similarity" value={stats?.similarity ?? 0} suffix="%" icon={PercentIcon} tone="success" />
-          <StatCard label="AI Detection" value={stats?.aiDetection ?? 0} suffix="%" icon={Sparkles} tone="info" />
+          <StatCard label="AI-style signals" value={stats?.aiDetection ?? 0} suffix="%" icon={Sparkles} tone="info" />
           <StatCard label="Grammar" value={stats?.grammar ?? 0} suffix="/100" icon={CheckCircle2} tone="success" />
           <StatCard label="Citation" value={stats?.citation ?? 0} suffix="/100" icon={FileText} tone="warning" />
           <StatCard label="Total Documents" value={(stats?.totalDocuments ?? 0).toLocaleString()} icon={Activity} tone="primary" />
@@ -87,7 +87,7 @@ function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-foreground">No documents yet</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload your first document to run plagiarism, AI, grammar, and citation analysis.
+              Upload your first document to review text similarity, writing signals, grammar, and citations.
             </p>
           </div>
           <Button size="sm" asChild><Link to="/documents">Upload a document</Link></Button>
@@ -129,8 +129,8 @@ function DashboardPage() {
 
         <Card className="p-5">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold text-foreground">AI Content Analysis</h3>
-            <p className="text-xs text-muted-foreground">Distribution of detected content</p>
+            <h3 className="text-sm font-semibold text-foreground">Writing-pattern indicators</h3>
+            <p className="text-xs text-muted-foreground">Estimated detector signals across reviewed passages</p>
           </div>
           <div className="h-64">
             {hasAnalyses ? (
