@@ -34,6 +34,7 @@ export type Highlight = {
   provider?: string;
   /** Human-readable confidence label for this individual segment. */
   confidence?: "high" | "medium" | "low";
+  alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
 
