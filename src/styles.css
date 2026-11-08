@@ -52,7 +52,7 @@
 }
 
 :root {
-  --radius: 0.55rem;
+  --radius: 0.35rem;
   --background: oklch(0.975 0.012 95);
   --foreground: oklch(0.24 0.025 160);
   --card: oklch(0.995 0.003 95);
@@ -95,7 +95,7 @@
 
   --gradient-primary: linear-gradient(135deg, oklch(0.36 0.065 158), oklch(0.52 0.075 155));
   --gradient-subtle: linear-gradient(180deg, oklch(0.99 0.003 95), oklch(0.95 0.012 95));
-  --shadow-elegant: 0 10px 30px -10px oklch(0.36 0.065 158 / 0.14);
+  --shadow-elegant: 0 2px 8px -4px oklch(0.24 0.025 160 / 0.12);
   --shadow-card: 0 1px 3px 0 oklch(0.24 0.025 160 / 0.05), 0 1px 2px -1px oklch(0.24 0.025 160 / 0.05);
 }
 .dark {
