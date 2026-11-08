@@ -147,10 +147,10 @@ async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
 }
 
 function xmlToPlainText(xml: string): string {
-  const body = xml.match(/<body[ >][\\s\\S]*?<\\/body>/i)?.[0] ?? xml;
+  const body = xml.match(/<body[ >][\s\S]*?<\/body>/i)?.[0] ?? xml;
   return body
-    .replace(/<(?:ref-list|fig|table-wrap|supplementary-material|ack)[\\s\\S]*?<\\/(?:ref-list|fig|table-wrap|supplementary-material|ack)>/gi, " ")
-    .replace(/<\\/(?:p|title|sec|list-item|caption)>/gi, "\\n")
+    .replace(/<(?:ref-list|fig|table-wrap|supplementary-material|ack)[\s\S]*?<\/(?:ref-list|fig|table-wrap|supplementary-material|ack)>/gi, " ")
+    .replace(/<\/(?:p|title|sec|list-item|caption)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code: string) => {
       const value = code[0]?.toLowerCase() === "x" ? parseInt(code.slice(1), 16) : parseInt(code, 10);
@@ -161,12 +161,11 @@ function xmlToPlainText(xml: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/[ \\t]+/g, " ")
-    .replace(/\\n[ \\t]+/g, "\\n")
-    .replace(/\\n{3,}/g, "\\n\\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
-
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length) as R[];
   let cursor = 0;
