@@ -23,10 +23,10 @@ export const Route = createFileRoute("/")({
 });
 
 const plans = [
-  { name: "Free", price: "$0", allowance: "10 reviews / month", note: "For a first review" },
-  { name: "Pro", price: "$14", allowance: "15 reviews / month", note: "For regular coursework", popular: true },
-  { name: "Plus", price: "$29", allowance: "25 reviews / month", note: "For ongoing research" },
-  { name: "Premium", price: "$49", allowance: "35 reviews / month", note: "For heavier workloads" },
+  { name: "Free", price: "₹0", allowance: "10 reviews / month", note: "For a first review" },
+  { name: "Pro", price: "₹1,300", allowance: "15 reviews / month", note: "For regular coursework", popular: true },
+  { name: "Plus", price: "₹2,700", allowance: "25 reviews / month", note: "For ongoing research" },
+  { name: "Premium", price: "₹4,600", allowance: "35 reviews / month", note: "For heavier workloads" },
 ];
 
 function WelcomePage() {
@@ -236,7 +236,7 @@ function WelcomePage() {
                 </div>
               ))}
             </div>
-            <p className="mt-5 text-center text-[10px] leading-5 text-[#8a938b]">Prices are displayed in USD. Checkout availability depends on the Stripe billing configuration for this deployment.</p>
+            <p className="mt-5 text-center text-[10px] leading-5 text-[#8a938b]">Prices are displayed in INR. Paid subscriptions are billed in Indian rupees through secure Stripe Checkout. GST is not added by this checkout configuration.</p>
           </div>
         </section>
 
