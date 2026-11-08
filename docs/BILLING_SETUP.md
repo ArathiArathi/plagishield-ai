@@ -1,28 +1,36 @@
 # Stripe subscription billing setup
 
-The application now uses Stripe-hosted Checkout and the Stripe customer portal. A paid plan is **not** granted by changing browser storage or editable user metadata. The database is updated only after a verified Stripe subscription webhook.
+PlagiShield uses Stripe-hosted Checkout and the Stripe customer portal. Paid access is granted only after the signed Stripe webhook confirms the subscription; browser storage and editable user metadata do not grant paid entitlements.
 
-## 1. Create Stripe products and recurring prices
+## Stripe test products and prices
 
-Create three products in Stripe for Pro, Plus, and Premium. For each product, create both a monthly and an annual recurring Price. The displayed amounts in the app are USD examples; make sure the Price IDs you configure match the amounts, currency, tax treatment, and billing interval you intend to sell.
+The connected Stripe account has these products and active INR recurring prices in **test mode**:
 
-Copy the six Stripe Price IDs.
+| Plan | Monthly | Annual | Product ID |
+| --- | ---: | ---: | --- |
+| Pro | ₹1,300 | ₹11,300 | `prod_VaecTO2bcGM2ul` |
+| Plus | ₹2,700 | ₹22,600 | `prod_VaecaIarnwnWbb` |
+| Premium | ₹4,600 | ₹39,500 | `prod_Vaecu2tn0zrLKb` |
 
-## 2. Configure Supabase secrets
+The six Stripe Price IDs are mapped in the server-side Checkout and webhook Edge Functions:
 
-Set these in the Supabase project used by this app. Do not put secret values in `VITE_*` variables or commit them to Git.
+| Plan | Monthly Price ID | Annual Price ID |
+| --- | --- | --- |
+| Pro | `price_1UZTJCEP3hMKlBIwIIilnrzC` | `price_1UZTJEEP3hMKlBIwn5ARqR7j` |
+| Plus | `price_1UZTJGEP3hMKlBIwtzHPMqfs` | `price_1UZTJIEP3hMKlBIwEtH6ofUj` |
+| Premium | `price_1UZTJKEP3hMKlBIw3EazNMVF` | `price_1UZTJLEP3hMKlBIwbtyQdVv2` |
 
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_PRO_MONTHLY`
-- `STRIPE_PRICE_PRO_ANNUAL`
-- `STRIPE_PRICE_PLUS_MONTHLY`
-- `STRIPE_PRICE_PLUS_ANNUAL`
-- `STRIPE_PRICE_PREMIUM_MONTHLY`
-- `STRIPE_PRICE_PREMIUM_ANNUAL`
-- `APP_URL` (the deployed app origin, for example `https://your-domain.example`)
+These prices preserve the existing plan tiers and approximate their former USD values using a rounded INR conversion. The user confirmed no GST collection for now; Stripe automatic tax is not enabled. Do not enable automatic tax unless the business confirms its tax registrations and collection requirements.
 
-Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY` / publishable key, and `SUPABASE_SERVICE_ROLE_KEY` / secret key to Edge Functions. The service-role key must remain server-side.
+## Supabase Edge Function secrets
+
+Set these values in the Supabase project's Edge Function secrets. Never place secret values in `VITE_*` variables or commit them to Git.
+
+- `STRIPE_SECRET_KEY` — the connected Stripe test-mode secret key (`sk_test_...`)
+- `STRIPE_WEBHOOK_SECRET` — signing secret for the webhook endpoint (`whsec_...`)
+- `APP_URL` — deployed frontend origin, for example `https://your-domain.example`
+
+Supabase provides the project URL and service credentials to Edge Functions. The service-role / secret key must remain server-side.
 
 Example:
 
@@ -32,51 +40,39 @@ supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
 supabase secrets set APP_URL=https://your-domain.example
 ```
 
-Use Stripe test-mode keys and the test Price IDs above until the complete purchase and cancellation lifecycle has been verified. The account has no GST collection enabled; do not enable automatic tax unless the business later confirms it is registered and wants to collect tax.
+The connected Supabase project is `efqiekytujylkcnlxnod`. The database migration and Edge Functions have already been applied/deployed there. Current deployed versions: `create-checkout-session` v2, `create-customer-portal` v1, `stripe-webhook` v4.
 
-## 3. Apply the database migration and deploy functions
+## Stripe webhook
 
-From the repository root:
-
-```sh
-supabase link --project-ref efqiekytujylkcnlxnod
-supabase db push
-supabase functions deploy create-checkout-session
-supabase functions deploy create-customer-portal
-supabase functions deploy stripe-webhook
-```
-
-The migration creates a subscription table with row-level security. Signed-in users can read only their own subscription. Client roles cannot write billing state. A database trigger also enforces the 10 / 15 / 25 / 35 document allowance each calendar month, so direct API requests cannot bypass the upload-page check.
-
-## 4. Register the Stripe webhook
-
-In Stripe Workbench / Developers, add an endpoint:
+Register this endpoint in Stripe Workbench / Developers:
 
 ```
 https://efqiekytujylkcnlxnod.supabase.co/functions/v1/stripe-webhook
 ```
 
 Subscribe to:
-
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
 
-Copy the endpoint signing secret into `STRIPE_WEBHOOK_SECRET`.
+Copy the endpoint signing secret into `STRIPE_WEBHOOK_SECRET`. The webhook verifies Stripe's signature and resolves the user through the stored Stripe Customer ID before updating `public.subscriptions`.
 
-## 5. Configure the customer portal
+## Customer portal
 
-Enable the Stripe customer portal in the Stripe Dashboard. Allow customers to update payment methods, view invoices, cancel subscriptions, and (if desired) switch between the Pro, Plus, and Premium products. If plan switching is enabled, add all six recurring Prices to the portal's product catalogue.
+Enable the Stripe customer portal in the Stripe Dashboard. Allow customers to update payment methods, view invoices, and cancel subscriptions. If plan switching is desired, add the six INR recurring Prices to the portal's product catalogue.
 
-## 6. Test before enabling live payments
+## Test checklist
 
-Use Stripe test mode and test cards. Verify:
+Before enabling live payments, verify in Stripe test mode:
 
-1. A signed-in free user can open Checkout for each paid plan and billing interval.
-2. Completing payment creates or updates exactly one row in `public.subscriptions`.
-3. Refreshing the app shows the paid plan only after the webhook has been received.
+1. A signed-in free user can open Checkout for Pro, Plus, and Premium, monthly and annual.
+2. Checkout displays INR prices and no GST/automatic tax.
+3. Completing test payment updates exactly one row in `public.subscriptions` through the webhook.
 4. A failed or canceled Checkout does not grant a paid plan.
-5. The customer portal can update payment details and cancel a subscription.
-6. A cancellation or subscription status change updates the database through the webhook.
+5. The customer portal opens for an existing Stripe customer.
+6. Cancellation and failed-payment webhook events update the database and access appropriately.
+7. Monthly document quotas (10 / 15 / 25 / 35) are enforced by the database trigger.
 
-The frontend code and server endpoints are committed here, but live payments cannot run until the Stripe products, Price IDs, secrets, database migration, webhook, and Edge Functions have been configured in the Supabase and Stripe dashboards.
+The products and recurring Prices exist in test mode, and the Checkout/webhook functions are deployed with their Price IDs. Checkout still requires the three Edge Function secrets above, and the webhook must be registered in Stripe before an end-to-end test payment can be completed.
