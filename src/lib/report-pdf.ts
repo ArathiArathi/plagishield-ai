@@ -353,7 +353,7 @@ function documentBlock(ctx: Ctx, input: ReportInput) {
     ["Analysis engine", input.results.meta?.engine_version || "Not recorded"],
     ["Word count", input.results.meta?.words != null ? Number(input.results.meta.words).toLocaleString() : "Not recorded"],
     ["Extracted text", input.results.meta?.extraction || "Not recorded"],
-    ["Analysis generated", input.generatedAt || new Date().toLocaleString()],
+    ["Analysis generated", input.generatedAt || "Not recorded"],
   ];
   metaTable(ctx, rows);
 }
@@ -408,66 +408,6 @@ function matchedSourcesBarChart(ctx: Ctx, matches: Array<{ source?: string; simi
 
 /** Visual Graph 3: AI Likelihood Spectrum Dial
  *  Visual gradient indicator showing where the text lies on the Synthetic spectrum. */
-function grammarCategoryGraph(ctx: Ctx, issues: Array<{ type?: string; severity?: string }>) {
-  const { doc } = ctx;
-  if (!issues || issues.length === 0) return;
-
-  const byType = issues.reduce<Record<string, number>>((acc, i) => {
-    const k = titleCase(i.type ?? "syntax");
-    acc[k] = (acc[k] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  const entries = Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  ensure(ctx, entries.length * 8 + 20);
-
-  sectionTitle(ctx, "Grammar & Stylistic Issues by Category");
-
-  const startY = ctx.y;
-  const labelW = 45;
-  const barMaxW = W - 2 * M - labelW - 20;
-  const maxCount = Math.max(...entries.map((e) => e[1])) || 1;
-
-  entries.forEach(([cat, count], idx) => {
-    const y = startY + idx * 7.5;
-    doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
-    doc.text(cat, M, y + 4);
-
-    const barX = M + labelW;
-    doc.setFillColor(240, 243, 248);
-    doc.roundedRect(barX, y, barMaxW, 4.5, 1, 1, "F");
-
-    const filledW = Math.max(3, (barMaxW * count) / maxCount);
-    doc.setFillColor(...ACCENT);
-    doc.roundedRect(barX, y, filledW, 4.5, 1, 1, "F");
-
-    doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...ACCENT);
-    doc.text(`${count} issue${count > 1 ? "s" : ""}`, barX + barMaxW + 3, y + 3.8);
-  });
-
-  ctx.y = startY + entries.length * 7.5 + 4;
-}
-
-/* ------------------------------------------- composition, highlights, issues */
-
-const CATEGORY_FILL: Record<string, [number, number, number]> = {
-  plagiarism: [255, 214, 214],
-  ai: [255, 235, 186],
-  grammar: [214, 231, 255],
-  citation: [212, 236, 224],
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  plagiarism: "Source-linked text match",
-  ai: "AI-style indicator",
-  grammar: "Language & grammar issue",
-  citation: "Scholarly citation",
-};
-
-const SOURCE_HIGHLIGHT_COLORS: Array<[number, number, number]> = [
-  [254, 240, 138], [191, 219, 254], [187, 247, 208],
-  [251, 207, 232], [221, 214, 254], [254, 215, 170],
-];
 
 function legendRow(ctx: Ctx, categories: string[]) {
   const { doc } = ctx;
