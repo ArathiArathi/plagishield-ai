@@ -55,9 +55,6 @@ export type ReportInput = {
   authorName?: string | null;
   paperTitle?: string | null;
   similarity: number;
-  ai: number;
-  grammar: number;
-  citation: number;
   results: ReportResults;
 };
 
