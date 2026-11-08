@@ -1,3 +1,4 @@
+/* eslint-disable no-control-regex */
 /**
  * Server-only plain-text extraction for uploaded documents.
  * Supports TXT/MD/CSV directly, DOCX (zip + deflate-raw) and PDF
