@@ -39,7 +39,7 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
   ai: {
     chip: "border-warning/30 bg-warning/20 text-warning",
     mark: "bg-warning/25 text-foreground underline decoration-warning decoration-2",
-    label: "AI content",
+    label: "Writing-pattern signal",
   },
   grammar: {
     chip: "border-info/30 bg-info/15 text-info",
@@ -54,13 +54,8 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
 };
 
 export const COMPOSITION_COLOR: Record<string, string> = {
-  "Plagiarised / matched": "var(--color-destructive)",
-  "AI generated": "var(--color-warning)",
-  "AI-style indicators (estimated)": "var(--color-warning)",
-  "Quoted & attributed": "var(--color-info)",
-  "Language issues": "var(--color-primary)",
-  "Original human writing": "var(--color-success)",
-  "Unmatched in retrieved sources": "var(--color-success)",
+  "Matched in retrieved sources": "var(--color-destructive)",
+  "No match in retrieved sources": "var(--color-muted)",
 };
 
 export type Segment = { text: string; highlight?: Highlight };
