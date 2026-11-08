@@ -131,7 +131,6 @@ export interface FileRoutesByTo {
   '/repository': typeof RepositoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
-  '/team': typeof TeamRoute
   '/verify-email': typeof VerifyEmailRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
@@ -150,7 +149,6 @@ export interface FileRoutesById {
   '/repository': typeof RepositoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
-  '/team': typeof TeamRoute
   '/verify-email': typeof VerifyEmailRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/google/callback': typeof AuthGoogleCallbackRoute
@@ -187,7 +185,6 @@ export interface FileRouteTypes {
     | '/repository'
     | '/reset-password'
     | '/settings'
-    | '/team'
     | '/verify-email'
     | '/auth/callback'
     | '/auth/google/callback'
@@ -205,7 +202,6 @@ export interface FileRouteTypes {
     | '/repository'
     | '/reset-password'
     | '/settings'
-    | '/team'
     | '/verify-email'
     | '/auth/callback'
     | '/auth/google/callback'
