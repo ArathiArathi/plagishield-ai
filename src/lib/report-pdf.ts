@@ -172,26 +172,24 @@ function paragraph(ctx: Ctx, text: string, opts: { size?: number; color?: [numbe
 
 function metaTable(ctx: Ctx, rows: Array<[string, string]>) {
   const { doc } = ctx;
-  const rowH = 7;
-  ensure(ctx, rows.length * rowH + 4);
-  const startY = ctx.y;
-  rows.forEach(([k, v], i) => {
-    const y = startY + i * rowH;
-    if (i % 2 === 0) {
-      doc.setFillColor(246, 248, 251);
-      doc.rect(M, y - 4.5, W - 2 * M, rowH, "F");
-    }
-    doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...NAVY);
-    doc.text(sanitizePdfText(k), M + 3, y);
-    doc.setFont("helvetica", "normal").setTextColor(60, 70, 85);
-    const splitV = doc.splitTextToSize(sanitizePdfText(v), W - 2 * M - 68) as string[];
-    const val = splitV[0] ?? "";
-    doc.text(val, M + 65, y);
-  });
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.3);
-  doc.rect(M, startY - 4.5, W - 2 * M, rows.length * rowH);
-  ctx.y = startY + rows.length * rowH + 5;
+  const labelWidth = 58;
+  const valueWidth = W - 2 * M - labelWidth - 8;
+  for (const [key, value] of rows) {
+    doc.setFont("helvetica", "normal").setFontSize(8);
+    const lines = doc.splitTextToSize(sanitizePdfText(value || "Not provided"), valueWidth) as string[];
+    const rowH = Math.max(7, lines.length * 3.8 + 3);
+    ensure(ctx, rowH + 2);
+    const y = ctx.y;
+    doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...NAVY);
+    doc.text(sanitizePdfText(key), M + 3, y);
+    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(60, 70, 85);
+    lines.forEach((line, index) => doc.text(line, M + labelWidth, y + index * 3.8));
+    doc.setDrawColor(...LINE);
+    doc.setLineWidth(0.2);
+    doc.line(M, y + rowH - 1, W - M, y + rowH - 1);
+    ctx.y += rowH;
+  }
+  ctx.y += 5;
 }
 
 function scoreCards(ctx: Ctx, cards: Array<{ label: string; value: string; tone: [number, number, number] }>) {
@@ -328,98 +326,28 @@ function titleCase(v: string) {
  *  (Title, Authors, Affiliation, Abstract Callout, Keywords, Institutional Seal). */
 function academicPaperHeader(ctx: Ctx, input: ReportInput) {
   const { doc } = ctx;
-  ensure(ctx, 70);
-
-  const rawDocName = input.documentName || "document";
-  const isUploadedPaper =
-    rawDocName.toLowerCase().includes("intrusion") ||
-    rawDocName.toLowerCase().includes("federated") ||
-    (input.paperTitle && input.paperTitle.toLowerCase().includes("intrusion"));
-
-  const paperTitle = sanitizePdfText(
-    input.paperTitle ||
-    (isUploadedPaper
-      ? "Toward Trustworthy Intrusion Detection via Federated Learning, Explainable SOC Analytics, and Blockchain Audit Logging"
-      : rawDocName.replace(/\.[a-z0-9]+$/i, ""))
-  );
-
-  const authors = sanitizePdfText(
-    input.authorName ||
-    (isUploadedPaper
-      ? "Sujith Kumar Vishwakarma, Arathi A"
-      : "Academic Contributor / Author")
-  );
-
-  const affiliation = sanitizePdfText(
-    (isUploadedPaper
-      ? "Department of MCA, Seshadripuram First Grade College, Bangalore, Karnataka, India"
-      : input.docType ? titleCase(input.docType) : "Academic Institution / Department of Computer Applications")
-  );
-
-  // Conference/Journal style Top Header Label
+  ensure(ctx, 58);
+  const paperTitle = sanitizePdfText(input.paperTitle || input.documentName.replace(/\.[a-z0-9]+$/i, "") || "Untitled submission");
+  const authors = sanitizePdfText(input.authorName || "Author not provided");
+  const affiliation = sanitizePdfText(input.docType ? titleCase(input.docType) : "Submission type not provided");
   doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...ACCENT);
-  doc.text("SCHOLARLY SUBMISSION & INTEGRITY CERTIFICATION DOSSIER", W / 2, ctx.y, { align: "center" });
-  ctx.y += 5;
-
-  // Title
-  doc.setFont("helvetica", "bold").setFontSize(13.5).setTextColor(...NAVY);
+  doc.text("DOCUMENT SIMILARITY & WRITING REVIEW", W / 2, ctx.y, { align: "center" });
+  ctx.y += 6;
+  doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...NAVY);
   const titleLines = doc.splitTextToSize(paperTitle, W - 2 * M - 10) as string[];
-  titleLines.forEach((l) => {
-    doc.text(l, W / 2, ctx.y, { align: "center" });
-    ctx.y += 5.2;
-  });
-
+  titleLines.forEach((line) => { ensure(ctx, 7); doc.text(line, W / 2, ctx.y, { align: "center" }); ctx.y += 5.2; });
   ctx.y += 2;
-
-  // Authors
-  doc.setFont("helvetica", "bold").setFontSize(9.5).setTextColor(40, 50, 70);
+  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(40, 50, 70);
   doc.text(authors, W / 2, ctx.y, { align: "center" });
   ctx.y += 4.5;
-
-  // Affiliation
   doc.setFont("helvetica", "italic").setFontSize(8).setTextColor(...MUTED);
-  const affilLines = doc.splitTextToSize(affiliation, W - 2 * M - 10) as string[];
-  affilLines.forEach((l) => {
-    doc.text(l, W / 2, ctx.y, { align: "center" });
-    ctx.y += 3.8;
-  });
-
-  ctx.y += 2;
-  doc.setDrawColor(...LINE);
-  doc.setLineWidth(0.4);
-  doc.line(M + 15, ctx.y, W - M - 15, ctx.y);
-  ctx.y += 5;
-
-  // Abstract & Forensic Audit Block (academic paper style)
-  const abstractBoxW = W - 2 * M;
-  const rawExcerpt = input.results?.text_excerpt || "";
-  const abstractText = sanitizePdfText(
-    rawExcerpt.length > 50
-      ? rawExcerpt.slice(0, 340).replace(/\s+/g, " ").trim() + "..."
-      : "This academic submission was analyzed by PlagiShield AI across global scholarly registries, OpenAlex repository databases, Crossref DOI bibliographic indices, stylometric LLM forensic markers, and syntactic grammar engines."
-  );
-
-  doc.setFillColor(248, 250, 253);
-  doc.setDrawColor(215, 223, 235);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(M, ctx.y, abstractBoxW, 28, 1.5, 1.5, "FD");
-
-  doc.setFillColor(...NAVY);
-  doc.rect(M, ctx.y, 2.4, 28, "F");
-
-  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
-  doc.text("ABSTRACT & INTEGRITY AUDIT SUMMARY", M + 6, ctx.y + 5.5);
-
-  doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(65, 75, 90);
-  const absLines = (doc.splitTextToSize(abstractText, abstractBoxW - 14) as string[]).slice(0, 3);
-  absLines.forEach((al, idx) => {
-    doc.text(al, M + 6, ctx.y + 10.5 + idx * 3.8);
-  });
-
-  doc.setFont("helvetica", "bold").setFontSize(6.8).setTextColor(...MUTED);
-  doc.text("Index Terms -- Academic Integrity, Plagiarism Detection, AI Stylometry, Scholarly Verification, Crossref DOI", M + 6, ctx.y + 24);
-
-  ctx.y += 33;
+  doc.text(affiliation, W / 2, ctx.y, { align: "center" });
+  ctx.y += 6;
+  const excerpt = sanitizePdfText(input.results?.text_excerpt || "");
+  sectionTitle(ctx, "Extracted Submission Excerpt");
+  if (excerpt) paragraph(ctx, excerpt.slice(0, 700).replace(/\s+/g, " ").trim() + (excerpt.length > 700 ? "..." : ""), { size: 8.5 });
+  else paragraph(ctx, "No extracted text excerpt was stored with this analysis. Review the source document alongside these results.");
+  paragraph(ctx, "Scores and passage flags are automated indicators. They are not proof of plagiarism or AI authorship; review matched-source evidence and document context before making academic decisions.", { size: 8, color: MUTED });
 }
 
 function documentBlock(ctx: Ctx, input: ReportInput) {
@@ -941,15 +869,13 @@ function similaritySection(ctx: Ctx, input: ReportInput) {
     "Overall similarity against matched sources",
     input.similarity,
     tone,
-    `${matches.length} matched source(s) identified. Excluding properly cited references, ${input.similarity}% of the submission overlaps with indexed literature.`,
+    `${matches.length} matched source(s) identified. ${input.similarity}% of the submission overlaps with retrieved sources; citation exclusions and repository coverage are not guaranteed.`,
   );
   verdictBox(
     ctx,
-    input.similarity >= 35 ? "High similarity — academic revision required" : input.similarity >= 15 ? "Moderate similarity — review matched sources" : "Low similarity — within acceptable thresholds",
+    input.similarity >= 35 ? "Higher observed overlap — review evidence" : input.similarity >= 15 ? "Some observed overlap — review evidence" : "Lower observed overlap in retrieved sources",
     tone,
-    input.similarity >= 15
-      ? "Paraphrase or quote the highlighted passages and provide full academic attribution for all matched sources."
-      : "No problematic overlap detected. The submission satisfies standard institutional originality benchmarks.",
+    "Review each matched passage and its source context. A low score does not establish originality because source coverage is incomplete.",
   );
 
   matchedSourcesBarChart(ctx, matches);
@@ -985,21 +911,19 @@ function aiSection(ctx: Ctx, input: ReportInput) {
     "Probability that text was synthetically generated by LLMs",
     input.ai,
     tone,
-    `Detector confidence level: ${det.confidence ?? "High (94.2%)"}.`,
+    `Reported detector confidence: ${det.confidence ?? "low"}. This is an uncalibrated model estimate, not a validated probability.`,
   );
   verdictBox(
     ctx,
-    input.ai >= 60 ? "Likely AI generated" : input.ai >= 30 ? "Possible AI assistance / paraphrasing" : "Original human authorship",
+    input.ai >= 60 ? "Elevated AI-style indicators — review passages" : input.ai >= 30 ? "Some AI-style indicators — review passages" : "Fewer AI-style indicators observed",
     tone,
-    input.ai >= 30
-      ? "Flagged passages exhibit low perplexity and uniform burstiness typical of generative AI. Revise in your own voice."
-      : "Stylistic burstiness and semantic variety are consistent with genuine human scholarly writing.",
+    "Automated style signals cannot establish authorship. Human and AI writing can share these patterns; do not use this score alone for academic decisions.",
   );
 
   aiLikelihoodSpectrumChart(ctx, input.ai, det.confidence);
 
   sectionTitle(ctx, "Forensic Detector Reasoning");
-  paragraph(ctx, det.reasoning?.trim() || "Multi-layer stylometric analysis evaluated n-gram perplexity, sentence length entropy, and transition predictability.");
+  paragraph(ctx, det.reasoning?.trim() || "No detector explanation was stored for this analysis. Treat the score as an uncertain indicator.");
 
   const aiMatches = det.highlights ?? [];
   if (aiMatches.length > 0) {
@@ -1079,7 +1003,7 @@ function recommendations(input: ReportInput): Array<[string, string, string]> {
   if (input.ai >= 30) out.push(["AI content", "Rewrite flagged passages with personal voice, specific methodologies, and concrete research data.", input.ai >= 60 ? "High" : "Medium"]);
   if (g > 0) out.push(["Grammar & Style", `Resolve ${g} flagged language and phrasing issue(s) before journal submission.`, input.grammar < 70 ? "High" : "Medium"]);
   if (ci > 0) out.push(["Citations", `Verify ${ci} citation reference(s) with valid Crossref or OpenAlex DOIs.`, input.citation < 70 ? "High" : "Medium"]);
-  if (out.length === 0) out.push(["Overall", "No corrective action required — document satisfies all institutional integrity criteria.", "Low"]);
+  if (out.length === 0) out.push(["Overall", "No issues were returned by the enabled checks. This is not certification of originality or authorship.", "Review"]);
   return out;
 }
 
@@ -1148,20 +1072,16 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
     recommendations(input),
   );
 
-  // Institutional Sign-off & Certification Note
+  // A generated analysis report is not an institutional certification.
   ensure(ctx, 22);
   doc.setFillColor(246, 248, 252);
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
   doc.roundedRect(M, ctx.y, W - 2 * M, 16, 1.5, 1.5, "FD");
   doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
-  doc.text("INSTITUTIONAL INTEGRITY CERTIFICATION", M + 5, ctx.y + 5.5);
+  doc.text("REVIEW NOTE", M + 5, ctx.y + 5.5);
   doc.setFont("helvetica", "normal").setFontSize(6.8).setTextColor(...MUTED);
-  doc.text(
-    "This report was generated by PlagiShield AI forensic scanner. Results are indicators for peer review and academic committees.",
-    M + 5,
-    ctx.y + 10,
-  );
+  doc.text("Automated findings require human review and do not constitute an institutional decision.", M + 5, ctx.y + 10);
   ctx.y += 20;
 
   footer(ctx);
