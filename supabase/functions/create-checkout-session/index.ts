@@ -61,9 +61,22 @@ Deno.serve(async (request) => {
       return json({ error: "Choose a valid paid plan and billing cycle." }, 400);
     }
 
-    const priceEnv = `STRIPE_PRICE_${String(planId).toUpperCase()}_${String(billingCycle).toUpperCase()}`;
-    const priceId = Deno.env.get(priceEnv);
-    if (!priceId) return json({ error: `The ${planId} ${billingCycle} price is not configured yet.` }, 503);
+    const priceIds: Record<string, Record<string, string>> = {
+      pro: {
+        monthly: "price_1UZTJCEP3hMKlBIwIIilnrzC",
+        annual: "price_1UZTJEEP3hMKlBIwn5ARqR7j",
+      },
+      plus: {
+        monthly: "price_1UZTJGEP3hMKlBIwtzHPMqfs",
+        annual: "price_1UZTJIEP3hMKlBIwEtH6ofUj",
+      },
+      premium: {
+        monthly: "price_1UZTJKEP3hMKlBIw3EazNMVF",
+        annual: "price_1UZTJLEP3hMKlBIwbtyQdVv2",
+      },
+    };
+    const priceId = priceIds[planId]?.[billingCycle];
+    if (!priceId) return json({ error: "This plan price is not configured." }, 503);
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
