@@ -1,3 +1,4 @@
+/* global Deno */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 import Stripe from "https://esm.sh/stripe@17.7.0?target=deno";
 
