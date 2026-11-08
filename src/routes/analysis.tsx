@@ -53,7 +53,7 @@ type Results = {
   stage_pct?: number;
   text_excerpt?: string;
   document_text?: string;
-  meta?: { engine_version?: string; extraction?: string; words?: number; checked_at?: string };
+  meta?: { engine_version?: string; extraction?: string; words?: number; checked_at?: string; truncated?: boolean; character_limit?: number };
   plagiarism?: {
     score?: number; matched_words?: number; eligible_words?: number; excluded_words?: number;
     matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; matched_snippet?: string; matched_words?: number; match_count?: number }>;
@@ -395,6 +395,7 @@ function AnalysisPage() {
                 Exact source matches and returned language annotations are highlighted in the extracted submission text. Experimental writing-style flags are separate and are not proof of authorship.
               </p>
               {!results.document_text && <p className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs leading-5 text-muted-foreground">This saved analysis predates full-paper storage. Re-run the analysis to include the complete extracted document and align every highlight in the report.</p>}
+          {results.meta?.truncated && <p className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs leading-5 text-muted-foreground">The analysis was limited to the first {Number(results.meta.character_limit ?? 120000).toLocaleString()} characters. Text beyond that limit was not compared or included in the report.</p>}
           <HighlightedDocument text={excerpt} highlights={allHighlights} />
             </TabsContent>
 
