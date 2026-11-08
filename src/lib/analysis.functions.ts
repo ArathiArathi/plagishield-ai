@@ -8,7 +8,7 @@ const InputSchema = z.object({
   analysisId: z.string().uuid(),
   documentId: z.string().uuid(),
   versionId: z.string().uuid(),
-  storagePath: z.string().min(1),
+  storagePath: z.string().min(1).optional(),
 });
 
 type Ctx = { supabase: any; userId: string };
@@ -22,11 +22,39 @@ const STAGE_PCT: Record<string, number> = {
 
 async function execute(
   context: Ctx,
-  data: { analysisId: string; documentId: string; versionId: string; storagePath: string },
+  data: { analysisId: string; documentId: string; versionId: string },
 ) {
   const { analyzeDocument } = await import("@/lib/analysis-engine.server");
   const { extractText } = await import("@/lib/text-extract.server");
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+  // Resolve every identifier through the authenticated user's ownership chain.
+  // Never trust a storage path supplied by the browser for a privileged download.
+  const { data: ownedAnalysis, error: ownershipError } = await supabaseAdmin
+    .from("analyses")
+    .select("id,document_id,version_id,documents!inner(id,owner_id,name,doc_type,author_name,paper_title)")
+    .eq("id", data.analysisId)
+    .eq("document_id", data.documentId)
+    .eq("version_id", data.versionId)
+    .eq("documents.owner_id", context.userId)
+    .maybeSingle();
+
+  if (ownershipError) throw ownershipError;
+  if (!ownedAnalysis) throw new Error("The requested analysis does not belong to your account or document version.");
+
+  const doc = ownedAnalysis.documents as {
+    id: string; owner_id: string; name: string; doc_type: string | null;
+    author_name: string | null; paper_title: string | null;
+  };
+  const { data: version, error: versionError } = await supabaseAdmin
+    .from("document_versions")
+    .select("storage_path")
+    .eq("id", data.versionId)
+    .eq("document_id", data.documentId)
+    .maybeSingle();
+
+  if (versionError) throw versionError;
+  if (!version?.storage_path) throw new Error("Stored file not found for this document version.");
 
   // Track progress in results JSON so it doesn't fail on tables without separate stage columns
   const setStage = async (stage: string) => {
@@ -59,24 +87,18 @@ async function execute(
     const { error: documentUpdateError } = await supabaseAdmin
       .from("documents")
       .update({ status: "processing", updated_at: new Date().toISOString() })
-      .eq("id", data.documentId);
+      .eq("id", data.documentId)
+      .eq("owner_id", context.userId);
     if (documentUpdateError) throw documentUpdateError;
 
-    // 2. Fetch document metadata
-    const { data: doc } = await supabaseAdmin
-      .from("documents")
-      .select("name,doc_type,author_name,paper_title")
-      .eq("id", data.documentId)
-      .single();
-
-    // 3. Download uploaded file from private storage
+    // 2. Download only the storage object linked to the verified document version
     const { data: file, error: dlErr } = await supabaseAdmin.storage
       .from("documents")
-      .download(data.storagePath);
+      .download(version.storage_path);
     if (dlErr || !file) throw new Error(dlErr?.message ?? "Stored file could not be downloaded");
 
     const buf = await file.arrayBuffer();
-    const { text, method } = await extractText(buf, doc?.name ?? data.storagePath);
+    const { text, method } = await extractText(buf, doc.name);
 
     if (text.replace(/\s+/g, " ").trim().length < 50) {
       throw new Error(
@@ -87,9 +109,9 @@ async function execute(
     // 4. Run the multi-dimensional analysis engine
     const result = await analyzeDocument(text, {
       extraction: method,
-      docType: doc?.doc_type ?? "other",
-      title: doc?.paper_title ?? null,
-      author: doc?.author_name ?? null,
+      docType: doc.doc_type ?? "other",
+      title: doc.paper_title ?? null,
+      author: doc.author_name ?? null,
       onStage: (stage) => setStage(stage),
     });
 
@@ -308,7 +330,6 @@ export const processQueue = createServerFn({ method: "POST" })
       analysisId: next.id,
       documentId: next.document_id,
       versionId: next.version_id,
-      storagePath: version.storage_path,
     });
 
     return { started: true as const, ...res };
