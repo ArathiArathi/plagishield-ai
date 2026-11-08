@@ -70,7 +70,7 @@ function DashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Quality Score" value={stats?.qualityScore ?? 0} suffix="/100" icon={Gauge} tone="primary" />
+          <StatCard label="Writing Quality" value={stats?.qualityScore ?? 0} suffix="/100" icon={Gauge} tone="primary" />
           <StatCard label="Similarity" value={stats?.similarity ?? 0} suffix="%" icon={PercentIcon} tone="success" />
           <StatCard label="AI-style signals" value={stats?.aiDetection ?? 0} suffix="%" icon={Sparkles} tone="info" />
           <StatCard label="Grammar" value={stats?.grammar ?? 0} suffix="/100" icon={CheckCircle2} tone="success" />
@@ -99,7 +99,7 @@ function DashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Submission Trends</h3>
-              <p className="text-xs text-muted-foreground">Total submissions and flagged documents</p>
+              <p className="text-xs text-muted-foreground">Submissions and documents with higher review signals</p>
             </div>
             <Badge variant="secondary" className="font-normal">Last 7 months</Badge>
           </div>
