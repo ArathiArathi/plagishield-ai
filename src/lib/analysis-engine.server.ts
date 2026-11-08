@@ -337,7 +337,7 @@ async function europePmcCandidates(phrase: string, includeFullText = false): Pro
         `https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(item.pmcid)}/fullTextXML`,
         10000,
       );
-      const body = fullXml?.match(/<body[\\s\\S]*?<\\/body>/i)?.[0] ?? "";
+      const body = fullXml?.match(/<body[\s\S]*?<\/body>/i)?.[0] ?? "";
       const extractedBody = body ? stripXmlText(body).slice(0, 120000) : "";
       if (extractedBody.length > sourceText.length + 500) {
         sourceText = extractedBody;
