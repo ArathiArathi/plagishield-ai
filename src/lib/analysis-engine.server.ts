@@ -758,7 +758,7 @@ function chunk_slice(text: string, offset: number, length: number) {
 
 function extractReferences(text: string) {
   const lines = text.split(/\n+/).map((l) => l.trim());
-  const refIndex = lines.findIndex((l) => /^(references|bibliography|works cited)\b/i.test(l));
+  const refIndex = lines.findIndex((l) => /^(references|bibliography|works cited|literature cited|reference list)\b/i.test(l));
   const pool = refIndex >= 0 ? lines.slice(refIndex + 1) : [];
   const refs = pool
     .filter((l) => l.length > 40 && /\(?(19|20)\d{2}\)?/.test(l) && /[A-Z][a-z]+/.test(l))
@@ -773,7 +773,7 @@ function extractTitleFromRef(raw: string): string {
   if (quoted && quoted[1].length > 10) return quoted[1].trim();
 
   // APA-style references usually place the title immediately after the year.
-  const afterYear = raw.match(/\\(?(?:19|20)\\d{2}[a-z]?\\)?\\.\\s+([^.!?]{12,300})/i);
+  const afterYear = raw.match(/\(?(?:19|20)\d{2}[a-z]?\)?\.\s+([^.!?]{12,300})/i);
   if (afterYear?.[1]) return afterYear[1].trim();
 
   const parts = raw.split(/[.,]/).map((part) => part.trim()).filter((part) => part.length > 15);
