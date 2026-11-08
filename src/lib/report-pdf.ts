@@ -758,7 +758,6 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
 
   if (kind === "ai") {
     aiSection(ctx, input);
-    issuesSection(ctx, input, ["ai"]);
   }
 
   if (kind === "grammar") {
@@ -773,7 +772,6 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
   }
 
   if (kind === "full") {
-    compositionSection(ctx, input);
     similaritySection(ctx, input);
     aiSection(ctx, input);
     grammarSection(ctx, input);
