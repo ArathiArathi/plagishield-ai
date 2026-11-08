@@ -358,7 +358,7 @@ async function semanticScholarCandidates(phrase: string, fetchFullText = false):
   }).then((items) => items.filter(Boolean) as Candidate[]);
 }
 
-async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
+async function europePmcCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
   const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
@@ -369,7 +369,7 @@ async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
 
   return mapLimit(results, 2, async (item): Promise<Candidate | null> => {
     const pmcid = String(item.pmcid ?? "");
-    const fullTextXml = pmcid
+    const fullTextXml = fetchFullText && pmcid
       ? await getText(`https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(pmcid)}/fullTextXML`, 8000)
       : null;
     const fullText = fullTextXml ? xmlToPlainText(fullTextXml) : "";
@@ -451,7 +451,7 @@ async function detectPlagiarism(
     openAlexCandidates(docKeywords, true),
     crossrefCandidates(docKeywords),
     semanticScholarCandidates(docKeywords, true),
-    europePmcCandidates(docKeywords),
+    europePmcCandidates(docKeywords, true),
   ]);
   const docPool = [...docWiki, ...docAlex, ...docCross, ...docSemantic, ...docEuropePmc];
   queried += docPool.length;
