@@ -310,7 +310,7 @@ function compositionSection(ctx: Ctx, input: ReportInput) {
   ], slices.map((slice) => [slice.category, `${Number(slice.percent ?? 0).toFixed(1)}%`, Number(slice.words ?? 0).toLocaleString()]));
   const excluded = Number(input.results.plagiarism?.excluded_words ?? 0);
   const eligible = Number(input.results.plagiarism?.eligible_words ?? 0);
-  paragraph(ctx, `${eligible.toLocaleString()} words were included in the comparison. ${excluded.toLocaleString()} words in clearly quoted passages or the detected reference section were excluded from the score.`, { size: 7.5, color: MUTED });
+  paragraph(ctx, `${eligible.toLocaleString()} words were included in the comparison. ${excluded.toLocaleString()} words in clearly quoted passages, inline citation markers or the detected reference section were excluded from the score.`, { size: 7.5, color: MUTED });
 }
 
 function legendRow(ctx: Ctx, categories: string[]) {
