@@ -3,7 +3,6 @@ import { AlertTriangle, Bot, Download, FileBarChart, FileSearch, FileStack, Quot
 import { toast } from "sonner";
 import { downloadReport, type ReportInput, type ReportKind } from "@/lib/report-pdf";
 
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { HighlightedDocument } from "@/components/analysis/HighlightedDocument";
-import { CompositionChart } from "@/components/analysis/CompositionChart";
 import { IssueList } from "@/components/analysis/IssueList";
 import type { CompositionSlice, Highlight, IssueItem } from "@/components/analysis/analysis-shared";
 
@@ -36,10 +34,13 @@ export const Route = createFileRoute("/reports")({
 
 type Results = {
   text_excerpt?: string;
+  document_text?: string;
   meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; sources_queried?: number; checked_at?: string };
   plagiarism?: {
     score?: number;
     matched_words?: number;
+    eligible_words?: number;
+    excluded_words?: number;
     matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; matched_snippet?: string; type?: string; provider?: string; matched_words?: number; match_count?: number; domain?: string }>;
     highlights?: Highlight[];
     source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
@@ -96,9 +97,6 @@ function ReportsPage() {
   const grammarIssues = results.grammar?.issues ?? [];
   const citationIssues = results.citations?.issues ?? [];
 
-  const distribution = (data?.similarityDistribution ?? []);
-
-  const composition = results.composition ?? [];
   const engineIssues = results.issues ?? [];
   const allHighlights: Highlight[] = [
     ...(results.plagiarism?.highlights ?? []),
@@ -111,7 +109,7 @@ function ReportsPage() {
     fileType: selected.file_type,
     version: selected.latest_version,
     analysisId: analysis.id,
-    generatedAt: new Date(analysis.created_at).toLocaleString(),
+    generatedAt: results.meta?.checked_at ? new Date(results.meta.checked_at).toLocaleString() : new Date(analysis.updated_at ?? analysis.created_at).toLocaleString(),
     docType: selected.doc_type,
     authorName: selected.author_name,
     paperTitle: selected.paper_title,
@@ -122,9 +120,9 @@ function ReportsPage() {
 
   const bundle: Array<{ kind: ReportKind; title: string; desc: string; icon: typeof FileSearch; metric: string }> = [
     { kind: "similarity", title: "Similarity Report", desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`, icon: FileSearch, metric: `${similarity}% similarity` },
-    { kind: "ai", title: "Writing-pattern Report", desc: "Estimated writing-pattern signals, detector notes and passages for a closer human review.", icon: Bot, metric: `${ai}% signal` },
-    { kind: "grammar", title: "Grammar & Language Report", desc: `Readability score with categorised issue breakdown (${grammarIssues.length} issue${grammarIssues.length === 1 ? "" : "s"}).`, icon: SpellCheck, metric: `${grammar}/100` },
-    { kind: "citation", title: "Citation Verification Report", desc: `Reference verification status and formatting issues (${citationIssues.length} issue${citationIssues.length === 1 ? "" : "s"}).`, icon: Quote, metric: `${citation}/100` },
+    { kind: "ai", title: "Writing-pattern Review", desc: "Experimental style signals for cautious human review; not an authorship verdict.", icon: Bot, metric: `${results.ai_detection?.highlights?.length ?? 0} passages` },
+    { kind: "grammar", title: "Grammar & Language Report", desc: `Corrections returned by the enabled grammar checker (${grammarIssues.length} issues).`, icon: SpellCheck, metric: `${grammarIssues.length} issues` },
+    { kind: "citation", title: "Reference Lookup Report", desc: `Reference-title lookups and warnings from connected scholarly indexes (${citationIssues.length}).`, icon: Quote, metric: `${citationIssues.length} warnings` },
     { kind: "full", title: "Comprehensive Report", desc: "All four modules combined into a single institutional integrity dossier.", icon: FileStack, metric: "All modules" },
   ];
 
@@ -185,7 +183,7 @@ function ReportsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-foreground">Report files</h3>
-            <p className="text-sm text-muted-foreground">Each module is exported as its own signed-off PDF file.</p>
+            <p className="text-sm text-muted-foreground">Each module is exported from the saved analysis evidence. No sample metrics are added.</p>
           </div>
           <Badge variant="secondary">{bundle.length} files available</Badge>
         </div>
@@ -222,32 +220,24 @@ function ReportsPage() {
         </div>
 
         <div className="space-y-8 p-6">
-          <Section title="Executive Summary">
+          <Section title="Analysis Summary">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              This document shows {similarity}% observed overlap against retrieved sources and an {ai}% AI-style
-              signal score. The signal is not a probability of authorship.
-              Writing quality scores {grammar}/100 and citation completeness {citation}/100.
-              {grammarIssues.length > 0 ? ` ${grammarIssues.length} grammar issue(s)` : " No grammar issues"} and
-              {citationIssues.length > 0 ? ` ${citationIssues.length} citation issue(s)` : " no citation issues"} were detected.
+              The analysis found {matches.length} source record(s) with exact phrase matches, covering {Number(results.plagiarism?.matched_words ?? 0).toLocaleString()} words in the compared text. The score reflects only the sources retrieved for this run; it is not a plagiarism verdict.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <KPI label="Similarity" value={`${similarity}%`} />
-              <KPI label="AI-style signal" value={`${ai}%`} />
-              <KPI label="Grammar" value={String(grammar)} />
-              <KPI label="Citation" value={String(citation)} />
+              <KPI label="Observed similarity" value={`${similarity}%`} />
+              <KPI label="Matched words" value={Number(results.plagiarism?.matched_words ?? 0).toLocaleString()} />
+              <KPI label="Compared words" value={Number(results.plagiarism?.eligible_words ?? results.meta?.words ?? 0).toLocaleString()} />
+              <KPI label="Matched sources" value={String(matches.length)} />
             </div>
           </Section>
 
           <Separator />
 
-          <Section title="Content Composition">
-            <CompositionChart data={composition} />
-          </Section>
-
           <Separator />
 
           <Section title="Highlighted Submission Text">
-            <HighlightedDocument text={results.text_excerpt ?? ""} highlights={allHighlights} />
+            <HighlightedDocument text={results.document_text || results.text_excerpt || ""} highlights={allHighlights} />
           </Section>
 
           <Separator />
@@ -280,7 +270,7 @@ function ReportsPage() {
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
               Providers: {(results.plagiarism?.source_coverage?.providers ?? []).join(", ") || "Not recorded"}.
-              Quotes and bibliography are currently included in the comparison.
+              Excluded words: {Number(results.plagiarism?.excluded_words ?? 0).toLocaleString()} (clearly quoted passages and detected reference section).
             </p>
           </Section>
 
@@ -307,7 +297,7 @@ function ReportsPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{Number(m.similarity ?? 0).toFixed(1)}% of document</Badge>
+                        <Badge variant="secondary">{Number(m.similarity ?? 0).toFixed(1)}% of compared text</Badge>
                         <span className="text-xs text-muted-foreground">{Number(m.matched_words ?? 0)} words</span>
                       </div>
                     </div>
@@ -330,30 +320,16 @@ function ReportsPage() {
                 ))}
               </ul>
             )}
-            <div className="mt-5 h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={distribution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="range" fontSize={12} stroke="var(--color-muted-foreground)" />
-                  <YAxis allowDecimals={false} fontSize={12} stroke="var(--color-muted-foreground)" />
-                  <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="count" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
           </Section>
 
           <Separator />
 
           <Section title="Recommendations">
             <ul className="space-y-2">
-              {buildRecommendations({ similarity, ai, grammar, citation, grammarIssues, citationIssues }).map((r, i) => (
+              {buildRecommendations({ matchCount: matches.length, grammarCount: grammarIssues.length, citationCount: citationIssues.length, aiPassages: results.ai_detection?.highlights?.length ?? 0 }).map((r, i) => (
                 <li key={i} className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{r.action}</p>
-                    <p className="text-xs text-muted-foreground">{r.group} · {r.priority} priority</p>
-                  </div>
-                  <Badge variant="secondary">{r.impact}</Badge>
+                  <div><p className="text-sm font-medium text-foreground">{r.action}</p><p className="text-xs text-muted-foreground">{r.group}</p></div>
+                  <Badge variant="secondary">Review</Badge>
                 </li>
               ))}
             </ul>
@@ -364,19 +340,16 @@ function ReportsPage() {
   );
 }
 
-function buildRecommendations({
-  similarity, ai, grammar, citation, grammarIssues, citationIssues,
-}: {
-  similarity: number; ai: number; grammar: number; citation: number;
-  grammarIssues: Array<{ type?: string }>; citationIssues: string[];
+function buildRecommendations({ matchCount, grammarCount, citationCount, aiPassages }: {
+  matchCount: number; grammarCount: number; citationCount: number; aiPassages: number;
 }) {
-  const recs: Array<{ group: string; action: string; priority: string; impact: string }> = [];
-  if (similarity >= 25) recs.push({ group: "Originality", action: "Paraphrase or quote the matched passages and cite their sources.", priority: "high", impact: `−${Math.min(similarity, 20)}% similarity` });
-  if (ai >= 50) recs.push({ group: "Writing-pattern review", action: "Read passages with stronger automated writing-pattern signals and check them against your own drafting process.", priority: "high", impact: "Human review recommended" });
-  if (grammarIssues.length > 0) recs.push({ group: "Grammar", action: `Resolve ${grammarIssues.length} flagged grammar issue(s).`, priority: grammar < 70 ? "high" : "medium", impact: "+ readability" });
-  if (citationIssues.length > 0) recs.push({ group: "Citations", action: `Fix ${citationIssues.length} citation issue(s) and verify every reference.`, priority: citation < 70 ? "high" : "medium", impact: `+${Math.max(100 - citation, 5)} citation score` });
-  if (recs.length === 0) recs.push({ group: "Overall", action: "No action required — this document meets integrity thresholds.", priority: "low", impact: "ready to submit" });
-  return recs;
+  const recommendations: Array<{ group: string; action: string }> = [];
+  if (matchCount > 0) recommendations.push({ group: "Text similarity", action: `Review all ${matchCount} matched source record(s) and check each highlighted passage against its source.` });
+  if (aiPassages > 0) recommendations.push({ group: "Writing patterns", action: "Review experimental writing-style flags manually; they are not evidence of authorship." });
+  if (grammarCount > 0) recommendations.push({ group: "Grammar", action: `Review the ${grammarCount} language issue(s) returned by the checker.` });
+  if (citationCount > 0) recommendations.push({ group: "References", action: `Check the ${citationCount} reference warning(s) against the original publications.` });
+  if (recommendations.length === 0) recommendations.push({ group: "Review", action: "No actionable findings were returned. This is not certification of originality." });
+  return recommendations;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
