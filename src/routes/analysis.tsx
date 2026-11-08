@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  Activity, AlertTriangle, BookOpen, Check, Cpu, Download, FileDown, FileText, GraduationCap, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
+  Activity, AlertTriangle, BookOpen, Check, Cpu, Download, FileDown, FileText, Highlighter, Lightbulb, ListChecks, Loader2, Quote, Sparkles,
 } from "lucide-react";
 import { downloadReport, type ReportInput } from "@/lib/report-pdf";
 
@@ -52,7 +52,6 @@ type Results = {
   stage?: string;
   stage_pct?: number;
   text_excerpt?: string;
-  document_text?: string;
   document_text?: string;
   meta?: { engine_version?: string; extraction?: string; words?: number; checked_at?: string };
   plagiarism?: {
@@ -498,7 +497,7 @@ function AnalysisPage() {
                 </Badge>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Analyzing submitted document directly through academic search indices, forensic stylometry algorithms, and syntax validators.
+                Searching public scholarly indexes, checking exact passage overlap, and running separate language and reference checks.
               </p>
             </div>
 
@@ -520,7 +519,7 @@ function AnalysisPage() {
                     <span className="text-[11px] text-muted-foreground">{stageIdx > 0 ? "Complete" : stageIdx === 0 ? "Active" : "Pending"}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Extracting clean text stream, stripping formatting artifacts, and segmenting prose into forensic sentence tokens.
+                    Extracting text and preserving its character offsets so matched passages can be highlighted in the report.
                   </p>
                 </div>
               </div>
