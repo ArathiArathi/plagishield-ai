@@ -315,8 +315,8 @@ function AnalysisPage() {
                           : "Ready to analyze"}
                   </p>
                   {status === "processing" && (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px] animate-pulse">
-                      Live Real-Time
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                      Processing
                     </Badge>
                   )}
                 </div>
@@ -344,11 +344,9 @@ function AnalysisPage() {
           </div>
           {status === "processing" && (
             <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span className="capitalize">{currentStage} stage</span>
-                <span className="font-semibold text-foreground">{results.stage_pct ?? (rerunning ? 25 : 45)}%</span>
+              <div className="text-[11px] text-muted-foreground">
+                <span className="capitalize">{currentStage} stage in progress</span>
               </div>
-              <Progress value={results.stage_pct ?? (rerunning ? 25 : 45)} className="h-2" />
             </div>
           )}
         </Card>
@@ -419,7 +417,7 @@ function AnalysisPage() {
               <ScoreBlock label="Overall similarity" value={similarity} tone={tone(similarity, true)} sub={`${matches.length} source matches`} />
               {matchChart.length > 0 && (
                 <Card className="bg-muted/30 p-4">
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Match strength by source</p>
+                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Eligible document words matched by source</p>
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={matchChart}>
@@ -447,7 +445,7 @@ function AnalysisPage() {
                         <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{s.source ?? "Unknown source"}</p>
                         <div className="text-right">
                           <p className="text-xs text-muted-foreground">Match</p>
-                          <p className="text-sm font-semibold text-foreground">{Math.round(Number(s.similarity ?? 0))}%</p>
+                          <p className="text-sm font-semibold text-foreground">{Number(s.similarity ?? 0).toFixed(1)}%</p>
                         </div>
                       </div>
                       {s.snippet && <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs text-foreground/90 break-words [overflow-wrap:anywhere]">{s.snippet}</p>}
@@ -658,7 +656,7 @@ function AnalysisPage() {
               <div className="flex justify-between items-center py-2">
                 <span className="text-muted-foreground">Audit Trail</span>
                 <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">
-                  Real-time Verified
+                  Coverage shown in report
                 </Badge>
               </div>
             </div>
