@@ -126,6 +126,35 @@ async function getJson(url: string, timeoutMs = 9000): Promise<any | null> {
   }
 }
 
+async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/xml,text/plain" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function stripXmlText(xml: string): string {
+  return xml
+    .replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/\\s+/g, " ")
+    .trim();
+}
+
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length) as R[];
   let cursor = 0;
@@ -283,23 +312,40 @@ async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
     }));
 }
 
-async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
+async function europePmcCandidates(phrase: string, includeFullText = false): Promise<Candidate[]> {
   const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=3&resultType=core`,
     6500,
   );
-  const results: any[] = data?.resultList?.result ?? [];
-  return results
-    .filter((item) => item.abstractText && item.abstractText.length > 80)
-    .map((item) => ({
+  const results: any[] = (data?.resultList?.result ?? [])
+    .filter((item: any) => item.abstractText && item.abstractText.length > 80)
+    .slice(0, 3);
+
+  return mapLimit(results, includeFullText ? 2 : 3, async (item) => {
+    let sourceText = [item.title, item.abstractText].filter(Boolean).join(". ");
+    let kind = "Scholarly publication (abstract)";
+    if (includeFullText && item.pmcid) {
+      const fullXml = await getText(
+        `https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(item.pmcid)}/fullTextXML`,
+        10000,
+      );
+      const body = fullXml?.match(/<body[\\s\\S]*?<\\/body>/i)?.[0] ?? "";
+      const extractedBody = body ? stripXmlText(body).slice(0, 120000) : "";
+      if (extractedBody.length > sourceText.length + 500) {
+        sourceText = extractedBody;
+        kind = "Open-access full text (Europe PMC)";
+      }
+    }
+    return {
       title: `${item.title ?? "Biomedical publication"}${item.pubYear ? ` (${item.pubYear})` : ""}`,
-      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
-      text: [item.title, item.abstractText].filter(Boolean).join(". "),
-      kind: "Scholarly publication (abstract)",
+      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : item.pmcid ? `https://europepmc.org/articles/${item.pmcid}` : undefined,
+      text: sourceText,
+      kind,
       provider: "Europe PMC REST API",
-    }));
+    };
+  });
 }
 
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
@@ -394,7 +440,7 @@ async function detectPlagiarism(
     openAlexCandidates(docKeywords),
     crossrefCandidates(docKeywords),
     semanticScholarCandidates(docKeywords),
-    europePmcCandidates(docKeywords),
+    europePmcCandidates(docKeywords, true),
   ]);
   const docPool = [...docWiki, ...docAlex, ...docCross, ...docSemantic, ...docEuropePmc];
   queried += docPool.length;
