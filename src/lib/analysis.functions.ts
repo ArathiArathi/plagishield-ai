@@ -102,7 +102,7 @@ async function execute(
     const normalizedText = text.replace(/\s+/g, " ").trim();
     const extractedWords = normalizedText.match(/[\p{L}\p{N}]+/gu) ?? [];
     const visibleCharacters = normalizedText.replace(/\s/g, "");
-    const readableCharacters = (visibleCharacters.match(/[\p{L}\p{N}.,;:!?'"()\-]/gu) ?? []).length;
+    const readableCharacters = (visibleCharacters.match(/[\p{L}\p{N}.,;:!?'"()-]/gu) ?? []).length;
     const readableRatio = visibleCharacters.length > 0 ? readableCharacters / visibleCharacters.length : 0;
     const replacementCharacters = (normalizedText.match(/�/g) ?? []).length;
 
