@@ -1183,15 +1183,15 @@ export async function analyzeDocument(
     Math.max(0, totalWords - plagWords - quotedWords - aiWords),
     grammar.issues.length * 6,
   );
-  const humanWords = Math.max(0, totalWords - plagWords - quotedWords - aiWords - grammarWords);
+  const unmatchedWords = Math.max(0, totalWords - plagWords - quotedWords - aiWords - grammarWords);
   const pct = (w: number) => Number(((w / totalWords) * 100).toFixed(1));
 
   const composition: CompositionSlice[] = [
     { category: "Plagiarised / matched", percent: pct(plagWords), words: plagWords },
-    { category: "AI generated", percent: pct(aiWords), words: aiWords },
+    { category: "AI-style indicators (estimated)", percent: pct(aiWords), words: aiWords },
     { category: "Quoted & attributed", percent: pct(quotedWords), words: quotedWords },
     { category: "Language issues", percent: pct(grammarWords), words: grammarWords },
-    { category: "Original human writing", percent: pct(humanWords), words: humanWords },
+    { category: "Unmatched in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
   ];
 
   await stage("rendering");
@@ -1248,6 +1248,7 @@ export async function analyzeDocument(
       matched_words: plag.matched_words,
       matches: plag.matches,
       highlights: plag.highlights,
+      source_coverage: plag.source_coverage,
     },
     ai_detection: {
       score: aiScore,
