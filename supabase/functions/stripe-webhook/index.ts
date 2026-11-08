@@ -76,14 +76,14 @@ async function verifyStripeSignature(
 }
 
 function getPlanFromPrice(priceId: string) {
-  const configuredPricePlans = [
-    ["pro", Deno.env.get("STRIPE_PRICE_PRO_MONTHLY"), Deno.env.get("STRIPE_PRICE_PRO_ANNUAL")],
-    ["plus", Deno.env.get("STRIPE_PRICE_PLUS_MONTHLY"), Deno.env.get("STRIPE_PRICE_PLUS_ANNUAL")],
-    ["premium", Deno.env.get("STRIPE_PRICE_PREMIUM_MONTHLY"), Deno.env.get("STRIPE_PRICE_PREMIUM_ANNUAL")],
-  ] as const;
+  const configuredPricePlans: Record<string, string[]> = {
+    pro: ["price_1UZTJCEP3hMKlBIwIIilnrzC", "price_1UZTJEEP3hMKlBIwn5ARqR7j"],
+    plus: ["price_1UZTJGEP3hMKlBIwtzHPMqfs", "price_1UZTJIEP3hMKlBIwEtH6ofUj"],
+    premium: ["price_1UZTJKEP3hMKlBIw3EazNMVF", "price_1UZTJLEP3hMKlBIwbtyQdVv2"],
+  };
 
-  return configuredPricePlans.find(([, monthly, annual]) =>
-    priceId === monthly || priceId === annual
+  return Object.entries(configuredPricePlans).find(([, priceIds]) =>
+    priceIds.includes(priceId)
   )?.[0] ?? null;
 }
 
