@@ -28,6 +28,7 @@ export type ReportResults = {
   text_excerpt?: string;
   meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; characters?: number; sources_queried?: number; checked_at?: string };
   plagiarism?: {
+    matched_words?: number;
     matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; type?: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
     highlights?: PdfHighlight[];
     source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
