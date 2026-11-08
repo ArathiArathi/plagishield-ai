@@ -8,7 +8,6 @@ const InputSchema = z.object({
   analysisId: z.string().uuid(),
   documentId: z.string().uuid(),
   versionId: z.string().uuid(),
-  storagePath: z.string().min(1).optional(),
 });
 
 type Ctx = { supabase: any; userId: string };
