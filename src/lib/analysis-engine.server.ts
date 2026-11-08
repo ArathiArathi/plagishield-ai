@@ -55,6 +55,8 @@ export type AnalysisResults = {
     words: number;
     sentences: number;
     characters: number;
+    truncated: boolean;
+    character_limit: number;
     sources_queried: number;
     checked_at: string;
   };
