@@ -7,7 +7,7 @@ import { extractText } from "@/lib/text-extract.server";
  *
  * Real pipeline — no mock scores:
  *  1. Sentence segmentation + fingerprinting of the submitted text.
- *  2. Source retrieval over open scholarly indexes and the web, followed by
+ *  2. Source retrieval over connected public scholarly indexes, followed by
  *     offset-preserving exact phrase matching with overlapping-source evidence.
  *  3. Stylometric AI-detection classifier (logistic regression over burstiness,
  *     lexical diversity, function-word and boilerplate features) blended with an
