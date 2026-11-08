@@ -84,3 +84,9 @@ drop trigger if exists enforce_document_allowance_before_insert on public.docume
 create trigger enforce_document_allowance_before_insert
   before insert on public.documents
   for each row execute function public.enforce_document_allowance();
+
+-- The trigger invokes this function internally. It is not a public RPC endpoint.
+revoke execute on function public.enforce_document_allowance() from public, anon, authenticated;
+
+create index if not exists documents_owner_created_at_idx
+  on public.documents (owner_id, created_at desc);
