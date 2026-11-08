@@ -5,6 +5,7 @@ import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { toast } from "sonner";
 
 export type SubscriptionPlanId = "free" | "pro" | "plus" | "premium";
+export type BillingCycle = "monthly" | "annual";
 
 export type SubscriptionPlan = {
   id: SubscriptionPlanId;
@@ -17,127 +18,141 @@ export type SubscriptionPlan = {
   features: string[];
 };
 
+const commonFeatures = [
+  "Evidence-backed text similarity review",
+  "AI-style writing signals with clear limitations",
+  "Grammar and citation review",
+  "Downloadable review reports",
+];
+
 export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanId, SubscriptionPlan> = {
   free: {
     id: "free",
-    name: "Free Plan",
+    name: "Free",
     docLimit: 10,
     priceMonthly: 0,
     priceAnnual: 0,
-    features: [
-      "10 document analyses included",
-      "Plagiarism & web source matching",
-      "AI stylometric content detection",
-      "Grammar & language diagnostics",
-      "Standard queue processing",
-      "Standard PDF report export",
-    ],
+    features: [...commonFeatures, "10 document allowance"],
   },
   pro: {
     id: "pro",
-    name: "Pro Plan",
+    name: "Pro",
     docLimit: 15,
     priceMonthly: 14,
     priceAnnual: 120,
-    badge: "Popular for Students",
+    badge: "For regular use",
     popular: true,
-    features: [
-      "15 document analyses included",
-      "Priority analysis queue",
-      "Crossref & OpenAlex deep retrieval",
-      "Sentence-level AI probability breakdown",
-      "Picky grammar & style suggestions",
-      "Visual chart exports in PDF",
-    ],
+    features: [...commonFeatures, "15 document allowance"],
   },
   plus: {
     id: "plus",
-    name: "Plus Plan",
+    name: "Plus",
     docLimit: 25,
     priceMonthly: 29,
     priceAnnual: 240,
-    badge: "For Faculty & Researchers",
-    features: [
-      "25 document analyses included",
-      "Instant parallel queue processing",
-      "Crossref DOI bibliographic verification",
-      "Full LLM forensic reasoning breakdown",
-      "Multi-module institutional dossier exports",
-      "Priority customer support",
-    ],
+    badge: "For research projects",
+    features: [...commonFeatures, "25 document allowance"],
   },
   premium: {
     id: "premium",
-    name: "Premium Plan",
+    name: "Premium",
     docLimit: 35,
     priceMonthly: 49,
     priceAnnual: 420,
-    badge: "Institutional Grade",
-    features: [
-      "35 document analyses included",
-      "Unlimited version comparisons",
-      "Academic IEEE / ACM formatted PDF reports",
-      "Dedicated worker queue with zero latency",
-      "Team & departmental collaboration",
-      "Dedicated account manager & 24/7 SLA",
-    ],
+    badge: "Highest allowance",
+    features: [...commonFeatures, "35 document allowance"],
   },
 };
 
-const PLAN_STORAGE_KEY = "plagishield_user_plan";
+type SubscriptionRecord = {
+  plan_id: SubscriptionPlanId;
+  status: string;
+  stripe_customer_id: string | null;
+  current_period_end: string | null;
+};
+
+const ACTIVE_STATUSES = new Set(["active", "trialing"]);
 
 export function useSubscription() {
   const { user } = useAuth();
   const { data: wsData } = useWorkspaceData();
+  const [record, setRecord] = useState<SubscriptionRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [planId, setPlanId] = useState<SubscriptionPlanId>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(PLAN_STORAGE_KEY) as SubscriptionPlanId | null;
-      if (stored && SUBSCRIPTION_PLANS[stored]) return stored;
+  const refreshSubscription = useCallback(async () => {
+    if (!user) {
+      setRecord(null);
+      setIsLoading(false);
+      return;
     }
-    const metaPlan = user?.user_metadata?.plan as SubscriptionPlanId | undefined;
-    return metaPlan && SUBSCRIPTION_PLANS[metaPlan] ? metaPlan : "free";
-  });
 
-  // Sync when user changes
-  useEffect(() => {
-    if (user?.user_metadata?.plan) {
-      const p = user.user_metadata.plan as SubscriptionPlanId;
-      if (SUBSCRIPTION_PLANS[p]) {
-        setPlanId(p);
-        localStorage.setItem(PLAN_STORAGE_KEY, p);
-      }
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("plan_id,status,stripe_customer_id,current_period_end")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Unable to load subscription:", error);
+      toast.error("Your billing status could not be loaded. Please refresh the page.");
+      setRecord(null);
+    } else {
+      setRecord(data as SubscriptionRecord | null);
     }
+    setIsLoading(false);
   }, [user]);
 
-  const plan = SUBSCRIPTION_PLANS[planId] ?? SUBSCRIPTION_PLANS.free;
+  useEffect(() => {
+    void refreshSubscription();
+  }, [refreshSubscription]);
+
+  const planId: SubscriptionPlanId =
+    record && ACTIVE_STATUSES.has(record.status) && SUBSCRIPTION_PLANS[record.plan_id]
+      ? record.plan_id
+      : "free";
+  const plan = SUBSCRIPTION_PLANS[planId];
   const docsUsed = wsData?.summaryStats?.totalDocuments ?? (wsData?.documents ?? []).length;
   const docLimit = plan.docLimit;
   const isLimitReached = docsUsed >= docLimit;
   const remainingDocs = Math.max(0, docLimit - docsUsed);
   const usagePercent = Math.min(100, Math.round((docsUsed / docLimit) * 100));
+  const hasBillingCustomer = Boolean(record?.stripe_customer_id);
 
-  const changePlan = useCallback(
-    async (newPlan: SubscriptionPlanId) => {
-      if (!SUBSCRIPTION_PLANS[newPlan]) return;
-      try {
-        setPlanId(newPlan);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(PLAN_STORAGE_KEY, newPlan);
-        }
-        if (user) {
-          await supabase.auth.updateUser({
-            data: { plan: newPlan },
-          });
-        }
-        toast.success(`Successfully switched to ${SUBSCRIPTION_PLANS[newPlan].name}! Limit updated to ${SUBSCRIPTION_PLANS[newPlan].docLimit} documents.`);
-      } catch (err) {
-        console.error("Failed to update plan:", err);
-        toast.error("Could not update plan. Please try again.");
-      }
-    },
-    [user],
-  );
+  const openBillingPortal = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("create-customer-portal", { body: {} });
+      if (error) throw error;
+      if (!data?.url) throw new Error("The billing portal did not return a link.");
+      window.location.assign(data.url as string);
+      return true;
+    } catch (error) {
+      console.error("Unable to open billing portal:", error);
+      toast.error(error instanceof Error ? error.message : "Unable to open billing settings.");
+      return false;
+    }
+  }, []);
+
+  const changePlan = useCallback(async (newPlan: SubscriptionPlanId, billingCycle: BillingCycle = "monthly") => {
+    if (!SUBSCRIPTION_PLANS[newPlan]) return false;
+    if (newPlan === "free" || (record && ACTIVE_STATUSES.has(record.status))) {
+      return openBillingPortal();
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: { planId: newPlan, billingCycle },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("Checkout is not configured yet. Please contact the workspace administrator.");
+      window.location.assign(data.url as string);
+      return true;
+    } catch (error) {
+      console.error("Unable to start checkout:", error);
+      toast.error(error instanceof Error ? error.message : "Unable to start checkout. Please try again.");
+      return false;
+    }
+  }, [openBillingPortal, record]);
 
   return {
     planId,
@@ -147,6 +162,12 @@ export function useSubscription() {
     isLimitReached,
     remainingDocs,
     usagePercent,
+    isLoading,
+    subscriptionStatus: record?.status ?? "inactive",
+    currentPeriodEnd: record?.current_period_end ?? null,
+    hasBillingCustomer,
+    refreshSubscription,
     changePlan,
+    openBillingPortal,
   };
 }
