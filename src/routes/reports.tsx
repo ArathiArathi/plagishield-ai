@@ -36,7 +36,14 @@ export const Route = createFileRoute("/reports")({
 
 type Results = {
   text_excerpt?: string;
-  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
+  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; sources_queried?: number; checked_at?: string };
+  plagiarism?: {
+    score?: number;
+    matched_words?: number;
+    matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; matched_snippet?: string; type?: string; provider?: string; matched_words?: number; match_count?: number; domain?: string }>;
+    highlights?: Highlight[];
+    source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
+  };
   ai_detection?: { confidence?: string; reasoning?: string; highlights?: Highlight[] };
   grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
@@ -253,6 +260,32 @@ function ReportsPage() {
 
 
 
+          <Section title="Source Search Coverage">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border border-border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Retrieved source records</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">{results.plagiarism?.source_coverage?.sources_retrieved ?? matches.length}</p>
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Matched words</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">{Number(results.plagiarism?.matched_words ?? 0).toLocaleString()}</p>
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 p-3">
+                <p className="text-xs text-muted-foreground">Matching method</p>
+                <p className="mt-1 text-sm font-medium text-foreground">Exact phrase evidence</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              {results.plagiarism?.source_coverage?.limitation ?? "Only the source records retrieved for this analysis were compared. This is not an exhaustive web, journal, or student-paper repository search."}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Providers: {(results.plagiarism?.source_coverage?.providers ?? []).join(", ") || "Not recorded"}.
+              Quotes and bibliography are currently included in the comparison.
+            </p>
+          </Section>
+
+          <Separator />
+
           <Section title="Similarity Analysis">
             {matches.length === 0 ? (
               <p className="text-sm text-muted-foreground">No source matches were recorded for this document.</p>
@@ -260,11 +293,39 @@ function ReportsPage() {
               <ul className="space-y-2">
                 {matches.map((m, i) => (
                   <li key={i} className="rounded-md border border-border p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-foreground">{m.source ?? "Unknown source"}</p>
-                      <Badge variant="secondary">{Math.round(Number(m.similarity ?? 0))}%</Badge>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        {m.url ? (
+                          <a href={m.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">
+                            {m.source ?? "Unknown source"}
+                          </a>
+                        ) : (
+                          <p className="text-sm font-medium text-foreground">{m.source ?? "Unknown source"}</p>
+                        )}
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {[m.domain, m.type, m.provider].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{Number(m.similarity ?? 0).toFixed(1)}% of document</Badge>
+                        <span className="text-xs text-muted-foreground">{Number(m.matched_words ?? 0)} words</span>
+                      </div>
                     </div>
-                    {m.snippet && <p className="mt-1 text-xs text-muted-foreground">{m.snippet}</p>}
+                    {m.snippet && (
+                      <div className="mt-3 rounded-md bg-muted/40 p-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Submission passage</p>
+                        <p className="mt-1 text-xs leading-5 text-foreground">{m.snippet}</p>
+                      </div>
+                    )}
+                    {m.matched_snippet && (
+                      <div className="mt-2 rounded-md bg-primary/5 p-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Matched source evidence</p>
+                        <p className="mt-1 text-xs leading-5 text-foreground">{m.matched_snippet}</p>
+                      </div>
+                    )}
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      {Number(m.match_count ?? 0)} exact passage match(es) · source overlap may overlap with other sources
+                    </p>
                   </li>
                 ))}
               </ul>

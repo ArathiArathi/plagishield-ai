@@ -34,7 +34,7 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
   plagiarism: {
     chip: "border-destructive/30 bg-destructive/15 text-destructive",
     mark: "bg-destructive/20 text-foreground underline decoration-destructive decoration-2",
-    label: "Plagiarism",
+    label: "Text similarity",
   },
   ai: {
     chip: "border-warning/30 bg-warning/20 text-warning",
@@ -56,9 +56,11 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
 export const COMPOSITION_COLOR: Record<string, string> = {
   "Plagiarised / matched": "var(--color-destructive)",
   "AI generated": "var(--color-warning)",
+  "AI-style indicators (estimated)": "var(--color-warning)",
   "Quoted & attributed": "var(--color-info)",
   "Language issues": "var(--color-primary)",
   "Original human writing": "var(--color-success)",
+  "Unmatched in retrieved sources": "var(--color-success)",
 };
 
 export type Segment = { text: string; highlight?: Highlight };

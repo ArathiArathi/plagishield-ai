@@ -26,7 +26,13 @@ export type PdfIssue = {
 
 export type ReportResults = {
   text_excerpt?: string;
-  plagiarism?: { matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: PdfHighlight[] };
+  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; characters?: number; sources_queried?: number; checked_at?: string };
+  plagiarism?: {
+    matched_words?: number;
+    matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; type?: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
+    highlights?: PdfHighlight[];
+    source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
+  };
   ai_detection?: { confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
   grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
   citations?: { total?: number; verified?: number; issues?: string[] };
@@ -85,9 +91,11 @@ export function sanitizePdfText(str: unknown): string {
 }
 
 function toneFor(kind: ReportKind, value: number): [number, number, number] {
-  const inverted = kind === "similarity" || kind === "ai";
-  const good = inverted ? value <= 15 : value >= 80;
-  const mid = inverted ? value <= 35 : value >= 60;
+  // Similarity and AI-style indicators have no universal pass/fail threshold.
+  // Keep their visual treatment neutral instead of assigning a misleading grade.
+  if (kind === "similarity" || kind === "ai") return ACCENT;
+  const good = value >= 80;
+  const mid = value >= 60;
   return good ? OK : mid ? WARN : BAD;
 }
 
@@ -108,7 +116,7 @@ function header(ctx: Ctx) {
   doc.text("PlagiShield AI", M + 12.5, 12);
   doc.setFont("helvetica", "normal").setFontSize(8);
   doc.setTextColor(200, 214, 235);
-  doc.text("Academic Integrity & Forensic Audit Report", M + 12.5, 17.5);
+  doc.text("Document Similarity & Writing Review", M + 12.5, 17.5);
 
   doc.setFont("helvetica", "bold").setFontSize(10);
   doc.setTextColor(255, 255, 255);
@@ -355,12 +363,15 @@ function documentBlock(ctx: Ctx, input: ReportInput) {
   const refId = String(input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
   const rows: Array<[string, string]> = [
     ["Document filename", docName],
-    ["Paper Title", input.paperTitle || docName.replace(/\.[a-z0-9]+$/i, "")],
-    ["Primary Author(s)", input.authorName || "Academic Contributor"],
-    ["Affiliation / Submission", input.docType ? titleCase(input.docType) : "Academic Research Submission"],
-    ["Format & Version", `${String(input.fileType || "PDF").toUpperCase()} · v${input.version || 1}`],
-    ["Analysis Reference ID", refId],
-    ["Audit Generated At", input.generatedAt || new Date().toLocaleString()],
+    ["Paper title", input.paperTitle || docName.replace(/\.[a-z0-9]+$/i, "")],
+    ["Author", input.authorName || "Author not provided"],
+    ["Submission type", input.docType ? titleCase(input.docType) : "Not provided"],
+    ["Format & version", `${String(input.fileType || "PDF").toUpperCase()} · v${input.version || 1}`],
+    ["Analysis reference ID", refId],
+    ["Analysis engine", input.results.meta?.engine_version || "Not recorded"],
+    ["Word count", Number(input.results.meta?.words ?? 0).toLocaleString()],
+    ["Extracted text", input.results.meta?.extraction || "Not recorded"],
+    ["Analysis generated", input.generatedAt || new Date().toLocaleString()],
   ];
   metaTable(ctx, rows);
 }
@@ -406,16 +417,16 @@ function benchmarkBarGraph(ctx: Ctx, input: ReportInput) {
     {
       label: "Similarity Index",
       score: input.similarity,
-      threshold: 20,
-      thresholdLabel: "Max 20%",
+      threshold: 0,
+      thresholdLabel: "No universal cutoff",
       inverted: true,
       color: toneFor("similarity", input.similarity),
     },
     {
-      label: "AI Generated",
+      label: "AI-style Signals",
       score: input.ai,
-      threshold: 30,
-      thresholdLabel: "Max 30%",
+      threshold: 0,
+      thresholdLabel: "Not authorship proof",
       inverted: true,
       color: toneFor("ai", input.ai),
     },
@@ -459,11 +470,12 @@ function benchmarkBarGraph(ctx: Ctx, input: ReportInput) {
     doc.text(`${m.score}%`, colCenter, barY - 1.8, { align: "center" });
 
     // Threshold indicator line & label
-    const threshY = originY - (m.threshold / 100) * chartH;
-    doc.setDrawColor(m.inverted ? 200 : 22, m.inverted ? 55 : 138, m.inverted ? 55 : 92);
-    doc.setLineWidth(0.4);
-    // short dashed guide
-    doc.line(barX - 2, threshY, barX + barWidth + 2, threshY);
+    if (m.threshold > 0) {
+      const threshY = originY - (m.threshold / 100) * chartH;
+      doc.setDrawColor(m.inverted ? 200 : 22, m.inverted ? 55 : 138, m.inverted ? 55 : 92);
+      doc.setLineWidth(0.4);
+      doc.line(barX - 2, threshY, barX + barWidth + 2, threshY);
+    }
 
     // X-Axis Category Label
     doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...NAVY);
@@ -647,8 +659,8 @@ const CATEGORY_FILL: Record<string, [number, number, number]> = {
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
-  plagiarism: "Plagiarised / matched text",
-  ai: "AI generated text",
+  plagiarism: "Text similarity match",
+  ai: "AI-style indicator",
   grammar: "Language & grammar issue",
   citation: "Scholarly citation",
 };
@@ -656,9 +668,11 @@ const CATEGORY_LABEL: Record<string, string> = {
 const SLICE_COLOR: Record<string, [number, number, number]> = {
   "Plagiarised / matched": BAD,
   "AI generated": WARN,
+  "AI-style indicators (estimated)": WARN,
   "Quoted & attributed": ACCENT,
   "Language issues": [120, 90, 200],
   "Original human writing": OK,
+  "Unmatched in retrieved sources": OK,
 };
 
 function compositionSection(ctx: Ctx, input: ReportInput) {
@@ -861,45 +875,73 @@ const KIND_TITLE: Record<ReportKind, string> = {
 };
 
 function similaritySection(ctx: Ctx, input: ReportInput) {
-  const matches = input.results.plagiarism?.matches ?? [];
+  const plagiarism = input.results.plagiarism ?? {};
+  const matches = plagiarism.matches ?? [];
+  const coverage = plagiarism.source_coverage;
   const tone = toneFor("similarity", input.similarity);
-  sectionTitle(ctx, "Similarity Overview & Risk Rating");
+  sectionTitle(ctx, "Similarity Overview & Source Coverage");
   gauge(
     ctx,
-    "Overall similarity against matched sources",
+    "Observed text similarity in retrieved sources",
     input.similarity,
     tone,
-    `${matches.length} matched source(s) identified. ${input.similarity}% of the submission overlaps with retrieved sources; citation exclusions and repository coverage are not guaranteed.`,
+    `${Number(plagiarism.highlights?.length ?? 0)} highlighted passage(s), ${Number(plagiarism.matched_words ?? 0).toLocaleString()} matched words, and ${matches.length} retrieved source(s). Similarity is a text-overlap measure, not a plagiarism verdict.`,
   );
   verdictBox(
     ctx,
-    input.similarity >= 35 ? "Higher observed overlap — review evidence" : input.similarity >= 15 ? "Some observed overlap — review evidence" : "Lower observed overlap in retrieved sources",
+    input.similarity >= 35 ? "Substantial observed text overlap — inspect the passages" : input.similarity >= 15 ? "Some observed text overlap — inspect the passages" : "Limited overlap found in the retrieved source set",
     tone,
-    "Review each matched passage and its source context. A low score does not establish originality because source coverage is incomplete.",
+    "Review the highlighted text and original source. A low score does not establish originality, and a match does not by itself establish misconduct.",
   );
 
   matchedSourcesBarChart(ctx, matches);
 
-  sectionTitle(ctx, "Matched Scholarly Sources & Repositories");
+  sectionTitle(ctx, "Matched Sources & Evidence");
   if (matches.length === 0) {
-    paragraph(ctx, "No source matches were recorded for this submission.");
+    paragraph(ctx, "No exact source passages meeting the minimum matching rule were found in the retrieved source set.");
   } else {
     table(
       ctx,
       [
-        { header: "#", width: 8, align: "left" },
-        { header: "Matched Repository / Document", width: 52 },
-        { header: "Matched Snippet", width: 88 },
-        { header: "Match %", width: 18, align: "right" },
+        { header: "#", width: 7 },
+        { header: "Source / Domain", width: 42 },
+        { header: "Submission passage", width: 48 },
+        { header: "Source passage", width: 48 },
+        { header: "Words", width: 15, align: "right" },
+        { header: "Doc %", width: 15, align: "right" },
       ],
       matches.map((m, i) => [
         String(i + 1),
-        m.source ?? "Unknown source",
+        [m.source ?? "Unknown source", m.domain ?? ""].filter(Boolean).join(" · "),
         m.snippet ?? "—",
-        `${Math.round(Number(m.similarity ?? 0))}%`,
+        m.matched_snippet ?? "—",
+        Number(m.matched_words ?? 0).toLocaleString(),
+        `${Number(m.similarity ?? 0).toFixed(1)}%`,
       ]),
     );
   }
+
+  sectionTitle(ctx, "Comparison Scope, Filters & Limitations");
+  const providers = coverage?.providers?.length ? coverage.providers.join(", ") : "No provider details recorded";
+  const scopeRows: Array<[string, string]> = [
+    ["Source records compared", String(coverage?.sources_retrieved ?? matches.length)],
+    ["Retrieval providers", providers],
+    ["Matching rule", coverage?.matching_method || "Not recorded"],
+    ["Quoted passages", "Included — quote exclusion is not currently applied"],
+    ["Bibliography / references", "Included — bibliography exclusion is not currently applied"],
+    ["Private student-paper repository", "Not connected"],
+    ["Licensed publisher full-text corpus", "Not connected"],
+  ];
+  table(
+    ctx,
+    [{ header: "Comparison setting", width: 58 }, { header: "Applied scope", width: 117 }],
+    scopeRows,
+  );
+  paragraph(
+    ctx,
+    coverage?.limitation || "This report compares against the source records retrieved for this run only. It does not represent exhaustive web, journal, or private repository coverage.",
+    { size: 7.5, color: MUTED },
+  );
 }
 
 function aiSection(ctx: Ctx, input: ReportInput) {
@@ -908,7 +950,7 @@ function aiSection(ctx: Ctx, input: ReportInput) {
   sectionTitle(ctx, "AI Likelihood & Detection Confidence");
   gauge(
     ctx,
-    "Probability that text was synthetically generated by LLMs",
+    "AI-style indicator score (not an authorship probability)",
     input.ai,
     tone,
     `Reported detector confidence: ${det.confidence ?? "low"}. This is an uncalibrated model estimate, not a validated probability.`,
@@ -927,7 +969,7 @@ function aiSection(ctx: Ctx, input: ReportInput) {
 
   const aiMatches = det.highlights ?? [];
   if (aiMatches.length > 0) {
-    sectionTitle(ctx, "Flagged Synthetic Passages");
+    sectionTitle(ctx, "Passages with AI-style signals");
     table(
       ctx,
       [
