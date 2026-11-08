@@ -235,6 +235,7 @@ function ReportsPage() {
           <Separator />
 
           <Section title="Highlighted Submission Text">
+            {!results.document_text && <p className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs leading-5 text-muted-foreground">This saved analysis contains only a stored excerpt. Re-run the analysis to include the complete extracted paper in the report.</p>}
             <HighlightedDocument text={results.document_text || results.text_excerpt || ""} highlights={allHighlights} />
           </Section>
 
