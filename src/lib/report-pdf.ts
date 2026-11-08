@@ -912,7 +912,7 @@ function similaritySection(ctx: Ctx, input: ReportInput) {
       ],
       matches.map((m, i) => [
         String(i + 1),
-        [m.source ?? "Unknown source", m.domain ?? ""].filter(Boolean).join("\\n"),
+        [m.source ?? "Unknown source", m.domain ?? ""].filter(Boolean).join(" · "),
         m.snippet ?? "—",
         m.matched_snippet ?? "—",
         Number(m.matched_words ?? 0).toLocaleString(),
