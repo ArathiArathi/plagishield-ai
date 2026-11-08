@@ -13,6 +13,7 @@ export type PdfHighlight = {
   source?: string;
   url?: string;
   note?: string;
+  alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
 export type PdfCompositionSlice = { category: string; percent: number; words: number };
