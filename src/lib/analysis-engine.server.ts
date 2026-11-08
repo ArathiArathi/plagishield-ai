@@ -335,7 +335,7 @@ async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
 }
 
 async function europePmcCandidates(phrase: string, includeFullText = false): Promise<Candidate[]> {
-  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+  const query = informativeTerms(phrase, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=3&resultType=core`,
@@ -771,8 +771,13 @@ function extractReferences(text: string) {
 function extractTitleFromRef(raw: string): string {
   const quoted = raw.match(/["“]([^"”]+)["”]/);
   if (quoted && quoted[1].length > 10) return quoted[1].trim();
-  const parts = raw.split(/[.,]/).map((p) => p.trim()).filter((p) => p.length > 15);
-  return parts[0] || raw;
+
+  // APA-style references usually place the title immediately after the year.
+  const afterYear = raw.match(/\\(?(?:19|20)\\d{2}[a-z]?\\)?\\.\\s+([^.!?]{12,300})/i);
+  if (afterYear?.[1]) return afterYear[1].trim();
+
+  const parts = raw.split(/[.,]/).map((part) => part.trim()).filter((part) => part.length > 15);
+  return parts.length > 1 ? parts[1]! : parts[0] || raw;
 }
 
 function titleSimilarity(a: string, b: string) {
