@@ -11,7 +11,7 @@ const CONF_TONE: Record<string, string> = {
 
 function confidenceOf(h: Highlight): "high" | "medium" | "low" {
   if (h.confidence) return h.confidence;
-  return h.score >= 70 ? "high" : h.score >= 45 ? "medium" : "low";
+  return "low";
 }
 
 /**
@@ -27,7 +27,7 @@ export function EvidencePanel({
   className?: string;
   limit?: number;
 }) {
-  const items = [...highlights].sort((a, b) => b.score - a.score).slice(0, limit);
+  const items = [...highlights].sort((a, b) => a.start - b.start).slice(0, limit);
 
   if (items.length === 0) {
     return (
@@ -48,7 +48,7 @@ export function EvidencePanel({
                 {CATEGORY_STYLE[h.category].label}
               </Badge>
               <Badge variant="outline" className={cn("capitalize", CONF_TONE[conf])}>
-                {conf} confidence · {Math.round(h.score)}%
+                {h.category === "plagiarism" ? "Exact phrase match" : `${conf} signal`}
               </Badge>
               {h.provider && (
                 <span className="text-xs text-muted-foreground break-words">{h.provider}</span>
