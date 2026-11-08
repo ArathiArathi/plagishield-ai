@@ -44,7 +44,7 @@ type Results = {
   };
   ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: Highlight[] };
   grammar?: { score?: number | null; provider?: string; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
-  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[] };
+  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[]; references?: Array<{ raw?: string; verified?: boolean; matched_title?: string; doi?: string; year?: number }> };
   issues?: IssueItem[];
 };
 
@@ -119,7 +119,7 @@ function ReportsPage() {
     { kind: "ai", title: "AI Authorship Assessment", desc: "Status note explaining why no unvalidated AI probability is reported.", icon: Bot, metric: "Not assessed" },
     { kind: "grammar", title: "Grammar & Language Report", desc: `Language checker findings and suggested corrections (${grammarIssues.length} issue${grammarIssues.length === 1 ? "" : "s"}).`, icon: SpellCheck, metric: `${grammarIssues.length} issues` },
     { kind: "citation", title: "Reference Verification Report", desc: `Reference records checked against public scholarly indexes (${results.citations?.verified ?? 0} of ${results.citations?.total ?? 0} verified).`, icon: Quote, metric: `${results.citations?.verified ?? 0}/${results.citations?.total ?? 0} verified` },
-    { kind: "full", title: "Comprehensive Report", desc: "All four modules combined into a single institutional integrity dossier.", icon: FileStack, metric: "All modules" },
+    { kind: "full", title: "Comprehensive Report", desc: "Similarity, language, reference review and assessment limitations in one PDF.", icon: FileStack, metric: "All modules" },
   ];
 
   const download = (kind: ReportKind) => {
@@ -169,7 +169,7 @@ function ReportsPage() {
             <p className="text-sm font-medium text-foreground">Interpret automated findings with care</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Similarity scores depend on the sources retrieved for this document and do not guarantee complete repository coverage.
-              AI-style indicators cannot prove who wrote a passage. Open the matched-source evidence and review context before drawing conclusions.
+              AI authorship is not assessed in this deployment. Open the matched-source evidence and review context before drawing conclusions.
             </p>
           </div>
         </div>
@@ -179,7 +179,7 @@ function ReportsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-foreground">Report files</h3>
-            <p className="text-sm text-muted-foreground">Each module is exported as its own signed-off PDF file.</p>
+            <p className="text-sm text-muted-foreground">Each module is exported as a separate PDF file.</p>
           </div>
           <Badge variant="secondary">{bundle.length} files available</Badge>
         </div>
@@ -293,7 +293,7 @@ function ReportsPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary">{Number(m.similarity ?? 0).toFixed(1)}% of document</Badge>
+                        <Badge variant="secondary">{Number(m.similarity ?? 0).toFixed(1)}% of eligible words</Badge>
                         <span className="text-xs text-muted-foreground">{Number(m.matched_words ?? 0)} words</span>
                       </div>
                     </div>
