@@ -347,6 +347,8 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
     return;
   }
 
+  if (!input.results.document_text) paragraph(ctx, "This older saved analysis contains only a text excerpt. Re-run the analysis to export the complete extracted submission. The text below is reconstructed from extraction and does not retain the source file's page layout or images.", { size: 7.5, color: MUTED });
+  else paragraph(ctx, "The complete extracted submission is reproduced below in reading order. Original page layout, embedded images and typography are not retained by the text extractor.", { size: 7.5, color: MUTED });
   legendRow(ctx, categories);
 
   const text = raw;
@@ -397,9 +399,9 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
 function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
   const all = input.results.issues ?? [];
   const issues = categories ? all.filter((i) => categories.some((c) => i.category?.toLowerCase().includes(c.toLowerCase()))) : all;
-  sectionTitle(ctx, "Detailed Issue & Forensic Action Log");
+  sectionTitle(ctx, "Review Notes & Action Log");
   if (issues.length === 0) {
-    paragraph(ctx, "No integrity or stylistic issues were flagged for this submission.");
+    paragraph(ctx, "No issues were returned by the enabled checks. This does not establish originality or error-free writing.");
     return;
   }
   const bySeverity = issues.reduce<Record<string, number>>((acc, issue) => {
