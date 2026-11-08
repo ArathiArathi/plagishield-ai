@@ -17,6 +17,7 @@ export type Highlight = {
   /** Retrieval provider / detector that produced this evidence. */
   provider?: string;
   confidence?: "high" | "medium" | "low";
+  alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
 
