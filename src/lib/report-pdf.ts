@@ -466,8 +466,7 @@ function aiSection(ctx: Ctx, input: ReportInput) {
   const detection = input.results.ai_detection ?? {};
   sectionTitle(ctx, "Writing-pattern review (experimental)");
   paragraph(ctx, `Detector confidence recorded for this run: ${detection.confidence ?? "not recorded"}. This feature is not a validated authorship detector and does not provide a reliable probability that text was written by AI.`);
-  if (detection.reasoning?.trim()) paragraph(ctx, detection.reasoning.trim());
-  else paragraph(ctx, "No writing-pattern explanation was returned for this analysis.");
+  paragraph(ctx, "This experimental feature does not establish authorship. Treat any flagged passages as prompts for manual review only.");
   const passages = detection.highlights ?? [];
   if (passages.length > 0) {
     sectionTitle(ctx, "Passages for human review");
