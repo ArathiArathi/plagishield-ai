@@ -17,6 +17,7 @@ export type AnalysisRow = {
   results: unknown;
   error: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type DocumentRow = {
@@ -32,11 +33,6 @@ export type DocumentRow = {
   author_name: string | null;
   paper_title: string | null;
 };
-
-const avg = (nums: number[]) =>
-  nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 0;
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 let activeChannel: ReturnType<typeof supabase.channel> | null = null;
 const activeClients = new Set<ReturnType<typeof useQueryClient>>();
@@ -118,7 +114,7 @@ export function useWorkspaceData() {
           .order("created_at", { ascending: false }),
         supabase
           .from("analyses")
-          .select("id,document_id,version_id,status,similarity_score,ai_score,grammar_score,citation_score,results,error,created_at")
+          .select("id,document_id,version_id,status,similarity_score,ai_score,grammar_score,citation_score,results,error,created_at,updated_at")
           .order("created_at", { ascending: false }),
       ]);
       if (docsRes.error) throw docsRes.error;
@@ -126,74 +122,55 @@ export function useWorkspaceData() {
 
       const documents = (docsRes.data ?? []) as DocumentRow[];
       const analyses = (analysesRes.data ?? []) as AnalysisRow[];
-      const done = analyses.filter((a) => a.status === "completed");
+      const done = analyses.filter((analysis) => analysis.status === "completed");
+      const resultFor = (analysis: AnalysisRow) => (analysis.results ?? {}) as {
+        plagiarism?: {
+          matched_words?: number;
+          eligible_words?: number;
+          excluded_words?: number;
+          matches?: unknown[];
+          source_coverage?: { sources_retrieved?: number };
+        };
+      };
 
-      const similarity = avg(done.map((a) => Number(a.similarity_score ?? 0)));
-      const aiDetection = avg(done.map((a) => Number(a.ai_score ?? 0)));
-      const grammar = avg(done.map((a) => Number(a.grammar_score ?? 0)));
-      const citation = avg(done.map((a) => Number(a.citation_score ?? 0)));
-      const qualityScore = done.length
-        ? Math.round((grammar + citation) / 2)
-        : 0;
-
-      // Submission trend — last 7 calendar months
-      const now = new Date();
-      const submissionTrend = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - (6 - i), 1);
-        const inMonth = documents.filter((doc) => {
-          const c = new Date(doc.created_at);
-          return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
-        });
-        const flagged = inMonth.filter((doc) => {
-          const a = done.find((x) => x.document_id === doc.id);
-          return a ? Number(a.similarity_score ?? 0) >= 25 || Number(a.ai_score ?? 0) >= 50 : false;
-        });
-        return { month: MONTHS[d.getMonth()], submissions: inMonth.length, flagged: flagged.length };
+      const summaryStats = done.reduce((summary, analysis) => {
+        const plagiarism = resultFor(analysis).plagiarism;
+        summary.matchedSourceRecords += plagiarism?.matches?.length ?? 0;
+        summary.matchedWords += Number(plagiarism?.matched_words ?? 0);
+        summary.comparedWords += Number(plagiarism?.eligible_words ?? 0);
+        summary.excludedWords += Number(plagiarism?.excluded_words ?? 0);
+        summary.sourcesRetrieved += Number(plagiarism?.source_coverage?.sources_retrieved ?? 0);
+        return summary;
+      }, {
+        totalDocuments: documents.length,
+        analyzed: done.length,
+        matchedSourceRecords: 0,
+        matchedWords: 0,
+        comparedWords: 0,
+        excludedWords: 0,
+        sourcesRetrieved: 0,
       });
 
-      const buckets = [
-        { range: "0-10%", min: 0, max: 10, fill: "var(--color-success)" },
-        { range: "11-25%", min: 11, max: 25, fill: "var(--color-success)" },
-        { range: "26-40%", min: 26, max: 40, fill: "var(--color-warning)" },
-        { range: "41-60%", min: 41, max: 60, fill: "var(--color-warning)" },
-        { range: "61%+", min: 61, max: 101, fill: "var(--color-destructive)" },
-      ];
-      const similarityDistribution = buckets.map((b) => ({
-        range: b.range,
-        fill: b.fill,
-        count: done.filter((a) => {
-          const s = Number(a.similarity_score ?? 0);
-          return s >= b.min && s <= b.max;
-        }).length,
-      }));
-
-      const aiHigh = done.filter((a) => Number(a.ai_score ?? 0) >= 60).length;
-      const aiMid = done.filter((a) => {
-        const s = Number(a.ai_score ?? 0);
-        return s >= 25 && s < 60;
-      }).length;
-      const aiLow = done.length - aiHigh - aiMid;
-      const aiContentAnalysis = [
-        { name: "Lower signal", value: aiLow, fill: "var(--color-success)" },
-        { name: "Moderate signal", value: aiMid, fill: "var(--color-warning)" },
-        { name: "Higher signal", value: aiHigh, fill: "var(--color-destructive)" },
-      ];
-
-      const recentActivity = documents.slice(0, 6).map((doc) => {
-        const a = analyses.find((x) => x.document_id === doc.id);
+      const recentActivity = documents.slice(0, 6).map((document) => {
+        const analysis = analyses.find((item) => item.document_id === document.id);
+        const result = analysis ? resultFor(analysis) : null;
+        const matchCount = result?.plagiarism?.matches?.length ?? 0;
         const status =
-          doc.status === "failed" ? "error" :
-          doc.status === "analyzed"
-            ? Number(a?.similarity_score ?? 0) >= 25 ? "warning" : "success"
-            : "info";
+          analysis?.status === "failed" || document.status === "failed" ? "error" :
+          analysis?.status === "completed" ? "success" :
+          analysis?.status === "processing" || document.status === "processing" ? "info" :
+          "info";
         return {
-          id: doc.id,
-          title: doc.name,
-          action:
-            doc.status === "analyzed" ? `Analysis complete · ${Math.round(Number(a?.similarity_score ?? 0))}% similarity` :
-            doc.status === "failed" ? "Analysis failed" :
-            doc.status === "processing" ? "Analysis running" : "Uploaded",
-          time: new Date(doc.updated_at).toLocaleString(),
+          id: document.id,
+          title: document.name,
+          action: analysis?.status === "completed"
+            ? `Analysis complete · ${matchCount} source match(es)`
+            : analysis?.status === "failed" || document.status === "failed"
+              ? "Analysis failed"
+              : analysis?.status === "processing" || document.status === "processing"
+                ? "Analysis running"
+                : "Uploaded",
+          time: new Date(document.updated_at).toLocaleString(),
           status,
         };
       });
@@ -201,18 +178,7 @@ export function useWorkspaceData() {
       return {
         documents,
         analyses,
-        summaryStats: {
-          qualityScore,
-          similarity,
-          aiDetection,
-          grammar,
-          citation,
-          totalDocuments: documents.length,
-          analyzed: done.length,
-        },
-        submissionTrend,
-        similarityDistribution,
-        aiContentAnalysis,
+        summaryStats,
         recentActivity,
       };
     },

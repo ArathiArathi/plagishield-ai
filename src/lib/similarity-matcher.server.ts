@@ -1,9 +1,10 @@
 /**
- * Conservative, evidence-first source matcher.
+ * Evidence-first document matcher.
  *
- * This module only marks verbatim normalized word sequences. It deliberately
- * does not call topic/keyword overlap plagiarism. Source discovery coverage is
- * determined by the upstream providers and is never implied to be exhaustive.
+ * Only exact, contiguous word sequences are reported. Every returned highlight
+ * carries offsets into the original extracted submission and the exact source
+ * passage used to establish the match. Quoted text and the bibliography are
+ * excluded from the comparison denominator by default.
  */
 
 export type MatchSource = {
@@ -45,8 +46,9 @@ export type SourceMatch = {
 
 type Token = { value: string; start: number; end: number };
 type Span = { first: number; last: number; sourceFirst: number; sourceLast: number };
+type Range = { start: number; end: number };
 
-const DEFAULT_SHINGLE_SIZE = 8;
+const SHINGLE_SIZE = 8;
 const MIN_MATCH_WORDS = 8;
 
 function normalizedWord(value: string): string {
@@ -76,8 +78,6 @@ function buildSourceIndex(words: Token[], size: number): Map<string, number[]> {
   for (let i = 0; i + size <= words.length; i++) {
     const key = shingle(words, i, size);
     const positions = index.get(key);
-    // A repeated boilerplate phrase can occur thousands of times. Keep a
-    // bounded sample of positions to avoid quadratic blow-ups on templates.
     if (positions) {
       if (positions.length < 40) positions.push(i);
     } else {
@@ -85,46 +85,6 @@ function buildSourceIndex(words: Token[], size: number): Map<string, number[]> {
     }
   }
   return index;
-}
-
-function findExactSpans(
-  documentWords: Token[],
-  sourceWords: Token[],
-  sourceIndex: Map<string, number[]>,
-  size: number,
-): Span[] {
-  const spans: Span[] = [];
-  for (let docAt = 0; docAt + size <= documentWords.length; docAt++) {
-    const positions = sourceIndex.get(shingle(documentWords, docAt, size));
-    if (!positions) continue;
-
-    for (const sourceAt of positions) {
-      // Only start at the beginning of a contiguous run; its predecessor
-      // would otherwise have found this exact same run.
-      if (
-        docAt > 0 &&
-        sourceAt > 0 &&
-        shingle(documentWords, docAt - 1, size) === shingle(sourceWords, sourceAt - 1, size)
-      ) continue;
-
-      let length = size;
-      while (
-        docAt + length < documentWords.length &&
-        sourceAt + length < sourceWords.length &&
-        documentWords[docAt + length]!.value === sourceWords[sourceAt + length]!.value
-      ) length++;
-
-      if (length >= MIN_MATCH_WORDS) {
-        spans.push({
-          first: docAt,
-          last: docAt + length - 1,
-          sourceFirst: sourceAt,
-          sourceLast: sourceAt + length - 1,
-        });
-      }
-    }
-  }
-  return spans;
 }
 
 function mergeSpans(spans: Span[]): Span[] {
@@ -148,13 +108,102 @@ function mergeSpans(spans: Span[]): Span[] {
   return merged;
 }
 
-function domainFromUrl(url?: string): string | undefined {
-  if (!url) return undefined;
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return undefined;
+function findExactSpans(
+  documentWords: Token[],
+  sourceWords: Token[],
+  sourceIndex: Map<string, number[]>,
+  excludedRanges: Range[],
+): Span[] {
+  const spans: Span[] = [];
+  for (let docAt = 0; docAt + SHINGLE_SIZE <= documentWords.length; docAt++) {
+    const firstToken = documentWords[docAt]!;
+    const lastToken = documentWords[docAt + SHINGLE_SIZE - 1]!;
+    if (excludedRanges.some((range) => firstToken.start < range.end && lastToken.end > range.start)) continue;
+
+    const positions = sourceIndex.get(shingle(documentWords, docAt, SHINGLE_SIZE));
+    if (!positions) continue;
+
+    for (const sourceAt of positions) {
+      if (
+        docAt > 0 &&
+        sourceAt > 0 &&
+        shingle(documentWords, docAt - 1, SHINGLE_SIZE) === shingle(sourceWords, sourceAt - 1, SHINGLE_SIZE)
+      ) continue;
+
+      let length = SHINGLE_SIZE;
+      while (
+        docAt + length < documentWords.length &&
+        sourceAt + length < sourceWords.length &&
+        documentWords[docAt + length]!.value === sourceWords[sourceAt + length]!.value
+      ) {
+        const token = documentWords[docAt + length]!;
+        if (excludedRanges.some((range) => token.start < range.end && token.end > range.start)) break;
+        length++;
+      }
+
+      if (length >= MIN_MATCH_WORDS) {
+        spans.push({
+          first: docAt,
+          last: docAt + length - 1,
+          sourceFirst: sourceAt,
+          sourceLast: sourceAt + length - 1,
+        });
+      }
+    }
   }
+  return mergeSpans(spans);
+}
+
+function documentExclusions(text: string): Range[] {
+  const ranges: Range[] = [];
+
+  // A bibliography is excluded only when a recognised heading occupies its own
+  // line. This avoids stopping at an ordinary sentence mentioning references.
+  const referenceHeading = /^\s*(?:\d+(?:\.\d+)*\s+)?(?:references|bibliography|works cited|literature cited|reference list)\s*:?[ \t]*$/gim;
+  const heading = referenceHeading.exec(text);
+  if (heading) ranges.push({ start: heading.index, end: text.length });
+
+  // Exclude clearly delimited quotations. Single straight quotes are omitted
+  // because apostrophes and contractions make them ambiguous.
+  const quotePatterns = [
+    /“[^”]{1,10000}”/g,
+    /"[^"]{1,10000}"/g,
+    /«[^»]{1,10000}»/g,
+    /„[^“]{1,10000}“/g,
+    /‘[^’]{1,10000}’/g,
+  ];
+  // Common numeric and author-date in-text citation markers are excluded as
+  // markers only; the surrounding sentence remains eligible for comparison.
+  const citationPatterns = [
+    /\[[0-9]+(?:[,;\s–-]+[0-9]+)*\]/g,
+    /\([A-Z][A-Za-z'’-]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2}[a-z]?\)/g,
+    /\b[A-Z][A-Za-z'’-]+(?:\s+et\s+al\.)?\s+\((?:19|20)\d{2}[a-z]?\)/g,
+  ];
+  for (const pattern of citationPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+  for (const pattern of quotePatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  }
+
+  // Markdown / block-quoted passages are also clearly marked quotations.
+  const blockQuote = /^\s*>[^\n]+/gm;
+  let block: RegExpExecArray | null;
+  while ((block = blockQuote.exec(text)) !== null) {
+    ranges.push({ start: block.index, end: block.index + block[0].length });
+  }
+
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function isExcluded(token: Token, ranges: Range[]): boolean {
+  return ranges.some((range) => token.start < range.end && token.end > range.start);
 }
 
 function unionWordCount(spans: Array<{ first: number; last: number }>): number {
@@ -177,64 +226,78 @@ function unionWordCount(spans: Array<{ first: number; last: number }>): number {
   return start < 0 ? 0 : total + end - start + 1;
 }
 
-/**
- * Compare a document with every retrieved source. Similarity is the percentage
- * of document words covered by the union of exact-match spans, not a source's
- * sentence-level confidence. Overlapping sources are retained as alternatives.
- */
+function domainFromUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
 export function matchDocumentAgainstSources(
   text: string,
   sources: MatchSource[],
 ): {
   score: number;
   matched_words: number;
+  eligible_words: number;
+  excluded_words: number;
   matches: SourceMatch[];
   highlights: MatchHighlight[];
 } {
   const documentWords = tokensWithOffsets(text);
-  const totalWords = documentWords.length || 1;
-  if (documentWords.length < MIN_MATCH_WORDS || sources.length === 0) {
-    return { score: 0, matched_words: 0, matches: [], highlights: [] };
+  const exclusions = documentExclusions(text);
+  const eligibleWords = documentWords.filter((word) => !isExcluded(word, exclusions)).length;
+  const excludedWords = documentWords.length - eligibleWords;
+
+  if (eligibleWords < MIN_MATCH_WORDS || sources.length === 0) {
+    return {
+      score: 0,
+      matched_words: 0,
+      eligible_words: eligibleWords,
+      excluded_words: excludedWords,
+      matches: [],
+      highlights: [],
+    };
   }
 
   const sourceEvidence = sources.map((source) => {
     const sourceWords = tokensWithOffsets(source.text);
-    const index = buildSourceIndex(sourceWords, DEFAULT_SHINGLE_SIZE);
-    const spans = mergeSpans(findExactSpans(documentWords, sourceWords, index, DEFAULT_SHINGLE_SIZE));
+    const index = buildSourceIndex(sourceWords, SHINGLE_SIZE);
+    const spans = findExactSpans(documentWords, sourceWords, index, exclusions);
     return { source, sourceWords, spans, matchedWords: unionWordCount(spans) };
   }).filter((entry) => entry.matchedWords >= MIN_MATCH_WORDS);
 
   const documentCoverage = unionWordCount(
     sourceEvidence.flatMap((entry) => entry.spans.map((span) => ({ first: span.first, last: span.last }))),
   );
-  const score = Math.min(100, Math.round((documentCoverage / totalWords) * 100));
+  const score = Math.min(100, Math.round((documentCoverage / eligibleWords) * 100));
 
-  const matches: SourceMatch[] = sourceEvidence
-    .map((entry) => {
-      const first = entry.spans[0]!;
-      const documentSnippet = text.slice(
-        documentWords[first.first]!.start,
-        documentWords[first.last]!.end,
-      );
-      const sourceSnippet = entry.source.text.slice(
-        entry.sourceWords[first.sourceFirst]!.start,
-        entry.sourceWords[first.sourceLast]!.end,
-      );
-      return {
-        source: entry.source.title,
-        url: entry.source.url,
-        similarity: Number(((entry.matchedWords / totalWords) * 100).toFixed(1)),
-        snippet: documentSnippet.slice(0, 360),
-        type: entry.source.kind,
-        matched_snippet: sourceSnippet.slice(0, 600),
-        provider: entry.source.provider,
-        matched_words: entry.matchedWords,
-        match_count: entry.spans.length,
-        match_strength: 100,
-        domain: domainFromUrl(entry.source.url),
-      };
-    })
-    .sort((a, b) => b.matched_words - a.matched_words);
+  const matches: SourceMatch[] = sourceEvidence.map((entry) => {
+    const first = entry.spans[0]!;
+    const documentSnippet = text.slice(
+      documentWords[first.first]!.start,
+      documentWords[first.last]!.end,
+    );
+    const sourceSnippet = entry.source.text.slice(
+      entry.sourceWords[first.sourceFirst]!.start,
+      entry.sourceWords[first.sourceLast]!.end,
+    );
+    return {
+      source: entry.source.title,
+      url: entry.source.url,
+      similarity: Number(((entry.matchedWords / eligibleWords) * 100).toFixed(1)),
+      snippet: documentSnippet.slice(0, 600),
+      type: entry.source.kind,
+      matched_snippet: sourceSnippet.slice(0, 600),
+      provider: entry.source.provider,
+      matched_words: entry.matchedWords,
+      match_count: entry.spans.length,
+      match_strength: 100,
+      domain: domainFromUrl(entry.source.url),
+    };
+  }).sort((a, b) => b.matched_words - a.matched_words);
 
   const highlights: MatchHighlight[] = [];
   for (const entry of sourceEvidence) {
@@ -272,25 +335,28 @@ export function matchDocumentAgainstSources(
     }
   }
 
-  // Prefer one primary source per identical document span for readable
-  // highlighting; retain all competing sources in alternate_sources.
   const primaryBySpan = new Map<string, MatchHighlight>();
   for (const highlight of highlights) {
     const key = `${highlight.start}:${highlight.end}`;
     const previous = primaryBySpan.get(key);
     if (!previous) primaryBySpan.set(key, highlight);
     else {
-      previous.alternate_sources = [
+      const alternateSources = [
         ...(previous.alternate_sources ?? []),
-        { source: highlight.source, url: highlight.url, type: highlight.note ?? "Source" },
+        { source: highlight.source, url: highlight.url, type: highlight.note },
         ...(highlight.alternate_sources ?? []),
-      ].slice(0, 5);
+      ].filter((source) => source.source !== previous.source);
+      previous.alternate_sources = [...new Map(
+        alternateSources.map((source) => [source.url ?? source.source, source]),
+      ).values()].slice(0, 5);
     }
   }
 
   return {
     score,
     matched_words: documentCoverage,
+    eligible_words: eligibleWords,
+    excluded_words: excludedWords,
     matches,
     highlights: [...primaryBySpan.values()].sort((a, b) => a.start - b.start),
   };

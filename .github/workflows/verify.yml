@@ -37,5 +37,8 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      - name: Test similarity matching and exclusions
+        run: npm run test:matcher
+
       - name: Build production application
         run: npm run build

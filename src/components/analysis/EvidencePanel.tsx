@@ -11,7 +11,7 @@ const CONF_TONE: Record<string, string> = {
 
 function confidenceOf(h: Highlight): "high" | "medium" | "low" {
   if (h.confidence) return h.confidence;
-  return h.score >= 70 ? "high" : h.score >= 45 ? "medium" : "low";
+  return "low";
 }
 
 /**
@@ -27,7 +27,7 @@ export function EvidencePanel({
   className?: string;
   limit?: number;
 }) {
-  const items = [...highlights].sort((a, b) => b.score - a.score).slice(0, limit);
+  const items = [...highlights].sort((a, b) => a.start - b.start).slice(0, limit);
 
   if (items.length === 0) {
     return (
@@ -48,7 +48,7 @@ export function EvidencePanel({
                 {CATEGORY_STYLE[h.category].label}
               </Badge>
               <Badge variant="outline" className={cn("capitalize", CONF_TONE[conf])}>
-                {conf} confidence · {Math.round(h.score)}%
+                {h.category === "plagiarism" ? "Exact phrase match" : `${conf} signal`}
               </Badge>
               {h.provider && (
                 <span className="text-xs text-muted-foreground break-words">{h.provider}</span>
@@ -73,6 +73,20 @@ export function EvidencePanel({
                   <p className="mt-1 rounded-md border border-border bg-card p-2.5 text-[13px] leading-relaxed text-muted-foreground break-words [overflow-wrap:anywhere]">
                     “{h.matched_snippet}”
                   </p>
+                </div>
+              )}
+
+              {h.alternate_sources && h.alternate_sources.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Also found in</p>
+                  <ul className="mt-1 space-y-1">
+                    {h.alternate_sources.map((source, index) => (
+                      <li key={`${source.url ?? source.source}-${index}`} className="text-xs text-muted-foreground">
+                        {source.url ? <a href={source.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{source.source}</a> : source.source}
+                        {source.type ? ` · ${source.type}` : ""}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

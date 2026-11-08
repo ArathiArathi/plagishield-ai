@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import {
   ArrowRight, ArrowUpRight, BookOpenCheck, Check, FileSearch, FileText,
-  LockKeyhole, PenLine, Quote, ShieldCheck, Sparkles,
+  LockKeyhole, PenLine, Quote, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -71,14 +71,13 @@ function WelcomePage() {
           <div className="max-w-2xl">
             <div className="mb-7 inline-flex items-center gap-2 border-b border-[#b9c9bf] pb-2 text-[11px] font-semibold uppercase tracking-[.18em] text-[#426d5b]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#bd6548]" />
-              A writing review workspace
+              For research papers, assignments and drafts
             </div>
             <h1 className="font-serif text-[clamp(3.25rem,6.3vw,5.7rem)] leading-[.99] tracking-[-.055em] text-[#1d2926]">
-              Good writing deserves a closer look.
+              Find the passage. Follow it to the source.
             </h1>
             <p className="mt-7 max-w-xl text-base leading-8 text-[#5b6660] md:text-lg">
-              See where your document overlaps with available sources, review writing-pattern signals,
-              and catch citation or clarity issues before you submit.
+              Compare extracted passages with public sources, inspect the wording side by side, and review citation and language notes before you submit.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Button size="lg" className="h-12 rounded-md bg-[#244c3e] px-6 text-white hover:bg-[#1b3c31]" asChild>
@@ -96,58 +95,37 @@ function WelcomePage() {
           </div>
 
           <div className="relative mx-auto w-full max-w-[590px]">
-            <div className="absolute -right-5 -top-5 h-32 w-32 rounded-full border border-[#d8dfd7]" />
-            <div className="absolute -bottom-6 -left-5 h-24 w-24 rounded-full border border-[#e5cfc3]" />
-            <div className="relative border border-[#deded5] bg-white p-5 shadow-[0_22px_65px_rgba(31,48,40,.10)] md:p-7">
-              <div className="flex items-start justify-between border-b border-[#eeede8] pb-5">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#78847b]">Illustrative report preview</p>
-                  <h2 className="mt-2 font-serif text-2xl text-[#26352e]">Research draft.pdf</h2>
-                  <p className="mt-1 text-xs text-[#89928b]">Document review · sample values</p>
+            <div className="grid items-start gap-3 sm:grid-cols-[1.08fr_.92fr]">
+              <article className="relative border border-[#dcd8ce] bg-[#fffefa] p-5 shadow-[0_18px_45px_rgba(31,48,40,.08)] sm:mt-2">
+                <div className="flex items-center justify-between border-b border-[#ece9e1] pb-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#78847b]">Submitted paper</span>
+                  <span className="font-mono text-[10px] text-[#a0a49e]">01</span>
                 </div>
-                <span className="rounded-sm bg-[#edf3ee] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#426d5b]">Reviewed</span>
-              </div>
-              <div className="grid grid-cols-[116px_1fr] gap-5 border-b border-[#eeede8] py-6 sm:grid-cols-[145px_1fr]">
-                <div className="flex flex-col items-center justify-center border-r border-[#eeede8] pr-5">
-                  <span className="font-serif text-5xl leading-none text-[#bd6548]">18%</span>
-                  <span className="mt-2 text-center text-[10px] uppercase tracking-[.13em] text-[#78847b]">Observed overlap</span>
+                <h2 className="mt-5 font-serif text-xl leading-snug text-[#26352e]">Research methods and secure systems</h2>
+                <p className="mt-4 text-[12px] leading-[2] text-[#667169]">
+                  The design of a secure communication protocol depends on clear key management, careful authentication, and a review of the assumptions made by each participant.
+                </p>
+                <p className="mt-3 text-[12px] leading-[2] text-[#667169]">
+                  <mark className="bg-[#f4d9a6] px-0.5 text-[#493d2d]">A secure communication protocol depends on clear key management and careful authentication</mark>, especially when systems exchange sensitive information.
+                </p>
+                <div className="mt-5 border-t border-[#ece9e1] pt-3 text-[10px] text-[#929a93]">Illustrative passage · not a live analysis</div>
+              </article>
+              <aside className="border border-[#d5ddd4] bg-[#edf1eb] p-5 sm:mt-16">
+                <div className="flex items-center justify-between border-b border-[#dbe2d8] pb-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#507461]">Retrieved source</span>
+                  <span className="font-mono text-[10px] text-[#8d9b90]">A</span>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <div className="mb-1.5 flex justify-between text-xs"><span className="font-medium text-[#34453c]">Matched passages</span><span className="text-[#77837a]">3 sources</span></div>
-                    <div className="h-1.5 overflow-hidden bg-[#edf0eb]"><div className="h-full w-[18%] bg-[#bd6548]" /></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="bg-[#f6f7f3] p-3"><span className="block font-serif text-xl text-[#26352e]">126</span><span className="text-[#77837a]">Matched words</span></div>
-                    <div className="bg-[#f6f7f3] p-3"><span className="block font-serif text-xl text-[#26352e]">08</span><span className="text-[#77837a]">Passages to review</span></div>
-                  </div>
+                <p className="mt-5 text-xs font-semibold leading-5 text-[#34453c]">Public research article</p>
+                <p className="mt-1 text-[10px] text-[#879288]">Example source record</p>
+                <p className="mt-4 text-[12px] leading-[2] text-[#657169]">
+                  The study describes how <mark className="bg-[#f4d9a6] px-0.5 text-[#493d2d]">a secure communication protocol depends on clear key management and careful authentication</mark> to protect exchanged information.
+                </p>
+                <div className="mt-5 border-t border-[#dbe2d8] pt-3 text-[10px] leading-5 text-[#879288]">
+                  The matching wording is shown in both passages so a reader can inspect the context.
                 </div>
-              </div>
-              <div className="space-y-4 pt-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-[.12em] text-[#647168]">Source evidence</h3>
-                  <span className="text-[10px] text-[#9aa29c]">Sample content</span>
-                </div>
-                {[
-                  { n: "01", title: "Journal article", detail: "Open scholarly record", pct: "9%" },
-                  { n: "02", title: "Reference website", detail: "Public web source", pct: "6%" },
-                  { n: "03", title: "Research abstract", detail: "Scholarly index", pct: "3%" },
-                ].map((item) => (
-                  <div key={item.n} className="flex items-center gap-3 border-b border-[#f0efe9] pb-3 last:border-0 last:pb-0">
-                    <span className="flex h-7 w-7 items-center justify-center bg-[#f3eee9] font-mono text-[10px] text-[#9b5d45]">{item.n}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-[#34453c]">{item.title}</p>
-                      <p className="mt-0.5 text-[10px] text-[#929a93]">{item.detail}</p>
-                    </div>
-                    <span className="text-xs font-semibold tabular-nums text-[#5e6d63]">{item.pct}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-5 border-t border-[#eeede8] pt-4 text-[10px] leading-5 text-[#929a93]">
-                A similarity percentage describes matches in the sources searched. It is not a plagiarism verdict.
-              </p>
+              </aside>
             </div>
-            <p className="mt-4 text-right text-[10px] uppercase tracking-[.14em] text-[#8b938d]">A clearer view of the work</p>
+            <p className="mt-4 text-right text-[10px] uppercase tracking-[.12em] text-[#8b938d]">A report should show the evidence behind the number.</p>
           </div>
         </section>
 
@@ -249,7 +227,7 @@ function WelcomePage() {
                 A matching passage may be a quotation, a correctly cited source, common wording, or material that needs attention. AI-style indicators are not proof of authorship. Read the evidence and apply your own judgement.
               </p>
             </div>
-            <div className="flex items-center gap-2 text-xs text-[#507461]"><Sparkles className="h-4 w-4" /> Built for careful review</div>
+            <p className="max-w-xs text-xs leading-6 text-[#507461]">Designed for readers who want to inspect the passage, the source and the context.</p>
           </div>
           <div className="flex flex-col items-start justify-between gap-6 pt-8 sm:flex-row sm:items-center">
             <div>

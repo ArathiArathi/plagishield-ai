@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
+import { extractText } from "@/lib/text-extract.server";
 
 /**
  * PlagiShield analysis engine (server-only).
  *
  * Real pipeline — no mock scores:
  *  1. Sentence segmentation + fingerprinting of the submitted text.
- *  2. Source retrieval over open scholarly indexes and the web, followed by
+ *  2. Source retrieval over connected public scholarly indexes, followed by
  *     offset-preserving exact phrase matching with overlapping-source evidence.
  *  3. Stylometric AI-detection classifier (logistic regression over burstiness,
  *     lexical diversity, function-word and boilerplate features) blended with an
@@ -16,7 +17,7 @@ import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
  */
 
 const UA = "PlagiShieldAI/1.0 (academic integrity analysis)";
-const ENGINE_VERSION = "2.1.0";
+const ENGINE_VERSION = "2.2.0";
 
 export type Highlight = {
   start: number;
@@ -33,6 +34,7 @@ export type Highlight = {
   provider?: string;
   /** Human-readable confidence label for this individual segment. */
   confidence?: "high" | "medium" | "low";
+  alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
 
@@ -53,13 +55,19 @@ export type AnalysisResults = {
     words: number;
     sentences: number;
     characters: number;
+    truncated: boolean;
+    character_limit: number;
     sources_queried: number;
     checked_at: string;
   };
   text_excerpt: string;
+  /** Full extracted text, retained so highlights and exports use original offsets. */
+  document_text: string;
   plagiarism: {
     score: number;
     matched_words: number;
+    eligible_words: number;
+    excluded_words: number;
     matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
     highlights: Highlight[];
     source_coverage: { sources_retrieved: number; providers: string[]; matching_method: string; limitation: string };
@@ -125,6 +133,39 @@ async function getJson(url: string, timeoutMs = 9000): Promise<any | null> {
   }
 }
 
+async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/xml,text/plain;q=0.9" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function xmlToPlainText(xml: string): string {
+  const body = xml.match(/<body[ >][\s\S]*?<\/body>/i)?.[0] ?? xml;
+  return body
+    .replace(/<(?:ref-list|fig|table-wrap|supplementary-material|ack)[\s\S]*?<\/(?:ref-list|fig|table-wrap|supplementary-material|ack)>/gi, " ")
+    .replace(/<\/(?:p|title|sec|list-item|caption)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code: string) => {
+      const value = code[0]?.toLowerCase() === "x" ? parseInt(code.slice(1), 16) : parseInt(code, 10);
+      try { return Number.isFinite(value) ? String.fromCodePoint(value) : " "; } catch { return " "; }
+    })
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length) as R[];
   let cursor = 0;
@@ -142,6 +183,34 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 /* ------------------------------------------------- 1. source retrieval */
 
 type Candidate = { title: string; url?: string; text: string; kind: string; provider?: string };
+
+async function fetchOpenAccessPdfText(url?: string): Promise<string> {
+  if (!url || !/^https:\/\//i.test(url)) return "";
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/pdf,*/*;q=0.5" },
+      signal: AbortSignal.timeout(10000),
+      redirect: "follow",
+    });
+    if (!response.ok) return "";
+    const contentLength = Number(response.headers.get("content-length") ?? 0);
+    if (contentLength > 12 * 1024 * 1024) return "";
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength < 100 || bytes.byteLength > 12 * 1024 * 1024) return "";
+    const signature = new TextDecoder().decode(bytes.slice(0, 5));
+    if (!signature.startsWith("%PDF-")) return "";
+
+    const extracted = await extractText(bytes, "open-access-source.pdf");
+    const text = extracted.text.replace(/\\s+/g, " ").trim();
+    const words = text.match(/[\\p{L}\\p{N}]+/gu) ?? [];
+    const visible = text.replace(/\\s/g, "");
+    const readable = (visible.match(/[\\p{L}\\p{N}.,;:!?'"()\\-]/gu) ?? []).length;
+    if (words.length < 100 || visible.length === 0 || readable / visible.length < 0.55) return "";
+    return text.slice(0, 120000);
+  } catch {
+    return "";
+  }
+}
 
 /**
  * Return the passage of `sourceText` that shares the most n-grams with the
@@ -237,68 +306,84 @@ async function wikipediaCandidates(sentence: string, cache: SourceCache): Promis
   return found.filter(Boolean) as Candidate[];
 }
 
-async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
+async function openAlexCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
   const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
   const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "which", "will", "would", "their"]);
   const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 7).join(" ");
   if (!keywords) return [];
   const q = encodeURIComponent(keywords);
   const data = await getJson(
-    `https://api.openalex.org/works?search=${q}&per-page=2&select=id,doi,title,abstract_inverted_index,publication_year,primary_location`,
+    `https://api.openalex.org/works?search=${q}&per-page=2&select=id,doi,title,abstract_inverted_index,publication_year,primary_location,best_oa_location`,
     7000
   );
   const works: any[] = data?.results ?? [];
-  return works
-    .map((w) => {
-      const abstract = openAlexAbstract(w.abstract_inverted_index);
-      const body = [w.title, abstract].filter(Boolean).join(". ");
-      return {
-        title: `${w.title ?? "Scholarly publication"}${w.publication_year ? ` (${w.publication_year})` : ""}`,
-        url: w.doi ?? w.primary_location?.landing_page_url ?? w.id,
-        text: body,
-        kind: "Scholarly publication",
-        provider: "OpenAlex works API",
-      };
-    })
-    .filter((c) => c.text.length > 60);
+  return mapLimit(works, 2, async (work): Promise<Candidate | null> => {
+    const abstract = openAlexAbstract(work.abstract_inverted_index);
+    const pdfUrl = work.best_oa_location?.pdf_url ?? work.primary_location?.pdf_url;
+    const fullText = fetchFullText ? await fetchOpenAccessPdfText(pdfUrl) : "";
+    const body = fullText || abstract;
+    if (body.length < 60) return null;
+    return {
+      title: `${work.title ?? "Scholarly publication"}${work.publication_year ? ` (${work.publication_year})` : ""}`,
+      url: work.doi ?? work.best_oa_location?.landing_page_url ?? work.primary_location?.landing_page_url ?? work.id,
+      text: [work.title, body].filter(Boolean).join(". "),
+      kind: fullText ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
+      provider: fullText ? "OpenAlex open-access PDF" : "OpenAlex works API",
+    };
+  }).then((items) => items.filter(Boolean) as Candidate[]);
 }
 
-async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
+async function semanticScholarCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
   const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
-    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=3&fields=title,abstract,url,year,externalIds`,
+    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=3&fields=title,abstract,url,year,externalIds,openAccessPdf`,
     6500,
   );
   const papers: any[] = data?.data ?? [];
-  return papers
-    .filter((paper) => paper.abstract && paper.abstract.length > 80)
-    .map((paper) => ({
+  return mapLimit(papers, 2, async (paper): Promise<Candidate | null> => {
+    const pdfUrl = paper.openAccessPdf?.url;
+    const fullText = fetchFullText ? await fetchOpenAccessPdfText(pdfUrl) : "";
+    const abstract = String(paper.abstract ?? "");
+    const body = fullText || abstract;
+    if (body.length < 80) return null;
+    return {
       title: `${paper.title ?? "Scholarly paper"}${paper.year ? ` (${paper.year})` : ""}`,
-      url: paper.url ?? (paper.externalIds?.DOI ? `https://doi.org/${paper.externalIds.DOI}` : undefined),
-      text: [paper.title, paper.abstract].filter(Boolean).join(". "),
-      kind: "Scholarly publication (abstract)",
-      provider: "Semantic Scholar Graph API",
-    }));
+      url: paper.url ?? (paper.externalIds?.DOI ? `https://doi.org/${paper.externalIds.DOI}` : pdfUrl),
+      text: [paper.title, body].filter(Boolean).join(". "),
+      kind: fullText ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
+      provider: fullText ? "Semantic Scholar open-access PDF" : "Semantic Scholar Graph API",
+    };
+  }).then((items) => items.filter(Boolean) as Candidate[]);
 }
 
-async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
+async function europePmcCandidates(phrase: string, fetchFullText = false): Promise<Candidate[]> {
   const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
-    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=3&resultType=core`,
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(`${query} AND OPEN_ACCESS:Y`)}&format=json&pageSize=3&resultType=core`,
     6500,
   );
   const results: any[] = data?.resultList?.result ?? [];
-  return results
-    .filter((item) => item.abstractText && item.abstractText.length > 80)
-    .map((item) => ({
+
+  return mapLimit(results, 2, async (item): Promise<Candidate | null> => {
+    const pmcid = String(item.pmcid ?? "");
+    const fullTextXml = fetchFullText && pmcid
+      ? await getText(`https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(pmcid)}/fullTextXML`, 8000)
+      : null;
+    const fullText = fullTextXml ? xmlToPlainText(fullTextXml) : "";
+    const abstract = String(item.abstractText ?? "");
+    const body = fullText.length > 500 ? fullText.slice(0, 120000) : abstract;
+    if (body.length < 80) return null;
+
+    return {
       title: `${item.title ?? "Biomedical publication"}${item.pubYear ? ` (${item.pubYear})` : ""}`,
-      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
-      text: [item.title, item.abstractText].filter(Boolean).join(". "),
-      kind: "Scholarly publication (abstract)",
-      provider: "Europe PMC REST API",
-    }));
+      url: item.doi ? `https://doi.org/${item.doi}` : pmcid ? `https://europepmc.org/articles/${pmcid}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
+      text: [item.title, body].filter(Boolean).join(". "),
+      kind: fullText.length > 500 ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
+      provider: fullText.length > 500 ? "Europe PMC Open Access Full Text" : "Europe PMC REST API",
+    };
+  }).then((items) => items.filter(Boolean) as Candidate[]);
 }
 
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
@@ -333,7 +418,7 @@ async function detectPlagiarism(
   // Sample across the full document rather than relying only on the opening
   // paragraphs. This improves retrieval diversity without claiming exhaustive
   // crawling of the web or licensed academic databases.
-  const target = Math.min(12, usable.length);
+  const target = Math.min(24, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
   for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
@@ -362,22 +447,23 @@ async function detectPlagiarism(
   let queried = 0;
   const [docWiki, docAlex, docCross, docSemantic, docEuropePmc] = await Promise.all([
     wikipediaCandidates(docKeywords, cache),
-    openAlexCandidates(docKeywords),
+    openAlexCandidates(docKeywords, true),
     crossrefCandidates(docKeywords),
-    semanticScholarCandidates(docKeywords),
-    europePmcCandidates(docKeywords),
+    semanticScholarCandidates(docKeywords, true),
+    europePmcCandidates(docKeywords, true),
   ]);
   const docPool = [...docWiki, ...docAlex, ...docCross, ...docSemantic, ...docEuropePmc];
   queried += docPool.length;
 
-  await mapLimit(candidates, 3, async (sentence) => {
-    const [wiki, alex, cross] = await Promise.all([
+  await mapLimit(candidates, 4, async (sentence) => {
+    const [wiki, alex, cross, europePmc] = await Promise.all([
       wikipediaCandidates(sentence.text, cache),
       openAlexCandidates(sentence.text),
       crossrefCandidates(sentence.text),
+      europePmcCandidates(sentence.text),
     ]);
-    docPool.push(...wiki, ...alex, ...cross);
-    queried += wiki.length + alex.length + cross.length;
+    docPool.push(...wiki, ...alex, ...cross, ...europePmc);
+    queried += wiki.length + alex.length + cross.length + europePmc.length;
   });
 
   const poolMap = new Map<string, Candidate>();
@@ -397,8 +483,8 @@ async function detectPlagiarism(
     source_coverage: {
       sources_retrieved: uniquePool.length,
       providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
-      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words)",
-      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
+      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words); clearly quoted passages, common inline citation markers and a recognised references section are excluded.",
+      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected. Quote, inline citation and bibliography exclusions use conservative text-format and heading rules and may not identify every citation style.",
     },
   };
 }
@@ -1138,7 +1224,9 @@ export async function analyzeDocument(
     }
   };
 
-  const text = rawText.replace(/\r/g, "").slice(0, 120000);
+  const normalizedRawText = rawText.replace(/\r/g, "");
+  const textTruncated = normalizedRawText.length > 120000;
+  const text = normalizedRawText.slice(0, 120000);
   const sentences = splitSentences(text);
   const words = tokenize(text);
 
@@ -1171,28 +1259,16 @@ export async function analyzeDocument(
 
 
   const totalWords = words.length || 1;
-  const plagWords = Math.min(totalWords, plag.matched_words);
-  const quotedWords = Math.min(
-    totalWords - plagWords,
-    Math.round(tokenize((text.match(/[“"][^”"]{25,400}[”"]/g) ?? []).join(" ")).length),
-  );
-  const aiWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords),
-    Math.round(((totalWords - plagWords) * aiScore) / 100),
-  );
-  const grammarWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords - aiWords),
-    grammar.issues.length * 6,
-  );
-  const unmatchedWords = Math.max(0, totalWords - plagWords - quotedWords - aiWords - grammarWords);
-  const pct = (w: number) => Number(((w / totalWords) * 100).toFixed(1));
+  const comparedWords = Math.max(1, plag.eligible_words);
+  const matchedWords = Math.min(comparedWords, plag.matched_words);
+  const unmatchedWords = Math.max(0, comparedWords - matchedWords);
+  const pct = (count: number) => Number(((count / comparedWords) * 100).toFixed(1));
 
+  // Composition is a factual partition of the compared text only. It does not
+  // assign arbitrary portions of the paper to AI, grammar, or human authorship.
   const composition: CompositionSlice[] = [
-    { category: "Plagiarised / matched", percent: pct(plagWords), words: plagWords },
-    { category: "AI-style indicators (estimated)", percent: pct(aiWords), words: aiWords },
-    { category: "Quoted & attributed", percent: pct(quotedWords), words: quotedWords },
-    { category: "Language issues", percent: pct(grammarWords), words: grammarWords },
-    { category: "Unmatched in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
+    { category: "Matched in retrieved sources", percent: pct(matchedWords), words: matchedWords },
+    { category: "No match in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
   ];
 
   await stage("rendering");
@@ -1244,9 +1320,12 @@ export async function analyzeDocument(
       checked_at: new Date().toISOString(),
     },
     text_excerpt: text.slice(0, 24000),
+    document_text: text,
     plagiarism: {
       score: plag.score,
       matched_words: plag.matched_words,
+      eligible_words: plag.eligible_words,
+      excluded_words: plag.excluded_words,
       matches: plag.matches,
       highlights: plag.highlights,
       source_coverage: plag.source_coverage,

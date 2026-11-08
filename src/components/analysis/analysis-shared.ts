@@ -17,6 +17,7 @@ export type Highlight = {
   /** Retrieval provider / detector that produced this evidence. */
   provider?: string;
   confidence?: "high" | "medium" | "low";
+  alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
 
@@ -39,7 +40,7 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
   ai: {
     chip: "border-warning/30 bg-warning/20 text-warning",
     mark: "bg-warning/25 text-foreground underline decoration-warning decoration-2",
-    label: "AI content",
+    label: "Writing-pattern signal",
   },
   grammar: {
     chip: "border-info/30 bg-info/15 text-info",
@@ -54,32 +55,63 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
 };
 
 export const COMPOSITION_COLOR: Record<string, string> = {
-  "Plagiarised / matched": "var(--color-destructive)",
-  "AI generated": "var(--color-warning)",
-  "AI-style indicators (estimated)": "var(--color-warning)",
-  "Quoted & attributed": "var(--color-info)",
-  "Language issues": "var(--color-primary)",
-  "Original human writing": "var(--color-success)",
-  "Unmatched in retrieved sources": "var(--color-success)",
+  "Matched in retrieved sources": "var(--color-destructive)",
+  "No match in retrieved sources": "var(--color-muted)",
 };
 
 export type Segment = { text: string; highlight?: Highlight };
 
-/** Flatten possibly-overlapping highlights into non-overlapping text segments. */
+/** Split the original text at every annotation boundary without dropping overlaps. */
 export function buildSegments(text: string, highlights: Highlight[]): Segment[] {
   const valid = highlights
-    .filter((h) => Number.isFinite(h.start) && Number.isFinite(h.end) && h.end > h.start && h.start < text.length)
-    .map((h) => ({ ...h, end: Math.min(h.end, text.length) }))
-    .sort((a, b) => a.start - b.start || b.end - a.end);
+    .filter((h) =>
+      Number.isFinite(h.start) &&
+      Number.isFinite(h.end) &&
+      h.start >= 0 &&
+      h.end > h.start &&
+      h.start < text.length,
+    )
+    .map((h) => ({ ...h, end: Math.min(h.end, text.length) }));
 
-  const segments: Segment[] = [];
-  let cursor = 0;
-  for (const h of valid) {
-    if (h.start < cursor) continue; // skip overlap
-    if (h.start > cursor) segments.push({ text: text.slice(cursor, h.start) });
-    segments.push({ text: text.slice(h.start, h.end), highlight: h });
-    cursor = h.end;
+  const boundaries = new Set<number>([0, text.length]);
+  for (const highlight of valid) {
+    boundaries.add(highlight.start);
+    boundaries.add(highlight.end);
   }
-  if (cursor < text.length) segments.push({ text: text.slice(cursor) });
+
+  const points = [...boundaries].sort((a, b) => a - b);
+  const priority: Record<HighlightCategory, number> = {
+    plagiarism: 4,
+    grammar: 3,
+    citation: 2,
+    ai: 1,
+  };
+  const segments: Segment[] = [];
+
+  for (let index = 0; index < points.length - 1; index++) {
+    const start = points[index]!;
+    const end = points[index + 1]!;
+    if (end <= start) continue;
+
+    const active = valid
+      .filter((h) => h.start <= start && h.end >= end)
+      .sort((a, b) =>
+        priority[b.category] - priority[a.category] ||
+        (a.end - a.start) - (b.end - b.start) ||
+        b.score - a.score,
+      );
+    const highlight = active[0];
+    const previous = segments[segments.length - 1];
+
+    if (previous && previous.highlight === highlight) {
+      previous.text += text.slice(start, end);
+    } else {
+      segments.push({
+        text: text.slice(start, end),
+        ...(highlight ? { highlight } : {}),
+      });
+    }
+  }
+
   return segments;
 }

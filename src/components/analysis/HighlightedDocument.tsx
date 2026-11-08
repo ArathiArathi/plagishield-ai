@@ -71,7 +71,7 @@ export function HighlightedDocument({
             s.highlight ? (
               <mark
                 key={i}
-                title={`${CATEGORY_STYLE[s.highlight.category].label} · ${s.highlight.score}%${s.highlight.source ? ` · ${s.highlight.source}` : ""}${s.highlight.note ? ` · ${s.highlight.note}` : ""}`}
+                title={`${CATEGORY_STYLE[s.highlight.category].label}${s.highlight.category === "plagiarism" ? " · exact phrase match" : ""}${s.highlight.source ? ` · ${s.highlight.source}` : ""}${s.highlight.note ? ` · ${s.highlight.note}` : ""}`}
                 className={cn("rounded px-0.5", CATEGORY_STYLE[s.highlight.category].mark)}
               >
                 {s.text}
