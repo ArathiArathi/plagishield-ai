@@ -55,13 +55,8 @@ export const CATEGORY_STYLE: Record<HighlightCategory, { chip: string; mark: str
 };
 
 export const COMPOSITION_COLOR: Record<string, string> = {
-  "Plagiarised / matched": "var(--color-destructive)",
-  "AI generated": "var(--color-warning)",
-  "AI-style indicators (estimated)": "var(--color-warning)",
-  "Quoted & attributed": "var(--color-info)",
-  "Language issues": "var(--color-primary)",
-  "Original human writing": "var(--color-success)",
-  "Unmatched in retrieved sources": "var(--color-success)",
+  "Observed source overlap": "var(--color-primary)",
+  "No match found in retrieved sources": "var(--color-muted-foreground)",
 };
 
 export type Segment = { text: string; highlight?: Highlight };
