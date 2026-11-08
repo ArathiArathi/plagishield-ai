@@ -1,31 +1,32 @@
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  Bar, BarChart, CartesianGrid, Legend, Line, LineChart, PolarAngleAxis, PolarGrid,
-  Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from "recharts";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
-import { StatCard } from "@/components/layout/StatCard";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, AlertTriangle, FileText, Sparkles } from "lucide-react";
 import { useWorkspaceData, type AnalysisRow } from "@/hooks/use-workspace-data";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
     meta: [
-      { title: "Analytics — PlagiShield AI" },
-      { name: "description", content: "Workspace-wide integrity analytics, usage trends, and writing quality insights." },
-      { property: "og:title", content: "Analytics — PlagiShield AI" },
-      { property: "og:description", content: "Workspace-wide integrity analytics, usage trends, and writing quality insights." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      { title: "Review history — PlagiShield" },
+      { name: "description", content: "Document review totals and source evidence returned in your workspace." },
     ],
   }),
   component: AnalyticsPage,
 });
 
-type GrammarIssue = { type?: string };
-type Results = { grammar?: { issues?: GrammarIssue[] } };
+type SavedResults = {
+  plagiarism?: {
+    score?: number;
+    matched_words?: number;
+    eligible_words?: number;
+    excluded_words?: number;
+    matches?: Array<{ source?: string; url?: string }>;
+    source_coverage?: { sources_retrieved?: number };
+  };
+  grammar?: { issues?: Array<{ type?: string }> };
+  citations?: { issues?: string[] };
+};
 
 function AnalyticsPage() {
   const { data, isLoading } = useWorkspaceData();
@@ -33,115 +34,140 @@ function AnalyticsPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Analytics" description="Deep insights across your workspace." />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
-        </div>
+        <PageHeader title="Review history" description="Totals from the analyses saved in your workspace." />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 w-full" />)}</div>
         <Skeleton className="h-72 w-full" />
       </div>
     );
   }
 
-  const stats = data?.summaryStats;
-  const analyses = (data?.analyses ?? []).filter((a) => a.status === "completed");
-  const flagged = analyses.filter(
-    (a) => Number(a.similarity_score ?? 0) >= 25 || Number(a.ai_score ?? 0) >= 50,
-  ).length;
+  const documents = data?.documents ?? [];
+  const analyses = (data?.analyses ?? []) as AnalysisRow[];
+  const completed = analyses.filter((analysis) => analysis.status === "completed");
+  const summary = data?.summaryStats;
+  const issueCounts = new Map<string, number>();
 
-  const errorCounts = new Map<string, number>();
-  for (const a of analyses as AnalysisRow[]) {
-    const issues = ((a.results ?? {}) as Results).grammar?.issues ?? [];
-    for (const issue of issues) {
-      const key = (issue.type ?? "Other").trim() || "Other";
-      errorCounts.set(key, (errorCounts.get(key) ?? 0) + 1);
+  for (const analysis of completed) {
+    const result = (analysis.results ?? {}) as SavedResults;
+    for (const issue of result.grammar?.issues ?? []) {
+      const kind = issue.type?.trim() || "Other";
+      issueCounts.set(kind, (issueCounts.get(kind) ?? 0) + 1);
     }
   }
-  const commonErrors = [...errorCounts.entries()]
-    .map(([type, count]) => ({ type, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
 
-  const grammarRadar = [
-    { subject: "Originality", score: 100 - (stats?.similarity ?? 0) },
-    { subject: "Writing signals", score: 100 - (stats?.aiDetection ?? 0) },
-    { subject: "Grammar", score: stats?.grammar ?? 0 },
-    { subject: "Citations", score: stats?.citation ?? 0 },
-    { subject: "Overall", score: stats?.qualityScore ?? 0 },
-  ];
-
-  const hasData = (stats?.analyzed ?? 0) > 0;
+  const commonIssues = [...issueCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const rows = completed.map((analysis) => {
+    const document = documents.find((item) => item.id === analysis.document_id);
+    const result = (analysis.results ?? {}) as SavedResults;
+    return {
+      analysis,
+      documentName: document?.name ?? "Document not found",
+      similarity: Number(analysis.similarity_score ?? result.plagiarism?.score ?? 0),
+      sourceMatches: result.plagiarism?.matches?.length ?? 0,
+      matchedWords: Number(result.plagiarism?.matched_words ?? 0),
+      comparedWords: Number(result.plagiarism?.eligible_words ?? 0),
+    };
+  });
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Analytics" description="Deep insights across your workspace." />
+    <div className="space-y-7">
+      <PageHeader title="Review history" description="A factual summary of the analyses saved in your workspace." />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Documents" value={String(stats?.totalDocuments ?? 0)} icon={FileText} tone="primary" />
-        <StatCard label="Avg Similarity" value={`${stats?.similarity ?? 0}%`} icon={Activity} tone="success" />
-        <StatCard label="Avg AI-style signal" value={`${stats?.aiDetection ?? 0}%`} icon={Sparkles} tone="info" />
-        <StatCard label="Documents for Review" value={String(flagged)} icon={AlertTriangle} tone="warning" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Summary label="Documents" value={summary?.totalDocuments ?? documents.length} />
+        <Summary label="Completed analyses" value={summary?.analyzed ?? completed.length} />
+        <Summary label="Source records matched" value={summary?.matchedSourceRecords ?? 0} />
+        <Summary label="Matched words" value={Number(summary?.matchedWords ?? 0).toLocaleString()} />
       </div>
 
-      {!hasData ? (
-        <Card className="p-10 text-center">
-          <h3 className="text-base font-semibold text-foreground">No analytics yet</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Upload and analyze documents to populate workspace analytics.
+      <Card className="overflow-hidden">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="text-sm font-semibold text-foreground">Completed document reviews</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Similarity is calculated from the retrieved source records for each analysis.</p>
+        </div>
+        {rows.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-sm text-muted-foreground">No completed analyses to summarise yet.</p>
+            <Link to="/documents" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">Upload a document</Link>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-left text-sm">
+              <thead className="bg-muted/30 text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Document</th>
+                  <th className="px-3 py-3 text-right font-medium">Observed similarity</th>
+                  <th className="px-3 py-3 text-right font-medium">Source records</th>
+                  <th className="px-3 py-3 text-right font-medium">Matched words</th>
+                  <th className="px-5 py-3 text-right font-medium">Review</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((row) => (
+                  <tr key={row.analysis.id} className="hover:bg-muted/20">
+                    <td className="px-5 py-4">
+                      <p className="max-w-[280px] truncate font-medium text-foreground">{row.documentName}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{new Date(row.analysis.created_at).toLocaleDateString()}</p>
+                    </td>
+                    <td className="px-3 py-4 text-right tabular-nums">{row.similarity}%</td>
+                    <td className="px-3 py-4 text-right tabular-nums">{row.sourceMatches}</td>
+                    <td className="px-3 py-4 text-right tabular-nums">{row.matchedWords.toLocaleString()}</td>
+                    <td className="px-5 py-4 text-right"><Link to="/analysis" search={{ doc: row.analysis.document_id }} className="text-xs font-medium text-primary hover:underline">Open review</Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <div className="grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-foreground">Comparison totals</h2>
+          <dl className="mt-4 space-y-3">
+            <Row label="Words included in comparison" value={Number(summary?.comparedWords ?? 0).toLocaleString()} />
+            <Row label="Words excluded by quote/reference rules" value={Number(summary?.excludedWords ?? 0).toLocaleString()} />
+            <Row label="Source records retrieved" value={Number(summary?.sourcesRetrieved ?? 0).toLocaleString()} />
+          </dl>
+          <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
+            Source records can overlap. Matched-word totals are deduplicated within each document, not across separate documents.
           </p>
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card className="p-5">
-            <h3 className="mb-4 text-sm font-semibold text-foreground">Usage trends</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data?.submissionTrend ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="month" stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <YAxis allowDecimals={false} stroke="var(--color-muted-foreground)" fontSize={12} />
-                  <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="submissions" stroke="var(--color-primary)" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="flagged" stroke="var(--color-destructive)" strokeWidth={2} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
 
-          <Card className="p-5">
-            <h3 className="mb-4 text-sm font-semibold text-foreground">Writing quality radar</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={grammarRadar}>
-                  <PolarGrid stroke="var(--color-border)" />
-                  <PolarAngleAxis dataKey="subject" fontSize={11} stroke="var(--color-muted-foreground)" />
-                  <Radar dataKey="score" stroke="var(--color-primary)" fill="var(--color-primary)" fillOpacity={0.25} />
-                  <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-foreground">Grammar issue categories</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Counts returned by the enabled grammar checker across completed reviews.</p>
+          {commonIssues.length === 0 ? (
+            <p className="mt-5 text-sm text-muted-foreground">No grammar issue records were returned.</p>
+          ) : (
+            <ul className="mt-4 divide-y divide-border">
+              {commonIssues.map(([kind, count]) => (
+                <li key={kind} className="flex items-center justify-between gap-3 py-3">
+                  <span className="text-sm text-foreground">{kind}</span>
+                  <Badge variant="secondary">{count}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
-          <Card className="p-5 lg:col-span-2">
-            <h3 className="mb-4 text-sm font-semibold text-foreground">Most common errors</h3>
-            {commonErrors.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No grammar issues detected across analyzed documents.</p>
-            ) : (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={commonErrors} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                    <XAxis type="number" allowDecimals={false} fontSize={12} stroke="var(--color-muted-foreground)" />
-                    <YAxis dataKey="type" type="category" fontSize={12} stroke="var(--color-muted-foreground)" width={130} />
-                    <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                    <Bar dataKey="count" fill="var(--color-primary)" radius={[0, 6, 6, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </Card>
-        </div>
-      )}
+      <p className="max-w-3xl text-xs leading-5 text-muted-foreground">
+        These figures describe saved analysis results only. They are not institution-wide benchmarks. A low or zero similarity result does not establish originality, because sources outside the connected indexes may not have been retrieved.
+      </p>
     </div>
   );
+}
+
+function Summary({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="border-b border-border px-1 py-4 sm:border-b-0 sm:border-l sm:pl-4 first:border-l-0 first:pl-1">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-2 font-serif text-3xl tabular-nums tracking-tight text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-center justify-between gap-3"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-sm font-medium tabular-nums text-foreground">{value}</dd></div>;
 }
