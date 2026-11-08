@@ -71,7 +71,18 @@ type SubscriptionRecord = {
   current_period_end: string | null;
 };
 
-const ACTIVE_STATUSES = new Set(["active", "trialing", "past_due", "unpaid"]);
+const ACTIVE_STATUSES = new Set(["active", "trialing"]);
+const BILLING_PORTAL_STATUSES = new Set(["active", "trialing", "past_due", "unpaid"]);
+
+async function invokeBillingFunction(name: string, body: Record<string, unknown> = {}) {
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    const response = (error as Error & { context?: Response }).context;
+    const payload = response ? await response.clone().json().catch(() => null) : null;
+    throw new Error(payload?.error ?? error.message);
+  }
+  return data as { url?: string } | null;
+}
 
 export function useSubscription() {
   const { user } = useAuth();
@@ -105,6 +116,9 @@ export function useSubscription() {
 
   useEffect(() => {
     void refreshSubscription();
+    const refreshOnFocus = () => void refreshSubscription();
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
   }, [refreshSubscription]);
 
   const planId: SubscriptionPlanId =
@@ -121,10 +135,9 @@ export function useSubscription() {
 
   const openBillingPortal = useCallback(async () => {
     try {
-      const { data, error } = await supabase.functions.invoke("create-customer-portal", { body: {} });
-      if (error) throw error;
+      const data = await invokeBillingFunction("create-customer-portal");
       if (!data?.url) throw new Error("The billing portal did not return a link.");
-      window.location.assign(data.url as string);
+      window.location.assign(data.url);
       return true;
     } catch (error) {
       console.error("Unable to open billing portal:", error);
@@ -135,17 +148,14 @@ export function useSubscription() {
 
   const changePlan = useCallback(async (newPlan: SubscriptionPlanId, billingCycle: BillingCycle = "monthly") => {
     if (!SUBSCRIPTION_PLANS[newPlan]) return false;
-    if (newPlan === "free" || (record && ACTIVE_STATUSES.has(record.status))) {
+    if (newPlan === "free" || (record && BILLING_PORTAL_STATUSES.has(record.status))) {
       return openBillingPortal();
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: { planId: newPlan, billingCycle },
-      });
-      if (error) throw error;
+      const data = await invokeBillingFunction("create-checkout-session", { planId: newPlan, billingCycle });
       if (!data?.url) throw new Error("Checkout is not configured yet. Please contact the workspace administrator.");
-      window.location.assign(data.url as string);
+      window.location.assign(data.url);
       return true;
     } catch (error) {
       console.error("Unable to start checkout:", error);
