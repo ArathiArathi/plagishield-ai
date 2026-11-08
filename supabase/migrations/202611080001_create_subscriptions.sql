@@ -23,3 +23,53 @@ create policy "Users can read their own subscription"
 
 revoke insert, update, delete on public.subscriptions from anon, authenticated;
 grant select on public.subscriptions to authenticated;
+
+-- Enforce plan allowances at the database boundary as well as in the upload UI.
+-- This prevents direct API calls from bypassing a workspace's document limit.
+create or replace function public.enforce_document_allowance()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_plan text := 'free';
+  v_limit integer := 10;
+  v_count integer := 0;
+begin
+  select
+    case
+      when s.status in ('active', 'trialing')
+        and s.plan_id in ('pro', 'plus', 'premium')
+      then s.plan_id
+      else 'free'
+    end
+  into v_plan
+  from public.subscriptions s
+  where s.user_id = new.owner_id;
+
+  v_limit := case v_plan
+    when 'pro' then 15
+    when 'plus' then 25
+    when 'premium' then 35
+    else 10
+  end;
+
+  select count(*) into v_count
+  from public.documents d
+  where d.owner_id = new.owner_id;
+
+  if v_count >= v_limit then
+    raise exception using
+      errcode = 'P0001',
+      message = format('Your %s plan allows up to %s documents. Upgrade your plan to add another document.', v_plan, v_limit);
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_document_allowance_before_insert on public.documents;
+create trigger enforce_document_allowance_before_insert
+  before insert on public.documents
+  for each row execute function public.enforce_document_allowance();
