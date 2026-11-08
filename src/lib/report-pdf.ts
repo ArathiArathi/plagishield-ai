@@ -659,8 +659,8 @@ const CATEGORY_FILL: Record<string, [number, number, number]> = {
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
-  plagiarism: "Plagiarised / matched text",
-  ai: "AI generated text",
+  plagiarism: "Text similarity match",
+  ai: "AI-style indicator",
   grammar: "Language & grammar issue",
   citation: "Scholarly citation",
 };
