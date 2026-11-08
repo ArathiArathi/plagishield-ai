@@ -132,7 +132,7 @@ export function useWorkspaceData() {
       const grammar = avg(done.map((a) => Number(a.grammar_score ?? 0)));
       const citation = avg(done.map((a) => Number(a.citation_score ?? 0)));
       const qualityScore = done.length
-        ? Math.round((grammar + citation + (100 - similarity) + (100 - aiDetection)) / 4)
+        ? Math.round((grammar + citation) / 2)
         : 0;
 
       // Submission trend — last 7 calendar months
@@ -173,9 +173,9 @@ export function useWorkspaceData() {
       }).length;
       const aiLow = done.length - aiHigh - aiMid;
       const aiContentAnalysis = [
-        { name: "Human", value: aiLow, fill: "var(--color-success)" },
-        { name: "AI Assisted", value: aiMid, fill: "var(--color-warning)" },
-        { name: "AI Generated", value: aiHigh, fill: "var(--color-destructive)" },
+        { name: "Lower signal", value: aiLow, fill: "var(--color-success)" },
+        { name: "Moderate signal", value: aiMid, fill: "var(--color-warning)" },
+        { name: "Higher signal", value: aiHigh, fill: "var(--color-destructive)" },
       ];
 
       const recentActivity = documents.slice(0, 6).map((doc) => {
