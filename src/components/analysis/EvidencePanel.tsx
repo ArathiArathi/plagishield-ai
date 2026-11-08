@@ -32,7 +32,7 @@ export function EvidencePanel({
   if (items.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No evidence segments were recorded — nothing was matched or flagged in this submission.
+        No passages were returned by the enabled checks. This does not establish originality or authorship.
       </p>
     );
   }
