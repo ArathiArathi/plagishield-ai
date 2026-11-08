@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, FileText, ScanSearch, FileBarChart, BarChart3, Database, Settings, Sparkles,
+  LayoutDashboard, FileText, ScanSearch, FileBarChart, BarChart3, Database, Settings, CreditCard,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -86,7 +86,7 @@ export function AppSidebar() {
                   onClick={() => setUpgradeOpen(true)}
                   className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
                 >
-                  <Sparkles className="h-3 w-3" />
+                  <CreditCard className="h-3 w-3" />
                   Billing
                 </button>
               </div>
@@ -104,7 +104,7 @@ export function AppSidebar() {
           )}
           {collapsed && (
             <Button variant="ghost" size="icon" aria-label="Manage billing" onClick={() => setUpgradeOpen(true)}>
-              <Sparkles className="h-4 w-4" />
+              <CreditCard className="h-4 w-4" />
             </Button>
           )}
         </SidebarFooter>
