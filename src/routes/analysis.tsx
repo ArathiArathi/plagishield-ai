@@ -57,7 +57,7 @@ type Results = {
   plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
   ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: Highlight[] };
   grammar?: { score?: number | null; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
-  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[] };
+  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[]; references?: Array<{ raw?: string; verified?: boolean; matched_title?: string; doi?: string; year?: number }> };
   composition?: CompositionSlice[];
   issues?: IssueItem[];
 };
@@ -492,6 +492,20 @@ function AnalysisPage() {
                 <p className="text-sm font-medium text-foreground">Reference records</p>
                 <p className="mt-1 text-sm text-muted-foreground">{results.citations?.verified ?? 0} of {results.citations?.total ?? 0} detected entries matched a public scholarly record. This checks record identity, not APA, MLA, IEEE or Harvard formatting.</p>
               </Card>
+              {(results.citations?.references ?? []).length > 0 && (
+                <div className="space-y-2">
+                  {(results.citations?.references ?? []).map((reference, index) => (
+                    <div key={reference.doi ?? reference.raw ?? index} className="rounded-md border border-border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-xs leading-5 text-foreground">{reference.raw}</p>
+                        <Badge variant="outline">{reference.verified ? "Matched" : "No public-index match"}</Badge>
+                      </div>
+                      {reference.matched_title && <p className="mt-2 text-xs text-muted-foreground">Matched record: {reference.matched_title}</p>}
+                      {reference.doi && <a className="mt-1 inline-block text-xs text-primary hover:underline" href={reference.doi.startsWith("http") ? reference.doi : "https://doi.org/" + reference.doi} target="_blank" rel="noreferrer">Open DOI record</a>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {citationIssues.length === 0 ? (
                 <Empty label="No additional reference verification notes were returned." />
               ) : citationIssues.map((c, i) => (
