@@ -146,7 +146,7 @@ function AnalysisPage() {
         targetAnalysisId = newAnalysis.id;
       }
 
-      // Immediately mark as processing in DB & invalidate cache so UI updates to Live Real-Time instantly!
+      // Immediately mark as processing in DB & invalidate cache so UI updates to Processing instantly!
       await supabase
         .from("analyses")
         .update({
@@ -296,12 +296,12 @@ function AnalysisPage() {
                       ? currentStage === "extracting"
                         ? "Stage 1/4: Ingesting text & tokenizing sentence structures"
                         : currentStage === "retrieving"
-                          ? "Stage 2/4: Live literature retrieval (Wikipedia, OpenAlex, Crossref)"
+                          ? "Stage 2/4: Public source retrieval (Crossref, OpenAlex, Semantic Scholar, Europe PMC, Wikipedia)"
                           : currentStage === "scoring"
                             ? "Stage 3/4: Experimental writing-pattern checks and language review"
                             : currentStage === "rendering"
                               ? "Stage 4/4: Bibliographic cross-matching & evidence compilation"
-                              : "Multi-signal analysis pipeline actively processing in real time…"
+                              : "Checking document text and retrieved source records…"
                       : status === "pending"
                         ? "Document queued for analysis"
                         : status === "failed"
@@ -316,7 +316,7 @@ function AnalysisPage() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {status === "processing"
-                    ? "Evaluating live academic repositories and computational models. Results appear automatically."
+                    ? "Searching connected public indexes. Results depend on the records returned."
                     : status === "pending"
                       ? "Waiting for the queue worker to begin execution."
                       : status === "failed"
