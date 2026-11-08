@@ -215,7 +215,7 @@ function ReportsPage() {
           </div>
           <h2 className="mt-3 text-2xl font-semibold text-foreground break-words [overflow-wrap:anywhere]">{selected.name}</h2>
           <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
-            Generated {new Date(analysis.created_at).toLocaleString()} · version {selected.latest_version} · {selected.file_type}
+            Generated {new Date(results.meta?.checked_at ?? analysis.updated_at ?? analysis.created_at).toLocaleString()} · version {selected.latest_version} · {selected.file_type}
           </p>
         </div>
 
@@ -231,8 +231,6 @@ function ReportsPage() {
               <KPI label="Matched sources" value={String(matches.length)} />
             </div>
           </Section>
-
-          <Separator />
 
           <Separator />
 
