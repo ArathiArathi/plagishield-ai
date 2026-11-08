@@ -71,7 +71,7 @@ type SubscriptionRecord = {
   current_period_end: string | null;
 };
 
-const ACTIVE_STATUSES = new Set(["active", "trialing"]);
+const ACTIVE_STATUSES = new Set(["active", "trialing", "past_due", "unpaid"]);
 
 export function useSubscription() {
   const { user } = useAuth();
