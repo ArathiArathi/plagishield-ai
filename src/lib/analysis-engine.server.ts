@@ -593,19 +593,16 @@ function stylometry(text: string, sentences: Sentence[]) {
   // 7. Composite Calibrated Logistic Score
   let z = -2.2;
 
-  // Add AI indicators:
-  z += Math.min(4.0, aiPhraseDensity * 0.25 * dampener);
-  z += Math.min(2.5, aiKeywordDensity * 0.25 * dampener);
-  z += Math.min(2.0, triadDensity * 2.2);
-  z += Math.min(2.2, transitionOpenerRatio * 3.5);
+  // These stylometric cues are weak and overlap heavily with ordinary
+  // academic prose. Keep each contribution small; the uncalibrated heuristic
+  // must not dominate the result or create an illusion of forensic certainty.
+  z += Math.min(1.2, aiPhraseDensity * 0.08 * dampener);
+  z += Math.min(0.6, aiKeywordDensity * 0.06 * dampener);
+  z += Math.min(0.6, triadDensity * 0.7);
+  z += Math.min(0.6, transitionOpenerRatio * 0.9);
 
-  // Uniformity penalty (low burstiness & low delta indicates mechanical LLM output)
-  if (burstiness < 0.22) {
-    z += (0.22 - burstiness) * 6.5;
-  }
-  if (deltaBurstiness < 0.25) {
-    z += (0.25 - deltaBurstiness) * 5.5;
-  }
+  if (burstiness < 0.22) z += (0.22 - burstiness) * 2.0;
+  if (deltaBurstiness < 0.25) z += (0.25 - deltaBurstiness) * 1.8;
 
   // Sentence variation is a weak stylistic feature, not proof of human
   // authorship. Keep its contribution bounded and do not treat citations,
