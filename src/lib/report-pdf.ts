@@ -258,29 +258,29 @@ function titleCase(v: string) {
   return v.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/* ------------------------------------------- academic paper header & block */
+/* ------------------------------------------- submission metadata */
 
 /** Formats the header and title block matching the academic paper layout
  *  (Title, Authors, Affiliation, Abstract Callout, Keywords, Institutional Seal). */
 function documentBlock(ctx: Ctx, input: ReportInput) {
   const docName = sanitizePdfText(input.documentName || "document");
-  const refId = String(input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
+  const refId = input.analysisId ? input.analysisId.slice(0, 8).toUpperCase() : "Not recorded";
   const rows: Array<[string, string]> = [
     ["Document filename", docName],
     ["Paper title", input.paperTitle || docName.replace(/\.[a-z0-9]+$/i, "")],
     ["Author", input.authorName || "Author not provided"],
     ["Submission type", input.docType ? titleCase(input.docType) : "Not provided"],
-    ["Format & version", `${String(input.fileType || "PDF").toUpperCase()} · v${input.version || 1}`],
+    ["Format & version", `${String(input.fileType || "Not recorded").toUpperCase()} · ${input.version ? `v${input.version}` : "version not recorded"}`],
     ["Analysis reference ID", refId],
     ["Analysis engine", input.results.meta?.engine_version || "Not recorded"],
     ["Word count", Number(input.results.meta?.words ?? 0).toLocaleString()],
     ["Extracted text", input.results.meta?.extraction || "Not recorded"],
-    ["Analysis generated", input.generatedAt || new Date().toLocaleString()],
+    ["Analysis generated", input.generatedAt || "Not recorded"],
   ];
   metaTable(ctx, rows);
 }
 
-/* ------------------------------------------- visual graphs & charts in jsPDF */
+/* ------------------------------------------- report sections */
 
 /* ------------------------------------------- composition, highlights, issues */
 
