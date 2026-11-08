@@ -332,7 +332,7 @@ async function detectPlagiarism(
   // Sample across the full document rather than relying only on the opening
   // paragraphs. This improves retrieval diversity without claiming exhaustive
   // crawling of the web or licensed academic databases.
-  const target = Math.min(16, usable.length);
+  const target = Math.min(12, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
   for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
