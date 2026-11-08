@@ -1,12 +1,16 @@
+import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, FileText, ScanSearch, FileBarChart, BarChart3,
-  Database, Users, Settings, ShieldCheck,
+  LayoutDashboard, FileText, ScanSearch, FileBarChart, BarChart3, Database, Settings, Sparkles,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/Logo";
+import { useSubscription } from "@/hooks/use-subscription";
+import { UpgradeModal } from "@/components/subscription/UpgradeModal";
 
 const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -17,24 +21,11 @@ const mainItems = [
   { title: "Repository", url: "/repository", icon: Database },
 ];
 
-const orgItems = [
-  { title: "Team", url: "/team", icon: Users },
-  { title: "Settings", url: "/settings", icon: Settings },
-];
-
-
-import { useState } from "react";
-import { useSubscription } from "@/hooks/use-subscription";
-import { UpgradeModal } from "@/components/subscription/UpgradeModal";
-import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
-import { Logo } from "@/components/brand/Logo";
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const isActive = (url: string) => pathname.startsWith(url);
+  const isActive = (url: string) => pathname === url || pathname.startsWith(`${url}/`);
   const { plan, docsUsed, docLimit, usagePercent, isLimitReached } = useSubscription();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
@@ -48,6 +39,7 @@ export function AppSidebar() {
             </Link>
           </div>
         </SidebarHeader>
+
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Workspace</SidebarGroupLabel>
@@ -66,50 +58,54 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
           <SidebarGroup>
-            <SidebarGroupLabel>Organization</SidebarGroupLabel>
+            <SidebarGroupLabel>Account</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {orgItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                      <Link to={item.url}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/settings")} tooltip="Settings">
+                    <Link to="/settings">
+                      <Settings className="h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
+
         <SidebarFooter className="border-t border-sidebar-border">
           {!collapsed && (
-            <div className="rounded-lg bg-sidebar-accent/40 p-3 text-xs text-sidebar-foreground/80 space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="space-y-2 rounded-lg bg-sidebar-accent/40 p-3 text-xs text-sidebar-foreground/80">
+              <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold text-sidebar-foreground">{plan.name}</p>
                 <button
                   type="button"
                   onClick={() => setUpgradeOpen(true)}
-                  className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1"
+                  className="flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
                 >
                   <Sparkles className="h-3 w-3" />
-                  Upgrade
+                  Billing
                 </button>
               </div>
               <p className="text-[11px] text-sidebar-foreground/60">
-                {docsUsed} / {docLimit} docs used {isLimitReached && <span className="text-destructive font-semibold">(Limit reached)</span>}
+                {docsUsed} / {docLimit} documents used
+                {isLimitReached && <span className="ml-1 font-semibold text-destructive">(Limit reached)</span>}
               </p>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-sidebar-border">
                 <div
-                  className={`h-full rounded-full transition-all ${
-                    isLimitReached ? "bg-destructive" : usagePercent > 80 ? "bg-warning" : "bg-sidebar-primary"
-                  }`}
+                  className={`h-full rounded-full transition-all ${isLimitReached ? "bg-destructive" : usagePercent > 80 ? "bg-warning" : "bg-sidebar-primary"}`}
                   style={{ width: `${usagePercent}%` }}
                 />
               </div>
             </div>
+          )}
+          {collapsed && (
+            <Button variant="ghost" size="icon" aria-label="Manage billing" onClick={() => setUpgradeOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+            </Button>
           )}
         </SidebarFooter>
       </Sidebar>
