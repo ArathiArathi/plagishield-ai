@@ -83,19 +83,40 @@ async function readZipEntry(bytes: Uint8Array, wanted: string): Promise<ZipEntry
 }
 
 async function extractDocx(bytes: Uint8Array): Promise<string> {
-  const entry = await readZipEntry(bytes, "word/document.xml");
-  if (!entry) return "";
-  const xml = decodeUtf8(entry.data);
-  return xml
-    .replace(/<w:p[ >]/g, "\n<w:p ")
-    .replace(/<\/w:p>/g, "\n")
-    .replace(/<w:tab[^>]*\/>/g, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
+  const fileNames = [
+    "word/document.xml",
+    "word/header1.xml",
+    "word/header2.xml",
+    "word/footer1.xml",
+    "word/footer2.xml",
+    "word/footnotes.xml",
+    "word/endnotes.xml",
+    "docProps/core.xml",
+  ];
+  let fullText = "";
+
+  for (const name of fileNames) {
+    const entry = await readZipEntry(bytes, name);
+    if (!entry) continue;
+    const xml = decodeUtf8(entry.data);
+    const converted = xml
+      .replace(/<w:p[ >]/g, "\n<w:p ")
+      .replace(/<\/w:p>/g, "\n")
+      .replace(/<w:tc[ >]/g, "\t")
+      .replace(/<\/w:tr>/g, "\n")
+      .replace(/<w:tab[^>]*\/>/g, " ")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+    if (converted.trim()) {
+      fullText += converted + "\n";
+    }
+  }
+
+  return fullText
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -190,11 +211,28 @@ function pdfTextFromContent(content: string): string {
   return out;
 }
 
+function extractPdfInfo(raw: string): string {
+  let infoText = "";
+  const titleMatch = raw.match(/\/Title\s*(?:\((?:\\.|[^\\()])*\)|<[0-9a-fA-F]+>)/i);
+  if (titleMatch) {
+    const rawVal = titleMatch[0].replace(/^\/Title\s*/i, "");
+    if (rawVal.startsWith("(")) infoText += pdfUnescape(rawVal.slice(1, -1)) + "\n";
+    else if (rawVal.startsWith("<")) infoText += decodeHexPdf(rawVal.slice(1, -1)) + "\n";
+  }
+  const subjectMatch = raw.match(/\/Subject\s*(?:\((?:\\.|[^\\()])*\)|<[0-9a-fA-F]+>)/i);
+  if (subjectMatch) {
+    const rawVal = subjectMatch[0].replace(/^\/Subject\s*/i, "");
+    if (rawVal.startsWith("(")) infoText += pdfUnescape(rawVal.slice(1, -1)) + "\n";
+    else if (rawVal.startsWith("<")) infoText += decodeHexPdf(rawVal.slice(1, -1)) + "\n";
+  }
+  return infoText;
+}
+
 async function extractPdf(bytes: Uint8Array): Promise<string> {
   const raw = latin1(bytes);
-  let text = "";
+  let text = extractPdfInfo(raw);
   // Ensure we match 'stream' but NOT 'endstream'
-  const streamRe = /(?<!end)stream\r?\n/g;
+  const streamRe = /(?<!end)stream[\r\n\s]+/g;
   let m: RegExpExecArray | null;
   let extracted = 0;
 
@@ -261,11 +299,11 @@ export async function extractText(
 
   if (ext === "docx") {
     rawText = await extractDocx(bytes);
-    if (rawText.length > 40) method = "docx-xml";
+    if (rawText.length > 20) method = "docx-xml";
   }
   if (!rawText && isPdf) {
     rawText = await extractPdf(bytes);
-    if (rawText.length > 40) method = "pdf-content-stream";
+    if (rawText.length > 20) method = "pdf-content-stream";
   }
 
   // Only decode raw binary as UTF-8 for plaintext files — NEVER decode raw PDF byte streams as English text
@@ -278,11 +316,29 @@ export async function extractText(
     method = "plain-text";
   }
 
+  // Fallback for visual documents, diagrams, or presentations with embedded text labels
+  if (!rawText || rawText.trim().length < 20) {
+    const rawLatin = latin1(bytes);
+    const textChunks = rawLatin.match(/[\p{L}\p{N}.,;:!?'"()\s-]{8,}/gu) ?? [];
+    const validChunks = textChunks
+      .map((c) => c.trim())
+      .filter(
+        (c) =>
+          !/^(stream|endstream|xref|trailer|startxref|\/Filter|\/Length|\/Type)/i.test(c) &&
+          c.length >= 8,
+      );
+    if (validChunks.length > 0) {
+      rawText += "\n" + validChunks.slice(0, 100).join(" ");
+      method = "embedded-tokens";
+    }
+  }
+
   // CRITICAL: Strip null bytes (\u0000) and control characters that trigger Postgres error 22P05
   const sanitized = rawText
     .replace(/\0/g, "")
     .replace(/\u0000/g, "")
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+    .replace(/\uFFFD/g, " ")
     .trim();
 
   return { text: sanitized, method };

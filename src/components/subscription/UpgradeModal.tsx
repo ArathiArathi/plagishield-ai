@@ -27,17 +27,18 @@ export function UpgradeModal({
   const {
     planId,
     changePlan,
+    activateDemoPlan,
     openBillingPortal,
     docsUsed,
+    isDemo,
     hasBillingCustomer,
     subscriptionStatus,
   } = useSubscription();
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const plans = Object.values(SUBSCRIPTION_PLANS);
-  const hasActiveSubscription = ["active", "trialing", "past_due", "unpaid"].includes(
-    subscriptionStatus,
-  );
+  const hasActiveSubscription =
+    !isDemo && ["active", "trialing", "past_due", "unpaid"].includes(subscriptionStatus);
 
   const handleSelectPlan = async (targetPlan: SubscriptionPlanId) => {
     if (targetPlan === planId || loadingPlan) return;
@@ -48,6 +49,11 @@ export function UpgradeModal({
     } finally {
       setLoadingPlan(null);
     }
+  };
+
+  const handleDemoActivate = (targetPlan: SubscriptionPlanId) => {
+    activateDemoPlan(targetPlan, billingCycle);
+    onOpenChange(false);
   };
 
   const handleManageBilling = async () => {
@@ -63,19 +69,28 @@ export function UpgradeModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
         <DialogHeader className="text-center sm:text-center">
-          <Badge
-            variant="outline"
-            className="mx-auto mb-2 w-fit gap-1 border-primary/30 bg-primary/10 text-primary"
-          >
-            <CreditCard className="h-3.5 w-3.5" />
-            Secure subscription billing
-          </Badge>
+          <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
+            <Badge
+              variant="outline"
+              className="w-fit gap-1 border-primary/30 bg-primary/10 text-primary"
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              Subscription billing
+            </Badge>
+            <Badge
+              variant="secondary"
+              className="w-fit gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-normal"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Demo Mode Ready
+            </Badge>
+          </div>
           <DialogTitle className="text-2xl font-semibold tracking-tight">
             Choose the allowance that fits your work
           </DialogTitle>
           <DialogDescription className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-            Payments are handled on Stripe Checkout. Your plan changes only after Stripe confirms
-            the subscription through a verified webhook.
+            Select a plan to upgrade your monthly document allowance. In demo mode, upgrades
+            activate instantly so you can explore all features with zero payment required.
           </DialogDescription>
 
           <div className="mt-4 flex items-center justify-center gap-2">
@@ -104,9 +119,9 @@ export function UpgradeModal({
               Annual
               <Badge
                 variant="secondary"
-                className="bg-success/20 px-1.5 py-0 text-[10px] text-success"
+                className="bg-emerald-500/20 px-1.5 py-0 text-[10px] text-emerald-600 dark:text-emerald-400"
               >
-                Annual billing
+                Save 20%
               </Badge>
             </button>
           </div>
@@ -123,9 +138,9 @@ export function UpgradeModal({
                 className={cn(
                   "relative flex flex-col justify-between rounded-xl border p-4 transition-colors",
                   p.popular
-                    ? "border-primary bg-primary/[0.03]"
+                    ? "border-primary bg-primary/[0.03] shadow-sm"
                     : isCurrent
-                      ? "border-primary/40 bg-muted/40"
+                      ? "border-primary/50 bg-primary/5"
                       : "border-border bg-card hover:border-primary/40",
                 )}
               >
@@ -140,14 +155,14 @@ export function UpgradeModal({
                     {isCurrent && (
                       <Badge
                         variant="secondary"
-                        className="border-primary/20 bg-primary/10 text-[10px] text-primary"
+                        className="border-primary/20 bg-primary/10 text-[10px] text-primary font-medium"
                       >
-                        Current
+                        Active
                       </Badge>
                     )}
                   </div>
                   <div className="mt-3 flex items-baseline gap-1">
-                    <span className="text-2xl font-semibold tracking-tight text-foreground">
+                    <span className="text-2xl font-bold tracking-tight text-foreground">
                       {p.priceMonthly === 0
                         ? "Free"
                         : `₹${monthlyEquivalent.toLocaleString("en-IN")}`}
@@ -168,13 +183,13 @@ export function UpgradeModal({
                   <ul className="mt-4 space-y-2 border-t border-border pt-4 text-xs text-muted-foreground">
                     {p.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2">
-                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
                         <span className="leading-5">{feature}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                <div className="mt-5">
+                <div className="mt-5 space-y-1.5">
                   <Button
                     size="sm"
                     className="w-full text-xs"
@@ -182,12 +197,28 @@ export function UpgradeModal({
                     disabled={isCurrent || Boolean(loadingPlan) || hasActiveSubscription}
                     onClick={() => handleSelectPlan(p.id)}
                   >
-                    {isCurrent
-                      ? "Current plan"
-                      : loadingPlan === p.id
-                        ? "Opening checkout…"
-                        : "Continue to checkout"}
+                    {isCurrent ? "Current plan" : loadingPlan === p.id ? "Processing…" : "Upgrade"}
                   </Button>
+                  {!isCurrent && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full text-[11px] h-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleDemoActivate(p.id)}
+                    >
+                      Instant Demo Activate
+                    </Button>
+                  )}
+                  {isCurrent && isDemo && p.id !== "free" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full text-[11px] h-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDemoActivate("free")}
+                    >
+                      Reset to Free Tier
+                    </Button>
+                  )}
                 </div>
               </div>
             );
@@ -196,11 +227,11 @@ export function UpgradeModal({
 
         <div className="mt-6 flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
             <span>
               {hasActiveSubscription
-                ? "You already have an active subscription. Use the billing portal to change plans, update payment details, or cancel."
-                : `Your workspace currently contains ${docsUsed} documents. Secure checkout opens in a new hosted payment flow.`}
+                ? "You have an active production subscription. Use the portal to manage your card or billing details."
+                : `Your workspace currently contains ${docsUsed} document review(s). Demo upgrades activate instantly without billing charges.`}
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -220,12 +251,6 @@ export function UpgradeModal({
             </Button>
           </div>
         </div>
-        {!hasBillingCustomer && !hasActiveSubscription && (
-          <p className="text-center text-[11px] text-muted-foreground">
-            Billing is available once the workspace owner has configured Stripe price IDs and
-            deployed the billing functions.
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );

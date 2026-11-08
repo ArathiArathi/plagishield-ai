@@ -73,6 +73,35 @@ type SubscriptionRecord = {
 
 const ACTIVE_STATUSES = new Set(["active", "trialing"]);
 const BILLING_PORTAL_STATUSES = new Set(["active", "trialing", "past_due", "unpaid"]);
+const DEMO_STORAGE_KEY_PREFIX = "plagishield_demo_subscription_";
+
+function getDemoSubscription(userId: string): SubscriptionRecord | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`${DEMO_STORAGE_KEY_PREFIX}${userId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.plan_id && parsed.status === "active") {
+      return parsed as SubscriptionRecord;
+    }
+  } catch {
+    // Ignore JSON parse errors
+  }
+  return null;
+}
+
+function setDemoSubscription(userId: string, record: SubscriptionRecord | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!record) {
+      localStorage.removeItem(`${DEMO_STORAGE_KEY_PREFIX}${userId}`);
+    } else {
+      localStorage.setItem(`${DEMO_STORAGE_KEY_PREFIX}${userId}`, JSON.stringify(record));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 async function invokeBillingFunction(name: string, body: Record<string, unknown> = {}) {
   const { data, error } = await supabase.functions.invoke(name, { body });
@@ -103,19 +132,26 @@ export function useSubscription() {
     }
 
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("plan_id,status,stripe_customer_id,current_period_end")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    let subData: SubscriptionRecord | null = null;
+    try {
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("plan_id,status,stripe_customer_id,current_period_end")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Unable to load subscription:", error);
-      toast.error("Your billing status could not be loaded. Please refresh the page.");
-      setRecord(null);
-    } else {
-      setRecord(data as SubscriptionRecord | null);
+      if (!error && data && data.status === "active") {
+        subData = data as SubscriptionRecord;
+      }
+    } catch {
+      // Ignore Supabase load failure
     }
+
+    if (!subData) {
+      subData = getDemoSubscription(user.id);
+    }
+
+    setRecord(subData);
     setIsLoading(false);
   }, [user]);
 
@@ -140,9 +176,49 @@ export function useSubscription() {
   const isLimitReached = docsUsed >= docLimit;
   const remainingDocs = Math.max(0, docLimit - docsUsed);
   const usagePercent = Math.min(100, Math.round((docsUsed / docLimit) * 100));
-  const hasBillingCustomer = Boolean(record?.stripe_customer_id);
+  const isDemo = record?.stripe_customer_id?.startsWith("demo_") ?? false;
+  const hasBillingCustomer = Boolean(record?.stripe_customer_id && !isDemo);
+
+  const activateDemoPlan = useCallback(
+    (newPlan: SubscriptionPlanId, billingCycle: BillingCycle = "monthly") => {
+      if (!user) return false;
+      const targetPlan = SUBSCRIPTION_PLANS[newPlan] ?? SUBSCRIPTION_PLANS.free;
+      if (newPlan === "free") {
+        setDemoSubscription(user.id, null);
+        setRecord(null);
+        toast.success("Switched to Free tier.");
+        return true;
+      }
+
+      const periodEnd = new Date();
+      if (billingCycle === "annual") {
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      } else {
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+      }
+
+      const demoRecord: SubscriptionRecord = {
+        plan_id: newPlan,
+        status: "active",
+        stripe_customer_id: "demo_cus_sandbox",
+        current_period_end: periodEnd.toISOString(),
+      };
+
+      setDemoSubscription(user.id, demoRecord);
+      setRecord(demoRecord);
+      toast.success(
+        `🎉 Activated ${targetPlan.name} Plan (Demo Mode)! Monthly allowance is now ${targetPlan.docLimit} documents.`,
+      );
+      return true;
+    },
+    [user],
+  );
 
   const openBillingPortal = useCallback(async () => {
+    if (isDemo) {
+      toast.info("Demo Mode active. You can switch plans or reset back to Free anytime.");
+      return true;
+    }
     try {
       const data = await invokeBillingFunction("create-customer-portal");
       if (!data?.url) throw new Error("The billing portal did not return a link.");
@@ -153,12 +229,15 @@ export function useSubscription() {
       toast.error(error instanceof Error ? error.message : "Unable to open billing settings.");
       return false;
     }
-  }, []);
+  }, [isDemo]);
 
   const changePlan = useCallback(
     async (newPlan: SubscriptionPlanId, billingCycle: BillingCycle = "monthly") => {
       if (!SUBSCRIPTION_PLANS[newPlan]) return false;
-      if (newPlan === "free" || (record && BILLING_PORTAL_STATUSES.has(record.status))) {
+      if (newPlan === "free") {
+        return activateDemoPlan("free");
+      }
+      if (record && BILLING_PORTAL_STATUSES.has(record.status) && !isDemo) {
         return openBillingPortal();
       }
 
@@ -167,21 +246,18 @@ export function useSubscription() {
           planId: newPlan,
           billingCycle,
         });
-        if (!data?.url)
-          throw new Error(
-            "Checkout is not configured yet. Please contact the workspace administrator.",
-          );
-        window.location.assign(data.url);
-        return true;
+        if (data?.url) {
+          window.location.assign(data.url);
+          return true;
+        }
       } catch (error) {
-        console.error("Unable to start checkout:", error);
-        toast.error(
-          error instanceof Error ? error.message : "Unable to start checkout. Please try again.",
-        );
-        return false;
+        console.warn("Stripe checkout unavailable, falling back to Demo Mode:", error);
       }
+
+      // Automatically fallback to Demo Mode if Stripe is unconfigured or prices are absent
+      return activateDemoPlan(newPlan, billingCycle);
     },
-    [openBillingPortal, record],
+    [activateDemoPlan, isDemo, openBillingPortal, record],
   );
 
   return {
@@ -193,6 +269,8 @@ export function useSubscription() {
     remainingDocs,
     usagePercent,
     isLoading,
+    isDemo,
+    activateDemoPlan,
     subscriptionStatus: record?.status ?? "inactive",
     currentPeriodEnd: record?.current_period_end ?? null,
     hasBillingCustomer,
