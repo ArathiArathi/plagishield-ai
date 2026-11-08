@@ -41,7 +41,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { profile, fullName, role, updateProfile, isUpdating } = useUserProfile();
-  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent, changePlan } = useSubscription();
+  const { planId, plan, docsUsed, docLimit, isLimitReached, usagePercent } = useSubscription();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const [form, setForm] = useState({
@@ -226,12 +226,9 @@ function SettingsPage() {
                           variant={tier.popular ? "default" : "outline"}
                           size="sm"
                           className="w-full"
-                          onClick={() => {
-                            changePlan(tier.id);
-                            toast.success(`Switched to ${tier.name}! Limit updated to ${tier.docLimit} documents.`);
-                          }}
+                          onClick={() => setUpgradeOpen(true)}
                         >
-                          Switch to {tier.name.split(" ")[0]}
+                          View secure checkout
                         </Button>
                       )}
                     </div>
