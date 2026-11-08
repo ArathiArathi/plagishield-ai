@@ -25,7 +25,7 @@ export function UpgradeModal({
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const plans = Object.values(SUBSCRIPTION_PLANS);
-  const hasActiveSubscription = ["active", "trialing"].includes(subscriptionStatus);
+  const hasActiveSubscription = ["active", "trialing", "past_due", "unpaid"].includes(subscriptionStatus);
 
   const handleSelectPlan = async (targetPlan: SubscriptionPlanId) => {
     if (targetPlan === planId || loadingPlan) return;
