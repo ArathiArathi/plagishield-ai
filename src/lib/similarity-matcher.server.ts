@@ -104,7 +104,7 @@ function findExactSpans(
       if (
         docAt > 0 &&
         sourceAt > 0 &&
-        documentWords[docAt - 1]!.value === sourceWords[sourceAt - 1]!.value
+        shingle(documentWords, docAt - 1, size) === shingle(sourceWords, sourceAt - 1, size)
       ) continue;
 
       let length = size;
