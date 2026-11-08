@@ -442,7 +442,6 @@ function AnalysisPage() {
               <p className="text-sm leading-6 text-muted-foreground">
                 Writing-style signals can occur in both human and AI-assisted writing. This check is unvalidated and should not be used to decide who wrote a document.
               </p>
-              {results.ai_detection?.reasoning && <Card className="bg-muted/30 p-4"><p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Model notes</p><p className="text-sm text-foreground/90 break-words [overflow-wrap:anywhere]">{results.ai_detection.reasoning}</p></Card>}
               {results.ai_detection?.highlights?.length ? <EvidencePanel highlights={results.ai_detection.highlights} /> : <Empty label="No writing-pattern passages were returned." />}
             </TabsContent>
 
