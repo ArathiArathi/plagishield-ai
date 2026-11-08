@@ -132,7 +132,11 @@ function mergeSpans(spans: Span[]): Span[] {
   const merged: Span[] = [];
   for (const span of sorted) {
     const previous = merged[merged.length - 1];
-    if (previous && span.first <= previous.last + 1) {
+    if (
+      previous &&
+      span.first <= previous.last + 1 &&
+      span.sourceFirst - span.first === previous.sourceFirst - previous.first
+    ) {
       if (span.last > previous.last) {
         previous.last = span.last;
         previous.sourceLast = span.sourceLast;
