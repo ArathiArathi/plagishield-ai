@@ -40,9 +40,18 @@ Deno.serve(async (request) => {
 
     const subscription = event.data.object as Stripe.Subscription;
     const userId = subscription.metadata?.user_id;
-    const planId = subscription.metadata?.plan_id;
+    const activePriceId = subscription.items.data[0]?.price.id;
+    const configuredPricePlans = [
+      ["pro", Deno.env.get("STRIPE_PRICE_PRO_MONTHLY"), Deno.env.get("STRIPE_PRICE_PRO_ANNUAL")],
+      ["plus", Deno.env.get("STRIPE_PRICE_PLUS_MONTHLY"), Deno.env.get("STRIPE_PRICE_PLUS_ANNUAL")],
+      ["premium", Deno.env.get("STRIPE_PRICE_PREMIUM_MONTHLY"), Deno.env.get("STRIPE_PRICE_PREMIUM_ANNUAL")],
+    ] as const;
+    const pricePlan = configuredPricePlans.find(([, monthly, annual]) =>
+      activePriceId && (activePriceId === monthly || activePriceId === annual)
+    )?.[0];
+    const planId = pricePlan ?? subscription.metadata?.plan_id;
     if (!userId || !["pro", "plus", "premium"].includes(planId)) {
-      console.error("Subscription webhook is missing valid user or plan metadata", subscription.id);
+      console.error("Subscription webhook is missing valid user or plan metadata/price mapping", subscription.id);
       return new Response("Subscription metadata is incomplete", { status: 400 });
     }
 
