@@ -328,11 +328,14 @@ export function matchDocumentAgainstSources(
     const previous = primaryBySpan.get(key);
     if (!previous) primaryBySpan.set(key, highlight);
     else {
-      previous.alternate_sources = [
+      const alternateSources = [
         ...(previous.alternate_sources ?? []),
         { source: highlight.source, url: highlight.url, type: highlight.note },
         ...(highlight.alternate_sources ?? []),
-      ].slice(0, 5);
+      ].filter((source) => source.source !== previous.source);
+      previous.alternate_sources = [...new Map(
+        alternateSources.map((source) => [source.url ?? source.source, source]),
+      ).values()].slice(0, 5);
     }
   }
 
