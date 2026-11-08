@@ -139,7 +139,7 @@ function SettingsPage() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  You are currently on the <span className="font-medium text-foreground">{plan.name}</span>. Documents analyzed reset with your active quota.
+                  You are currently on the <span className="font-medium text-foreground">{plan.name}</span>. Document usage is tracked against the allowance included in your plan.
                 </p>
               </div>
               <Button onClick={() => setUpgradeOpen(true)} className="gap-2 shadow-sm shrink-0">
