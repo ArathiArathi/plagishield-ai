@@ -91,7 +91,7 @@ export function AppSidebar() {
                 </button>
               </div>
               <p className="text-[11px] text-sidebar-foreground/60">
-                {docsUsed} / {docLimit} documents used
+                {docsUsed} / {docLimit} documents used this month
                 {isLimitReached && <span className="ml-1 font-semibold text-destructive">(Limit reached)</span>}
               </p>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-sidebar-border">
