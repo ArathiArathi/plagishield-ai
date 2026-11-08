@@ -397,7 +397,8 @@ function AnalysisPage() {
               <p className="text-xs text-muted-foreground">
                 Exact source matches and returned language annotations are highlighted in the extracted submission text. Experimental writing-style flags are separate and are not proof of authorship.
               </p>
-              <HighlightedDocument text={excerpt} highlights={allHighlights} />
+              {!results.document_text && <p className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-xs leading-5 text-muted-foreground">This saved analysis predates full-paper storage. Re-run the analysis to include the complete extracted document and align every highlight in the report.</p>}
+          <HighlightedDocument text={excerpt} highlights={allHighlights} />
             </TabsContent>
 
             <TabsContent value="evidence" className="mt-5 space-y-4">
