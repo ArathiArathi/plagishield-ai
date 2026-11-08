@@ -324,6 +324,34 @@ async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
   }).filter((c) => c.text.length > 40);
 }
 
+type ExcludedTextRange = { start: number; end: number; reason: "quotation" | "bibliography" };
+
+function findExcludedRanges(text: string): { ranges: ExcludedTextRange[] } {
+  const ranges: ExcludedTextRange[] = [];
+  const quotePattern = /["“«「『]([^"”»」』]{20,3000})["”»」』]/gu;
+  let quote: RegExpExecArray | null;
+  while ((quote = quotePattern.exec(text)) !== null) {
+    ranges.push({ start: quote.index, end: quote.index + quote[0].length, reason: "quotation" });
+  }
+
+  const bibliographyHeading = /^\s*(?:references|bibliography|works cited|literature cited|reference list)\s*:?\s*$/im;
+  const heading = bibliographyHeading.exec(text);
+  if (heading) ranges.push({ start: heading.index, end: text.length, reason: "bibliography" });
+
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: ExcludedTextRange[] = [];
+  for (const range of ranges) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+      if (range.reason === "bibliography") previous.reason = "bibliography";
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return { ranges: merged };
+}
+
 async function detectPlagiarism(
   text: string,
   sentences: Sentence[],
@@ -333,7 +361,7 @@ async function detectPlagiarism(
   // Sample across the full document rather than relying only on the opening
   // paragraphs. This improves retrieval diversity without claiming exhaustive
   // crawling of the web or licensed academic databases.
-  const target = Math.min(12, usable.length);
+  const target = Math.min(18, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
   for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
@@ -371,13 +399,15 @@ async function detectPlagiarism(
   queried += docPool.length;
 
   await mapLimit(candidates, 3, async (sentence) => {
-    const [wiki, alex, cross] = await Promise.all([
+    const [wiki, alex, cross, semantic, europePmc] = await Promise.all([
       wikipediaCandidates(sentence.text, cache),
       openAlexCandidates(sentence.text),
       crossrefCandidates(sentence.text),
+      semanticScholarCandidates(sentence.text),
+      europePmcCandidates(sentence.text),
     ]);
-    docPool.push(...wiki, ...alex, ...cross);
-    queried += wiki.length + alex.length + cross.length;
+    docPool.push(...wiki, ...alex, ...cross, ...semantic, ...europePmc);
+    queried += wiki.length + alex.length + cross.length + semantic.length + europePmc.length;
   });
 
   const poolMap = new Map<string, Candidate>();
@@ -389,7 +419,15 @@ async function detectPlagiarism(
     if (!previous || candidate.text.length > previous.text.length) poolMap.set(key, candidate);
   }
   const uniquePool = [...poolMap.values()];
-  const compared = matchDocumentAgainstSources(text, uniquePool);
+  const excluded = findExcludedRanges(text);
+  const compared = matchDocumentAgainstSources(text, uniquePool, { excludedRanges: excluded.ranges });
+  const countWords = (reason: ExcludedTextRange["reason"]) => tokenize(
+    excluded.ranges.filter((range) => range.reason === reason)
+      .map((range) => text.slice(range.start, range.end)).join(" "),
+  ).length;
+  const excludedQuotedWords = countWords("quotation");
+  const excludedBibliographyWords = countWords("bibliography");
+  const comparisonWords = Math.max(0, tokenize(text).length - excludedQuotedWords - excludedBibliographyWords);
 
   return {
     ...compared,
@@ -397,8 +435,11 @@ async function detectPlagiarism(
     source_coverage: {
       sources_retrieved: uniquePool.length,
       providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
-      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words)",
-      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
+      matching_method: "Normalized exact word-sequence matching; minimum 8 consecutive words",
+      comparison_words: comparisonWords,
+      excluded_quoted_words: excludedQuotedWords,
+      excluded_bibliography_words: excludedBibliographyWords,
+      limitation: "Compared only text returned by the listed public providers. Detected quoted passages and the detected reference-list section are excluded. In-text citation context is not automatically excluded. These providers do not include a complete web archive, licensed publisher full text, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
     },
   };
 }
