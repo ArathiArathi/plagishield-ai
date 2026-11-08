@@ -223,7 +223,7 @@ function SettingsPage() {
                       </div>
                       <div className="mt-2 flex items-baseline gap-1">
                         <span className="text-2xl font-bold text-foreground">
-                          {tier.priceMonthly === 0 ? "Free" : `$${tier.priceMonthly}`}
+                          {tier.priceMonthly === 0 ? "Free" : `₹${tier.priceMonthly.toLocaleString("en-IN")}`}
                         </span>
                         {tier.priceMonthly > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
                       </div>
