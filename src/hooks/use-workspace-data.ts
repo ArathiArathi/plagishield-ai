@@ -124,7 +124,6 @@ export function useWorkspaceData() {
     },
     queryFn: async () => {
       const session = (await supabase.auth.getSession()).data.session;
-      const userId = session?.user?.id ?? "global";
 
       const [docsRes, analysesRes] = await Promise.all([
         supabase
@@ -141,7 +140,8 @@ export function useWorkspaceData() {
 
       const documents = (docsRes.data ?? []) as DocumentRow[];
       const analyses = (analysesRes.data ?? []) as AnalysisRow[];
-      const done = analyses.filter((a) => a.status === "completed");
+      const completed = analyses.filter((analysis) => analysis.status === "completed");
+      const done = completed.filter((analysis) => resultOf(analysis).meta?.engine_version === "3.0.0");
 
       const similarity = avg(done.map(observedSimilarity));
       const matchedDocuments = done.filter((analysis) => matchedWordCount(analysis) > 0).length;
@@ -168,7 +168,7 @@ export function useWorkspaceData() {
           const created = new Date(doc.created_at);
           return created.getFullYear() === d.getFullYear() && created.getMonth() === d.getMonth();
         });
-        const completedInMonth = done.filter((analysis) => {
+        const completedInMonth = completed.filter((analysis) => {
           const created = new Date(analysis.created_at);
           return created.getFullYear() === d.getFullYear() && created.getMonth() === d.getMonth();
         });
@@ -193,9 +193,11 @@ export function useWorkspaceData() {
 
       const recentActivity = documents.slice(0, 6).map((doc) => {
         const analysis = analyses.find((item) => item.document_id === doc.id);
-        const matched = analysis ? matchedWordCount(analysis) : 0;
+        const current = analysis ? resultOf(analysis).meta?.engine_version === "3.0.0" : false;
+        const matched = analysis && current ? matchedWordCount(analysis) : 0;
         const status =
           doc.status === "failed" ? "error" :
+          doc.status === "analyzed" && !current ? "info" :
           doc.status === "analyzed" && matched > 0 ? "warning" :
           doc.status === "analyzed" ? "success" : "info";
         return {
@@ -203,9 +205,11 @@ export function useWorkspaceData() {
           title: doc.name,
           action:
             doc.status === "analyzed"
-              ? matched > 0
-                ? `Analysis complete · ${matched.toLocaleString()} matched words`
-                : "No exact matches in retrieved sources"
+              ? !current
+                ? "Older analysis · re-run to refresh"
+                : matched > 0
+                  ? `Analysis complete · ${matched.toLocaleString()} matched words`
+                  : "No exact matches in retrieved sources"
               : doc.status === "failed"
                 ? "Analysis failed"
                 : doc.status === "processing"
