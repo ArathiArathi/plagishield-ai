@@ -68,3 +68,13 @@ test("keeps every character and resolves overlapping highlights without dropping
   assert.equal(segments.find((segment) => segment.highlight?.category === "plagiarism")?.text, "23456789");
   assert.equal(segments.find((segment) => segment.highlight?.category === "grammar")?.text, "abcd");
 });
+
+test("excludes common author-date citation markers without excluding the sentence", () => {
+  const document = `This paper adopts ${phrase} (Smith et al., 2020).`;
+  const result = matchDocumentAgainstSources(document, [source]);
+  assert.equal(result.matched_words, 13);
+  assert.equal(result.excluded_words, 4);
+  assert.equal(result.eligible_words, 16);
+  assert.equal(result.score, 81);
+  assert.equal(result.highlights.length, 1);
+});
