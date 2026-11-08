@@ -141,17 +141,23 @@ async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
 
 function stripXmlText(xml: string): string {
   return xml
-    .replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
-    .replace(/&#(\\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
-    .replace(/\\s+/g, " ")
+    .replace(/&#(\d+);/g, (_, code: string) => {
+      const value = Number(code);
+      return value > 0 && value <= 0x10ffff ? String.fromCodePoint(value) : " ";
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => {
+      const value = parseInt(code, 16);
+      return value > 0 && value <= 0x10ffff ? String.fromCodePoint(value) : " ";
+    })
+    .replace(/\s+/g, " ")
     .trim();
 }
 
