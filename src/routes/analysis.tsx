@@ -210,9 +210,6 @@ function AnalysisPage() {
   }
 
   const similarity = Math.round(Number(analysis?.similarity_score ?? 0));
-  const aiScore = Math.round(Number(analysis?.ai_score ?? 0));
-  const grammarScore = Math.round(Number(analysis?.grammar_score ?? 0));
-  const citationScore = Math.round(Number(analysis?.citation_score ?? 0));
   const status = rerunning ? "processing" : (analysis?.status ?? "pending");
   const isProcessing = rerunning || status === "processing";
 
