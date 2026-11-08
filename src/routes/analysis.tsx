@@ -165,7 +165,6 @@ function AnalysisPage() {
           analysisId: targetAnalysisId,
           documentId: selectedDoc.id,
           versionId: version.id,
-          storagePath: version.storage_path,
         },
       })) as { ok: boolean; error?: string; retryAfter?: number };
       if (!res.ok) throw new Error(res.error ?? "Analysis failed");
