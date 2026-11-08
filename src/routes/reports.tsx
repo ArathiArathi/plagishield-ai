@@ -35,7 +35,7 @@ export const Route = createFileRoute("/reports")({
 type Results = {
   text_excerpt?: string;
   document_text?: string;
-  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; sources_queried?: number; checked_at?: string };
+  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; sources_queried?: number; checked_at?: string; truncated?: boolean; character_limit?: number };
   plagiarism?: {
     score?: number;
     matched_words?: number;
