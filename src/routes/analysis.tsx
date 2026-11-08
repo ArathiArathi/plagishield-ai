@@ -54,6 +54,7 @@ type Results = {
   stage?: string;
   stage_pct?: number;
   text_excerpt?: string;
+  meta?: { engine_version?: string; words?: number; extraction?: string };
   plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
   ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: Highlight[] };
   grammar?: { score?: number | null; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
@@ -87,6 +88,7 @@ function AnalysisPage() {
     [data?.analyses, selectedDoc?.id],
   );
   const results = (analysis?.results ?? {}) as Results;
+  const isOutdated = Boolean(analysis) && results.meta?.engine_version !== "3.0.0";
 
   const handleDownloadPdf = () => {
     if (!selectedDoc || !analysis) return;
@@ -352,6 +354,16 @@ function AnalysisPage() {
       )}
 
       {status === "completed" && !rerunning ? (
+        <>
+        {isOutdated && (
+          <Card className="flex flex-wrap items-center justify-between gap-3 border-warning/30 bg-warning/5 p-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">This analysis uses an older engine version</p>
+              <p className="mt-1 text-xs text-muted-foreground">Re-run it to use updated source retrieval, text exclusions, full-text storage and annotated PDF output.</p>
+            </div>
+            <Button size="sm" onClick={handleRerun}>Re-run analysis</Button>
+          </Card>
+        )}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] min-w-0">
         <Card className="p-5 min-w-0 overflow-hidden">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Integrity summary</h3>
@@ -533,7 +545,8 @@ function AnalysisPage() {
             </TabsContent>
           </Tabs>
         </Card>
-      </div>
+        </div>
+        </>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2 p-6 space-y-6 border-primary/20 bg-card">
