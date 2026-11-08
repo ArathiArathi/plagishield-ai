@@ -476,7 +476,7 @@ function AnalysisPage() {
                   <p className="mt-2 text-sm text-foreground break-words [overflow-wrap:anywhere]">{recommendation.text}</p>
                 </div>
               ))}
-            </TabsContent>TabsContent>
+            </TabsContent>
           </Tabs>
         </Card>
       </div>
