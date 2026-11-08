@@ -29,17 +29,47 @@ export type PdfIssue = {
 export type ReportResults = {
   text_excerpt?: string;
   document_text?: string;
-  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; characters?: number; truncated?: boolean; character_limit?: number; sources_queried?: number; checked_at?: string };
+  meta?: {
+    engine_version?: string;
+    extraction?: string;
+    words?: number;
+    sentences?: number;
+    characters?: number;
+    truncated?: boolean;
+    character_limit?: number;
+    sources_queried?: number;
+    checked_at?: string;
+  };
   plagiarism?: {
     matched_words?: number;
     eligible_words?: number;
     excluded_words?: number;
-    matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; type?: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
+    matches?: Array<{
+      source?: string;
+      url?: string;
+      similarity?: number;
+      snippet?: string;
+      type?: string;
+      matched_snippet?: string;
+      provider?: string;
+      matched_words?: number;
+      match_count?: number;
+      match_strength?: number;
+      domain?: string;
+    }>;
     highlights?: PdfHighlight[];
-    source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
+    source_coverage?: {
+      sources_retrieved?: number;
+      providers?: string[];
+      matching_method?: string;
+      limitation?: string;
+    };
   };
   ai_detection?: { confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
-  grammar?: { issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
+  grammar?: {
+    issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>;
+    highlights?: PdfHighlight[];
+  };
   citations?: { total?: number; verified?: number; issues?: string[] };
   composition?: PdfCompositionSlice[];
   issues?: PdfIssue[];
@@ -113,7 +143,9 @@ function header(ctx: Ctx) {
   doc.text(sanitizePdfText(ctx.title), W - M, 12, { align: "right" });
   doc.setFont("helvetica", "normal").setFontSize(8);
   doc.setTextColor(200, 214, 235);
-  const refId = String(ctx.input.analysisId || "ANL-001").slice(0, 8).toUpperCase();
+  const refId = String(ctx.input.analysisId || "ANL-001")
+    .slice(0, 8)
+    .toUpperCase();
   doc.text(`Ref ${refId}`, W - M, 17.5, { align: "right" });
   ctx.y = 30;
 }
@@ -123,7 +155,10 @@ function footer(ctx: Ctx) {
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
   doc.line(M, H - 16, W - M, H - 16);
-  doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(7.5)
+    .setTextColor(...MUTED);
   const docName = sanitizePdfText(ctx.input.documentName || "document");
   const genAt = sanitizePdfText(ctx.input.generatedAt || new Date().toLocaleString());
   doc.text(`${docName} · generated ${genAt}`, M, H - 11);
@@ -146,7 +181,10 @@ function sectionTitle(ctx: Ctx, text: string) {
   const { doc } = ctx;
   doc.setFillColor(...ACCENT);
   doc.rect(M, ctx.y - 3.5, 2.5, 5.5, "F");
-  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...NAVY);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(11)
+    .setTextColor(...NAVY);
   doc.text(sanitizePdfText(text), M + 5, ctx.y);
   ctx.y += 5;
   doc.setDrawColor(...LINE);
@@ -155,10 +193,17 @@ function sectionTitle(ctx: Ctx, text: string) {
   ctx.y += 7;
 }
 
-function paragraph(ctx: Ctx, text: string, opts: { size?: number; color?: [number, number, number] } = {}) {
+function paragraph(
+  ctx: Ctx,
+  text: string,
+  opts: { size?: number; color?: [number, number, number] } = {},
+) {
   const { doc } = ctx;
   const safeText = sanitizePdfText(text);
-  doc.setFont("helvetica", "normal").setFontSize(opts.size ?? 9.5).setTextColor(...(opts.color ?? [60, 70, 85]));
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(opts.size ?? 9.5)
+    .setTextColor(...(opts.color ?? [60, 70, 85]));
   const lines = doc.splitTextToSize(safeText, W - 2 * M) as string[];
   for (const line of lines) {
     ensure(ctx, 6);
@@ -174,11 +219,17 @@ function metaTable(ctx: Ctx, rows: Array<[string, string]>) {
   const valueWidth = W - 2 * M - labelWidth - 8;
   for (const [key, value] of rows) {
     doc.setFont("helvetica", "normal").setFontSize(8);
-    const lines = doc.splitTextToSize(sanitizePdfText(value || "Not provided"), valueWidth) as string[];
+    const lines = doc.splitTextToSize(
+      sanitizePdfText(value || "Not provided"),
+      valueWidth,
+    ) as string[];
     const rowH = Math.max(7, lines.length * 3.8 + 3);
     ensure(ctx, rowH + 2);
     const y = ctx.y;
-    doc.setFont("helvetica", "bold").setFontSize(8).setTextColor(...NAVY);
+    doc
+      .setFont("helvetica", "bold")
+      .setFontSize(8)
+      .setTextColor(...NAVY);
     doc.text(sanitizePdfText(key), M + 3, y);
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(60, 70, 85);
     lines.forEach((line, index) => doc.text(line, M + labelWidth, y + index * 3.8));
@@ -209,7 +260,9 @@ function table(
     columns.forEach((c, i) => {
       const right = c.align === "right";
       const headerText = sanitizePdfText(c.header);
-      doc.text(headerText, right ? x + widths[i]! - 3 : x + 3, ctx.y + 5, { align: right ? "right" : "left" });
+      doc.text(headerText, right ? x + widths[i]! - 3 : x + 3, ctx.y + 5, {
+        align: right ? "right" : "left",
+      });
       x += widths[i]!;
     });
     ctx.y += 7.5;
@@ -243,7 +296,9 @@ function table(
       const right = columns[i]?.align === "right";
       doc.setTextColor(50, 60, 75);
       lines.forEach((l, li) => {
-        doc.text(l, right ? x + widths[i]! - 3 : x + 3, ctx.y + 4.8 + li * 3.8, { align: right ? "right" : "left" });
+        doc.text(l, right ? x + widths[i]! - 3 : x + 3, ctx.y + 4.8 + li * 3.8, {
+          align: right ? "right" : "left",
+        });
       });
       x += widths[i]!;
     });
@@ -268,7 +323,10 @@ function documentBlock(ctx: Ctx, input: ReportInput) {
     ["Paper title", input.paperTitle || docName.replace(/\.[a-z0-9]+$/i, "")],
     ["Author", input.authorName || "Author not provided"],
     ["Submission type", input.docType ? titleCase(input.docType) : "Not provided"],
-    ["Format & version", `${String(input.fileType || "Not recorded").toUpperCase()} · ${input.version ? `v${input.version}` : "version not recorded"}`],
+    [
+      "Format & version",
+      `${String(input.fileType || "Not recorded").toUpperCase()} · ${input.version ? `v${input.version}` : "version not recorded"}`,
+    ],
     ["Analysis reference ID", refId],
     ["Analysis engine", input.results.meta?.engine_version || "Not recorded"],
     ["Word count", Number(input.results.meta?.words ?? 0).toLocaleString()],
@@ -303,21 +361,36 @@ function compositionSection(ctx: Ctx, input: ReportInput) {
     paragraph(ctx, "No comparison coverage breakdown was recorded for this analysis.");
     return;
   }
-  table(ctx, [
-    { header: "Comparison result", width: 86 },
-    { header: "Share of compared text", width: 48, align: "right" },
-    { header: "Words", width: 28, align: "right" },
-  ], slices.map((slice) => [slice.category, `${Number(slice.percent ?? 0).toFixed(1)}%`, Number(slice.words ?? 0).toLocaleString()]));
+  table(
+    ctx,
+    [
+      { header: "Comparison result", width: 86 },
+      { header: "Share of compared text", width: 48, align: "right" },
+      { header: "Words", width: 28, align: "right" },
+    ],
+    slices.map((slice) => [
+      slice.category,
+      `${Number(slice.percent ?? 0).toFixed(1)}%`,
+      Number(slice.words ?? 0).toLocaleString(),
+    ]),
+  );
   const excluded = Number(input.results.plagiarism?.excluded_words ?? 0);
   const eligible = Number(input.results.plagiarism?.eligible_words ?? 0);
-  paragraph(ctx, `${eligible.toLocaleString()} words were included in the comparison. ${excluded.toLocaleString()} words in clearly quoted passages, inline citation markers or the detected reference section were excluded from the score.`, { size: 7.5, color: MUTED });
+  paragraph(
+    ctx,
+    `${eligible.toLocaleString()} words were included in the comparison. ${excluded.toLocaleString()} words in clearly quoted passages, inline citation markers or the detected reference section were excluded from the score.`,
+    { size: 7.5, color: MUTED },
+  );
 }
 
 function legendRow(ctx: Ctx, categories: string[]) {
   const { doc } = ctx;
   ensure(ctx, 10);
   let x = M;
-  doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...MUTED);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(7.5)
+    .setTextColor(...MUTED);
   categories.forEach((c) => {
     doc.setFillColor(...(CATEGORY_FILL[c] ?? [230, 230, 230]));
     doc.rect(x, ctx.y - 3, 4, 4, "F");
@@ -341,13 +414,31 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
 
   sectionTitle(ctx, "Submission Text — Highlighted Issue Annotations");
   if (!raw.trim()) {
-    paragraph(ctx, "The extracted submission text is not stored for this analysis, so in-text highlighting is unavailable. Re-analyze the document to generate full annotations.");
+    paragraph(
+      ctx,
+      "The extracted submission text is not stored for this analysis, so in-text highlighting is unavailable. Re-analyze the document to generate full annotations.",
+    );
     return;
   }
 
-  if (!input.results.document_text) paragraph(ctx, "This older saved analysis contains only a text excerpt. Re-run the analysis to export the complete extracted submission. The text below is reconstructed from extraction and does not retain the source file's page layout or images.", { size: 7.5, color: MUTED });
-  else if (input.results.meta?.truncated) paragraph(ctx, `The first ${Number(input.results.meta.character_limit ?? 120000).toLocaleString()} characters were analyzed and are reproduced below. The remainder of the source file was not included. Original page layout, embedded images and typography are not retained by the text extractor.`, { size: 7.5, color: MUTED });
-  else paragraph(ctx, "The complete extracted submission is reproduced below in reading order. Original page layout, embedded images and typography are not retained by the text extractor.", { size: 7.5, color: MUTED });
+  if (!input.results.document_text)
+    paragraph(
+      ctx,
+      "This older saved analysis contains only a text excerpt. Re-run the analysis to export the complete extracted submission. The text below is reconstructed from extraction and does not retain the source file's page layout or images.",
+      { size: 7.5, color: MUTED },
+    );
+  else if (input.results.meta?.truncated)
+    paragraph(
+      ctx,
+      `The first ${Number(input.results.meta.character_limit ?? 120000).toLocaleString()} characters were analyzed and are reproduced below. The remainder of the source file was not included. Original page layout, embedded images and typography are not retained by the text extractor.`,
+      { size: 7.5, color: MUTED },
+    );
+  else
+    paragraph(
+      ctx,
+      "The complete extracted submission is reproduced below in reading order. Original page layout, embedded images and typography are not retained by the text extractor.",
+      { size: 7.5, color: MUTED },
+    );
   legendRow(ctx, categories);
 
   const text = raw;
@@ -370,7 +461,10 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
           for (let line = 0; line < lineBreaks; line++) {
             x = M;
             ctx.y += lineH;
-            if (ctx.y > H - 24) { newPage(ctx); setBody(); }
+            if (ctx.y > H - 24) {
+              newPage(ctx);
+              setBody();
+            }
           }
         } else if (x > M) {
           x += doc.getTextWidth(tk);
@@ -381,7 +475,10 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
       if (x + w > W - M) {
         x = M;
         ctx.y += lineH;
-        if (ctx.y > H - 24) { newPage(ctx); setBody(); }
+        if (ctx.y > H - 24) {
+          newPage(ctx);
+          setBody();
+        }
       }
       if (seg.highlight) {
         doc.setFillColor(...(CATEGORY_FILL[String(seg.highlight.category)] ?? [235, 235, 235]));
@@ -397,10 +494,15 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
 
 function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
   const all = input.results.issues ?? [];
-  const issues = categories ? all.filter((i) => categories.some((c) => i.category?.toLowerCase().includes(c.toLowerCase()))) : all;
+  const issues = categories
+    ? all.filter((i) => categories.some((c) => i.category?.toLowerCase().includes(c.toLowerCase())))
+    : all;
   sectionTitle(ctx, "Review Notes & Action Log");
   if (issues.length === 0) {
-    paragraph(ctx, "No issues were returned by the enabled checks. This does not establish originality or error-free writing.");
+    paragraph(
+      ctx,
+      "No issues were returned by the enabled checks. This does not establish originality or error-free writing.",
+    );
     return;
   }
   const bySeverity = issues.reduce<Record<string, number>>((acc, issue) => {
@@ -408,7 +510,11 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
     acc[severity] = (acc[severity] ?? 0) + 1;
     return acc;
   }, {});
-  paragraph(ctx, `${issues.length} issue(s) were returned: ${bySeverity.high ?? 0} high, ${bySeverity.medium ?? 0} medium, and ${bySeverity.low ?? 0} low severity.`, { size: 8, color: MUTED });
+  paragraph(
+    ctx,
+    `${issues.length} issue(s) were returned: ${bySeverity.high ?? 0} high, ${bySeverity.medium ?? 0} medium, and ${bySeverity.low ?? 0} low severity.`,
+    { size: 8, color: MUTED },
+  );
   table(
     ctx,
     [
@@ -445,46 +551,124 @@ function similaritySection(ctx: Ctx, input: ReportInput) {
   sectionTitle(ctx, "Similarity Overview & Source Coverage");
   const eligible = Number(plagiarism.eligible_words ?? input.results.meta?.words ?? 0);
   const matched = Number(plagiarism.matched_words ?? 0);
-  paragraph(ctx, `Observed similarity: ${Number(input.similarity ?? 0)}% of the compared text (${matched.toLocaleString()} of ${eligible.toLocaleString()} words). This is a text-overlap measure, not a plagiarism verdict.`);
-  paragraph(ctx, `${matches.length} source record(s) contained at least one exact passage match. Source percentages can overlap when multiple records contain the same passage.`, { size: 8, color: MUTED });
+  paragraph(
+    ctx,
+    `Observed similarity: ${Number(input.similarity ?? 0)}% of the compared text (${matched.toLocaleString()} of ${eligible.toLocaleString()} words). This is a text-overlap measure, not a plagiarism verdict.`,
+  );
+  paragraph(
+    ctx,
+    `${matches.length} source record(s) contained at least one exact passage match. Source percentages can overlap when multiple records contain the same passage.`,
+    { size: 8, color: MUTED },
+  );
   sectionTitle(ctx, "Matched Sources & Verbatim Evidence");
-  if (matches.length === 0) paragraph(ctx, "No exact source passages meeting the minimum eight-consecutive-word rule were found in the retrieved source set. This does not establish that the paper is original.");
-  else table(ctx, [
-    { header: "#", width: 7 }, { header: "Source / Domain", width: 42 }, { header: "Submission passage", width: 48 },
-    { header: "Source passage", width: 48 }, { header: "Words", width: 15, align: "right" }, { header: "Doc %", width: 15, align: "right" },
-  ], matches.map((match, index) => [String(index + 1), [match.source ?? "Source not identified", match.domain ?? ""].filter(Boolean).join(" · "), match.snippet ?? "—", match.matched_snippet ?? "—", Number(match.matched_words ?? 0).toLocaleString(), `${Number(match.similarity ?? 0).toFixed(1)}%` ]));
+  if (matches.length === 0)
+    paragraph(
+      ctx,
+      "No exact source passages meeting the minimum eight-consecutive-word rule were found in the retrieved source set. This does not establish that the paper is original.",
+    );
+  else
+    table(
+      ctx,
+      [
+        { header: "#", width: 7 },
+        { header: "Source / Domain", width: 42 },
+        { header: "Submission passage", width: 48 },
+        { header: "Source passage", width: 48 },
+        { header: "Words", width: 15, align: "right" },
+        { header: "Doc %", width: 15, align: "right" },
+      ],
+      matches.map((match, index) => [
+        String(index + 1),
+        [match.source ?? "Source not identified", match.domain ?? ""].filter(Boolean).join(" · "),
+        match.snippet ?? "—",
+        match.matched_snippet ?? "—",
+        Number(match.matched_words ?? 0).toLocaleString(),
+        `${Number(match.similarity ?? 0).toFixed(1)}%`,
+      ]),
+    );
   sectionTitle(ctx, "Comparison Scope & Limitations");
-  const providers = coverage?.providers?.length ? coverage.providers.join(", ") : "No provider details recorded";
-  table(ctx, [{ header: "Setting", width: 58 }, { header: "Applied scope", width: 117 }], [
-    ["Source records compared", String(coverage?.sources_retrieved ?? matches.length)], ["Retrieval providers", providers],
-    ["Matching rule", coverage?.matching_method || "Not recorded"], ["Private student-paper repository", "Not connected"],
-    ["Licensed publisher full-text corpus", "Not connected"],
-  ]);
-  paragraph(ctx, coverage?.limitation || "Only source records retrieved for this run were compared. Coverage is not exhaustive.", { size: 7.5, color: MUTED });
+  const providers = coverage?.providers?.length
+    ? coverage.providers.join(", ")
+    : "No provider details recorded";
+  table(
+    ctx,
+    [
+      { header: "Setting", width: 58 },
+      { header: "Applied scope", width: 117 },
+    ],
+    [
+      ["Source records compared", String(coverage?.sources_retrieved ?? matches.length)],
+      ["Retrieval providers", providers],
+      ["Matching rule", coverage?.matching_method || "Not recorded"],
+      ["Private student-paper repository", "Not connected"],
+      ["Licensed publisher full-text corpus", "Not connected"],
+    ],
+  );
+  paragraph(
+    ctx,
+    coverage?.limitation ||
+      "Only source records retrieved for this run were compared. Coverage is not exhaustive.",
+    { size: 7.5, color: MUTED },
+  );
 }
 
 function aiSection(ctx: Ctx, input: ReportInput) {
   const detection = input.results.ai_detection ?? {};
   sectionTitle(ctx, "Writing-pattern review (experimental)");
-  paragraph(ctx, `Detector confidence recorded for this run: ${detection.confidence ?? "not recorded"}. This feature is not a validated authorship detector and does not provide a reliable probability that text was written by AI.`);
-  paragraph(ctx, "This experimental feature does not establish authorship. Treat any flagged passages as prompts for manual review only.");
+  paragraph(
+    ctx,
+    `Detector confidence recorded for this run: ${detection.confidence ?? "not recorded"}. This feature is not a validated authorship detector and does not provide a reliable probability that text was written by AI.`,
+  );
+  paragraph(
+    ctx,
+    "This experimental feature does not establish authorship. Treat any flagged passages as prompts for manual review only.",
+  );
   const passages = detection.highlights ?? [];
   if (passages.length > 0) {
     sectionTitle(ctx, "Passages for human review");
-    table(ctx, [{ header: "#", width: 8 }, { header: "Passage", width: 142 }, { header: "Signal", width: 24, align: "right" }], passages.map((passage, index) => [String(index + 1), passage.text ?? "", "Flagged"]));
+    table(
+      ctx,
+      [
+        { header: "#", width: 8 },
+        { header: "Passage", width: 142 },
+        { header: "Signal", width: 24, align: "right" },
+      ],
+      passages.map((passage, index) => [String(index + 1), passage.text ?? "", "Flagged"]),
+    );
   }
 }
 
 function grammarSection(ctx: Ctx, input: ReportInput) {
   const issues = input.results.grammar?.issues ?? [];
   sectionTitle(ctx, "Grammar & Language Review");
-  paragraph(ctx, `${issues.length} language issue(s) were returned by the enabled grammar service. This is an issue count, not a calibrated writing-quality score.`);
+  paragraph(
+    ctx,
+    `${issues.length} language issue(s) were returned by the enabled grammar service. This is an issue count, not a calibrated writing-quality score.`,
+  );
   sectionTitle(ctx, "Detected Language Issues");
-  if (issues.length === 0) paragraph(ctx, "No grammar issues were returned by the enabled checker. This does not guarantee error-free writing.");
-  else table(ctx, [
-    { header: "#", width: 8 }, { header: "Type", width: 24 }, { header: "Severity", width: 18 },
-    { header: "Original passage", width: 57 }, { header: "Suggested correction", width: 57 },
-  ], issues.map((issue, index) => [String(index + 1), issue.type ?? "—", issue.severity ?? "—", issue.text ?? "—", issue.suggestion ?? "—"]));
+  if (issues.length === 0)
+    paragraph(
+      ctx,
+      "No grammar issues were returned by the enabled checker. This does not guarantee error-free writing.",
+    );
+  else
+    table(
+      ctx,
+      [
+        { header: "#", width: 8 },
+        { header: "Type", width: 24 },
+        { header: "Severity", width: 18 },
+        { header: "Original passage", width: 57 },
+        { header: "Suggested correction", width: 57 },
+      ],
+      issues.map((issue, index) => [
+        String(index + 1),
+        issue.type ?? "—",
+        issue.severity ?? "—",
+        issue.text ?? "—",
+        issue.suggestion ?? "—",
+      ]),
+    );
 }
 
 function citationSection(ctx: Ctx, input: ReportInput) {
@@ -493,10 +677,24 @@ function citationSection(ctx: Ctx, input: ReportInput) {
   const verified = Number(citations.verified ?? 0);
   const issues = citations.issues ?? [];
   sectionTitle(ctx, "Reference Lookup");
-  paragraph(ctx, total > 0 ? `${verified} of ${total} reference title(s) matched records in the connected scholarly indexes. A title match is not a full bibliographic audit.` : "No reference entries could be parsed from the extracted document text.");
+  paragraph(
+    ctx,
+    total > 0
+      ? `${verified} of ${total} reference title(s) matched records in the connected scholarly indexes. A title match is not a full bibliographic audit.`
+      : "No reference entries could be parsed from the extracted document text.",
+  );
   sectionTitle(ctx, "Reference Warnings");
-  if (issues.length === 0) paragraph(ctx, "No reference warnings were returned by the enabled checks.");
-  else table(ctx, [{ header: "#", width: 8 }, { header: "Warning", width: 142 }], issues.map((issue, index) => [String(index + 1), issue]));
+  if (issues.length === 0)
+    paragraph(ctx, "No reference warnings were returned by the enabled checks.");
+  else
+    table(
+      ctx,
+      [
+        { header: "#", width: 8 },
+        { header: "Warning", width: 142 },
+      ],
+      issues.map((issue, index) => [String(index + 1), issue]),
+    );
 }
 
 function recommendations(input: ReportInput): Array<[string, string, string]> {
@@ -504,11 +702,36 @@ function recommendations(input: ReportInput): Array<[string, string, string]> {
   const matches = input.results.plagiarism?.matches ?? [];
   const grammarCount = input.results.grammar?.issues?.length ?? 0;
   const citationWarnings = input.results.citations?.issues?.length ?? 0;
-  if (matches.length > 0) actions.push(["Text similarity", `Review ${matches.length} matched source record(s), compare each highlighted passage with its source, and confirm quotation and citation context.`, "Review"]);
-  if ((input.results.ai_detection?.highlights?.length ?? 0) > 0) actions.push(["Writing patterns", "Review the flagged passages manually. Automated writing-style signals cannot establish authorship.", "Review"]);
-  if (grammarCount > 0) actions.push(["Grammar & language", `Review ${grammarCount} returned language issue(s) and accept only corrections that preserve the intended meaning.`, "Review"]);
-  if (citationWarnings > 0) actions.push(["References", `Check ${citationWarnings} reference warning(s) against the original publication records.`, "Review"]);
-  if (actions.length === 0) actions.push(["Review", "No actionable findings were returned by the enabled checks. This is not certification of originality or error-free writing.", "Manual review"]);
+  if (matches.length > 0)
+    actions.push([
+      "Text similarity",
+      `Review ${matches.length} matched source record(s), compare each highlighted passage with its source, and confirm quotation and citation context.`,
+      "Review",
+    ]);
+  if ((input.results.ai_detection?.highlights?.length ?? 0) > 0)
+    actions.push([
+      "Writing patterns",
+      "Review the flagged passages manually. Automated writing-style signals cannot establish authorship.",
+      "Review",
+    ]);
+  if (grammarCount > 0)
+    actions.push([
+      "Grammar & language",
+      `Review ${grammarCount} returned language issue(s) and accept only corrections that preserve the intended meaning.`,
+      "Review",
+    ]);
+  if (citationWarnings > 0)
+    actions.push([
+      "References",
+      `Check ${citationWarnings} reference warning(s) against the original publication records.`,
+      "Review",
+    ]);
+  if (actions.length === 0)
+    actions.push([
+      "Review",
+      "No actionable findings were returned by the enabled checks. This is not certification of originality or error-free writing.",
+      "Manual review",
+    ]);
   return actions;
 }
 
@@ -576,10 +799,20 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
   doc.setDrawColor(...LINE);
   doc.setLineWidth(0.3);
   doc.roundedRect(M, ctx.y, W - 2 * M, 16, 1.5, 1.5, "FD");
-  doc.setFont("helvetica", "bold").setFontSize(7.5).setTextColor(...NAVY);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(7.5)
+    .setTextColor(...NAVY);
   doc.text("REVIEW NOTE", M + 5, ctx.y + 5.5);
-  doc.setFont("helvetica", "normal").setFontSize(6.8).setTextColor(...MUTED);
-  doc.text("Automated findings require human review and do not constitute an institutional decision.", M + 5, ctx.y + 10);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(6.8)
+    .setTextColor(...MUTED);
+  doc.text(
+    "Automated findings require human review and do not constitute an institutional decision.",
+    M + 5,
+    ctx.y + 10,
+  );
   ctx.y += 20;
 
   footer(ctx);
@@ -587,7 +820,13 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
 }
 
 export function slugify(value: string) {
-  return value.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "document";
+  return (
+    value
+      .toLowerCase()
+      .replace(/\.[a-z0-9]+$/, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "document"
+  );
 }
 
 export function downloadReport(kind: ReportKind, input: ReportInput) {

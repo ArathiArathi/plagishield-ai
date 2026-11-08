@@ -3,7 +3,15 @@ import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Download, Eye, FileDown, FileText, History, MoreHorizontal, ScanSearch, Trash2, Upload,
+  Download,
+  Eye,
+  FileDown,
+  FileText,
+  History,
+  MoreHorizontal,
+  ScanSearch,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -13,17 +21,33 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,16 +70,30 @@ const statusStyles: Record<string, string> = {
 };
 
 type DocRow = {
-  id: string; name: string; file_type: string; size_bytes: number;
-  latest_version: number; status: string; created_at: string;
-  doc_type?: string | null; author_name?: string | null; paper_title?: string | null;
+  id: string;
+  name: string;
+  file_type: string;
+  size_bytes: number;
+  latest_version: number;
+  status: string;
+  created_at: string;
+  doc_type?: string | null;
+  author_name?: string | null;
+  paper_title?: string | null;
 };
 type VersionRow = {
-  id: string; version: number; storage_path: string; size_bytes: number; created_at: string;
+  id: string;
+  version: number;
+  storage_path: string;
+  size_bytes: number;
+  created_at: string;
 };
 type AnalysisRow = {
-  id: string; document_id: string; status: string;
-  similarity_score: number | null; ai_score: number | null;
+  id: string;
+  document_id: string;
+  status: string;
+  similarity_score: number | null;
+  ai_score: number | null;
 };
 
 import { useSubscription } from "@/hooks/use-subscription";
@@ -86,10 +124,13 @@ function DocumentsPage() {
   const [versionTarget, setVersionTarget] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<DocRow | null>(null);
   const [pending, setPending] = useState<{ file: File; existingDocId?: string } | null>(null);
-  const [meta, setMeta] = useState<UploadMeta>({ docType: "research", authorName: "", paperTitle: "" });
+  const [meta, setMeta] = useState<UploadMeta>({
+    docType: "research",
+    authorName: "",
+    paperTitle: "",
+  });
   const { plan, docsUsed, docLimit, isLimitReached } = useSubscription();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
-
 
   const docsQ = useQuery({
     queryKey: ["documents", user?.id],
@@ -102,7 +143,10 @@ function DocumentsPage() {
       return secureUserCache.getOrFetch<DocRow[]>(
         "documents_list",
         async () => {
-          const { data, error } = await supabase.from("documents").select("*").order("created_at", { ascending: false });
+          const { data, error } = await supabase
+            .from("documents")
+            .select("*")
+            .order("created_at", { ascending: false });
           if (error) throw error;
           return data as DocRow[];
         },
@@ -117,20 +161,27 @@ function DocumentsPage() {
     refetchInterval: (query) => {
       const map = query.state.data as Map<string, AnalysisRow> | undefined;
       if (!map) return false;
-      return [...map.values()].some((a) => a.status === "processing" || a.status === "pending") ? 1500 : false;
+      return [...map.values()].some((a) => a.status === "processing" || a.status === "pending")
+        ? 1500
+        : false;
     },
     queryFn: async () => {
       const list = await secureUserCache.getOrFetch<AnalysisRow[]>(
         "analyses_latest_raw",
         async () => {
-          const { data, error } = await supabase.from("analyses").select("id,document_id,status,similarity_score,ai_score").order("created_at", { ascending: false });
+          const { data, error } = await supabase
+            .from("analyses")
+            .select("id,document_id,status,similarity_score,ai_score")
+            .order("created_at", { ascending: false });
           if (error) throw error;
           return data as AnalysisRow[];
         },
         { userId: user?.id, ttlMs: 3 * 60 * 1000, tags: ["analyses"] },
       );
       const map = new Map<string, AnalysisRow>();
-      list.forEach((a) => { if (!map.has(a.document_id)) map.set(a.document_id, a); });
+      list.forEach((a) => {
+        if (!map.has(a.document_id)) map.set(a.document_id, a);
+      });
       return map;
     },
   });
@@ -139,7 +190,11 @@ function DocumentsPage() {
     queryKey: ["versions", historyOpen?.id],
     enabled: !!historyOpen,
     queryFn: async () => {
-      const { data, error } = await supabase.from("document_versions").select("*").eq("document_id", historyOpen!.id).order("version", { ascending: false });
+      const { data, error } = await supabase
+        .from("document_versions")
+        .select("*")
+        .eq("document_id", historyOpen!.id)
+        .order("version", { ascending: false });
       if (error) throw error;
       return data as VersionRow[];
     },
@@ -151,152 +206,213 @@ function DocumentsPage() {
     refreshQueue();
   }, [refreshQueue]);
 
-
-  const uploadFile = useCallback(async (file: File, info: UploadMeta, existingDocId?: string) => {
-    if (!user) return;
-    if (!existingDocId && isLimitReached) {
-      toast.error(`${plan.name} monthly allowance of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium.`);
-      setUpgradeOpen(true);
-      return;
-    }
-    setUploadProgress(5);
-    try {
-      let documentId = existingDocId;
-      let version = 1;
-
-      if (documentId) {
-        const { data: doc } = await supabase.from("documents").select("latest_version").eq("id", documentId).single();
-        version = (doc?.latest_version ?? 0) + 1;
-        await supabase.from("documents").update({
-          doc_type: info.docType,
-          author_name: info.authorName || null,
-          paper_title: info.paperTitle || null,
-        }).eq("id", documentId);
-      } else {
-        const { data: inserted, error: insErr } = await supabase.from("documents").insert({
-          owner_id: user.id, name: file.name,
-          file_type: file.name.split(".").pop()?.toUpperCase() ?? "FILE",
-          size_bytes: file.size, latest_version: 1, status: "queued",
-          doc_type: info.docType,
-          author_name: info.authorName || null,
-          paper_title: info.paperTitle || null,
-        }).select().single();
-        if (insErr) throw insErr;
-        documentId = inserted.id;
+  const uploadFile = useCallback(
+    async (file: File, info: UploadMeta, existingDocId?: string) => {
+      if (!user) return;
+      if (!existingDocId && isLimitReached) {
+        toast.error(
+          `${plan.name} monthly allowance of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium.`,
+        );
+        setUpgradeOpen(true);
+        return;
       }
-      setUploadProgress(25);
+      setUploadProgress(5);
+      try {
+        let documentId = existingDocId;
+        let version = 1;
 
-      const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80) || "upload";
-      const storagePath = `${user.id}/${documentId}/v${version}-${Date.now()}-${safeName}`;
+        if (documentId) {
+          const { data: doc } = await supabase
+            .from("documents")
+            .select("latest_version")
+            .eq("id", documentId)
+            .single();
+          version = (doc?.latest_version ?? 0) + 1;
+          await supabase
+            .from("documents")
+            .update({
+              doc_type: info.docType,
+              author_name: info.authorName || null,
+              paper_title: info.paperTitle || null,
+            })
+            .eq("id", documentId);
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from("documents")
+            .insert({
+              owner_id: user.id,
+              name: file.name,
+              file_type: file.name.split(".").pop()?.toUpperCase() ?? "FILE",
+              size_bytes: file.size,
+              latest_version: 1,
+              status: "queued",
+              doc_type: info.docType,
+              author_name: info.authorName || null,
+              paper_title: info.paperTitle || null,
+            })
+            .select()
+            .single();
+          if (insErr) throw insErr;
+          documentId = inserted.id;
+        }
+        setUploadProgress(25);
 
-      const { error: upErr } = await supabase.storage.from("documents").upload(storagePath, file, { upsert: false });
-      if (upErr) throw upErr;
-      setUploadProgress(55);
+        const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80) || "upload";
+        const storagePath = `${user.id}/${documentId}/v${version}-${Date.now()}-${safeName}`;
 
-      const { data: ver, error: vErr } = await supabase.from("document_versions").insert({
-        document_id: documentId!, version, storage_path: storagePath,
-        size_bytes: file.size, uploaded_by: user.id,
-      }).select().single();
-      if (vErr) throw vErr;
+        const { error: upErr } = await supabase.storage
+          .from("documents")
+          .upload(storagePath, file, { upsert: false });
+        if (upErr) throw upErr;
+        setUploadProgress(55);
 
-      await supabase.from("documents").update({
-        latest_version: version, size_bytes: file.size, status: "queued",
-      }).eq("id", documentId!);
-      setUploadProgress(70);
+        const { data: ver, error: vErr } = await supabase
+          .from("document_versions")
+          .insert({
+            document_id: documentId!,
+            version,
+            storage_path: storagePath,
+            size_bytes: file.size,
+            uploaded_by: user.id,
+          })
+          .select()
+          .single();
+        if (vErr) throw vErr;
 
-      const { error: aErr } = await supabase.from("analyses").insert({
-        document_id: documentId!, version_id: ver.id, status: "pending",
-      }).select().single();
-      if (aErr) throw aErr;
-      setUploadProgress(90);
+        await supabase
+          .from("documents")
+          .update({
+            latest_version: version,
+            size_bytes: file.size,
+            status: "queued",
+          })
+          .eq("id", documentId!);
+        setUploadProgress(70);
 
-      toast.success(`Uploaded ${file.name} (v${version}) — queued for analysis`);
-      if (user?.id) {
-        await secureUserCache.invalidateByTag("documents", { userId: user.id });
-        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
-        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
-      }
-      refresh();
-      qc.invalidateQueries({ queryKey: ["documents"] });
-      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-      qc.invalidateQueries({ queryKey: ["workspace-data"] });
-      setUploadProgress(100);
-      setTimeout(() => setUploadProgress(null), 600);
-      void drainQueue();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Upload failed";
-      toast.error(msg);
-      setUploadProgress(null);
-    }
-  }, [user, refresh, drainQueue, qc, isLimitReached, plan.name, docLimit]);
+        const { error: aErr } = await supabase
+          .from("analyses")
+          .insert({
+            document_id: documentId!,
+            version_id: ver.id,
+            status: "pending",
+          })
+          .select()
+          .single();
+        if (aErr) throw aErr;
+        setUploadProgress(90);
 
-  const startUpload = useCallback((file: File, existingDocId?: string) => {
-    if (!existingDocId && isLimitReached) {
-      toast.error(`${plan.name} monthly allowance of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium to upload more.`);
-      setUpgradeOpen(true);
-      return;
-    }
-    const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
-    setMeta((m) => ({ ...m, paperTitle: m.paperTitle || base }));
-    setPending({ file, existingDocId });
-  }, [isLimitReached, plan.name, docLimit]);
-
-  const reanalyze = useCallback(async (doc: DocRow) => {
-    const { data: ver } = await supabase
-      .from("document_versions")
-      .select("id,storage_path")
-      .eq("document_id", doc.id)
-      .order("version", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!ver) { toast.error("No stored version found for this document"); return; }
-
-    const { data: existing } = await supabase
-      .from("analyses")
-      .select("id")
-      .eq("document_id", doc.id)
-      .eq("version_id", ver.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    toast.info(`Re-analyzing ${doc.name}…`);
-    try {
-      if (user?.id) {
-        await secureUserCache.invalidateByTag("analyses", { userId: user.id });
-        await secureUserCache.invalidateByTag("workspace", { userId: user.id });
-      }
-      if (existing) {
-        const res = (await runAnalysisFn({ data: {
-          analysisId: existing.id, documentId: doc.id, versionId: ver.id, storagePath: ver.storage_path,
-        } })) as { ok: boolean; error?: string };
-        if (!res.ok) toast.error(`Analysis failed: ${res.error}`);
-        else toast.success("Analysis complete");
+        toast.success(`Uploaded ${file.name} (v${version}) — queued for analysis`);
+        if (user?.id) {
+          await secureUserCache.invalidateByTag("documents", { userId: user.id });
+          await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+          await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+        }
         refresh();
-      } else {
-        await supabase.from("analyses").insert({ document_id: doc.id, version_id: ver.id, status: "pending" });
-        await drainQueue();
+        qc.invalidateQueries({ queryKey: ["documents"] });
+        qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+        qc.invalidateQueries({ queryKey: ["workspace-data"] });
+        setUploadProgress(100);
+        setTimeout(() => setUploadProgress(null), 600);
+        void drainQueue();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Upload failed";
+        toast.error(msg);
+        setUploadProgress(null);
       }
-      qc.invalidateQueries({ queryKey: ["analyses-latest"] });
-      qc.invalidateQueries({ queryKey: ["workspace-data"] });
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Analysis failed");
-      refresh();
-    }
-  }, [runAnalysisFn, refresh, drainQueue, user, qc]);
+    },
+    [user, refresh, drainQueue, qc, isLimitReached, plan.name, docLimit],
+  );
 
+  const startUpload = useCallback(
+    (file: File, existingDocId?: string) => {
+      if (!existingDocId && isLimitReached) {
+        toast.error(
+          `${plan.name} monthly allowance of ${docLimit} documents reached. Please upgrade to Pro, Plus, or Premium to upload more.`,
+        );
+        setUpgradeOpen(true);
+        return;
+      }
+      const base = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+      setMeta((m) => ({ ...m, paperTitle: m.paperTitle || base }));
+      setPending({ file, existingDocId });
+    },
+    [isLimitReached, plan.name, docLimit],
+  );
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) startUpload(f);
-  }, [startUpload]);
+  const reanalyze = useCallback(
+    async (doc: DocRow) => {
+      const { data: ver } = await supabase
+        .from("document_versions")
+        .select("id,storage_path")
+        .eq("document_id", doc.id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!ver) {
+        toast.error("No stored version found for this document");
+        return;
+      }
 
+      const { data: existing } = await supabase
+        .from("analyses")
+        .select("id")
+        .eq("document_id", doc.id)
+        .eq("version_id", ver.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      toast.info(`Re-analyzing ${doc.name}…`);
+      try {
+        if (user?.id) {
+          await secureUserCache.invalidateByTag("analyses", { userId: user.id });
+          await secureUserCache.invalidateByTag("workspace", { userId: user.id });
+        }
+        if (existing) {
+          const res = (await runAnalysisFn({
+            data: {
+              analysisId: existing.id,
+              documentId: doc.id,
+              versionId: ver.id,
+              storagePath: ver.storage_path,
+            },
+          })) as { ok: boolean; error?: string };
+          if (!res.ok) toast.error(`Analysis failed: ${res.error}`);
+          else toast.success("Analysis complete");
+          refresh();
+        } else {
+          await supabase
+            .from("analyses")
+            .insert({ document_id: doc.id, version_id: ver.id, status: "pending" });
+          await drainQueue();
+        }
+        qc.invalidateQueries({ queryKey: ["analyses-latest"] });
+        qc.invalidateQueries({ queryKey: ["workspace-data"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Analysis failed");
+        refresh();
+      }
+    },
+    [runAnalysisFn, refresh, drainQueue, user, qc],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      const f = e.dataTransfer.files?.[0];
+      if (f) startUpload(f);
+    },
+    [startUpload],
+  );
 
   const deleteDoc = async (id: string) => {
     if (!confirm("Delete this document and all versions?")) return;
     try {
-      const { data: versions } = await supabase.from("document_versions").select("storage_path").eq("document_id", id);
+      const { data: versions } = await supabase
+        .from("document_versions")
+        .select("storage_path")
+        .eq("document_id", id);
       const paths = (versions ?? []).map((v) => v.storage_path).filter(Boolean);
       if (paths.length) {
         await supabase.storage.from("documents").remove(paths);
@@ -319,10 +435,18 @@ function DocumentsPage() {
   };
 
   const downloadVersion = async (storagePath: string, name: string) => {
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(storagePath, 60);
-    if (error || !data) { toast.error("Could not generate link"); return; }
+    const { data, error } = await supabase.storage
+      .from("documents")
+      .createSignedUrl(storagePath, 60);
+    if (error || !data) {
+      toast.error("Could not generate link");
+      return;
+    }
     const a = document.createElement("a");
-    a.href = data.signedUrl; a.download = name; a.target = "_blank"; a.click();
+    a.href = data.signedUrl;
+    a.download = name;
+    a.target = "_blank";
+    a.click();
   };
 
   const docs = docsQ.data ?? [];
@@ -330,13 +454,29 @@ function DocumentsPage() {
 
   return (
     <div className="space-y-6">
-      <input ref={fileRef} type="file" className="hidden"
+      <input
+        ref={fileRef}
+        type="file"
+        className="hidden"
         accept=".pdf,.docx,.txt,.md"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) startUpload(f); e.target.value = ""; }} />
-      <input ref={versionRef} type="file" className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) startUpload(f);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={versionRef}
+        type="file"
+        className="hidden"
         accept=".pdf,.docx,.txt,.md"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f && versionTarget) startUpload(f, versionTarget); e.target.value = ""; setVersionTarget(null); }} />
-
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f && versionTarget) startUpload(f, versionTarget);
+          e.target.value = "";
+          setVersionTarget(null);
+        }}
+      />
 
       <PageHeader
         title="Documents"
@@ -348,7 +488,9 @@ function DocumentsPage() {
               onClick={() => setUpgradeOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs text-foreground hover:bg-muted transition-colors"
             >
-              <span className="font-medium">{docsUsed} / {docLimit} docs</span>
+              <span className="font-medium">
+                {docsUsed} / {docLimit} docs
+              </span>
               <span className="text-primary font-semibold">({plan.name})</span>
               <Sparkles className="h-3 w-3 text-primary" />
             </button>
@@ -356,14 +498,17 @@ function DocumentsPage() {
               size="sm"
               onClick={() => {
                 if (isLimitReached) {
-                  toast.error(`${plan.name} monthly allowance of ${docLimit} documents reached. Upgrade your plan to upload more.`);
+                  toast.error(
+                    `${plan.name} monthly allowance of ${docLimit} documents reached. Upgrade your plan to upload more.`,
+                  );
                   setUpgradeOpen(true);
                 } else {
                   fileRef.current?.click();
                 }
               }}
             >
-              <Upload className="mr-1.5 h-4 w-4" />Upload
+              <Upload className="mr-1.5 h-4 w-4" />
+              Upload
             </Button>
           </div>
         }
@@ -374,23 +519,32 @@ function DocumentsPage() {
           <div className="flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-warning shrink-0" />
             <div className="text-xs">
-              <p className="font-semibold text-foreground">Document limit reached for {plan.name} ({docLimit} documents)</p>
-              <p className="text-muted-foreground mt-0.5">Upgrade to Pro (15 docs), Plus (25 docs), or Premium (35 docs) to continue uploading.</p>
+              <p className="font-semibold text-foreground">
+                Document limit reached for {plan.name} ({docLimit} documents)
+              </p>
+              <p className="text-muted-foreground mt-0.5">
+                Upgrade to Pro (15 docs), Plus (25 docs), or Premium (35 docs) to continue
+                uploading.
+              </p>
             </div>
           </div>
           <Button size="sm" onClick={() => setUpgradeOpen(true)} className="shrink-0 text-xs">
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" />Upgrade plan
+            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+            Upgrade plan
           </Button>
         </Card>
       )}
 
       <Card
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         className={cn(
           "flex flex-col items-center justify-center gap-3 border-2 border-dashed p-10 text-center transition-colors",
-          dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/30"
+          dragOver ? "border-primary bg-primary/5" : "border-border bg-muted/30",
         )}
       >
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -398,9 +552,13 @@ function DocumentsPage() {
         </div>
         <div>
           <p className="text-sm font-medium text-foreground">Drag & drop files to upload</p>
-          <p className="text-xs text-muted-foreground">PDF, DOCX, TXT, MD — stored privately, scored automatically</p>
+          <p className="text-xs text-muted-foreground">
+            PDF, DOCX, TXT, MD — stored privately, scored automatically
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>Browse files</Button>
+        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+          Browse files
+        </Button>
         {uploadProgress !== null && (
           <div className="mt-3 w-full max-w-md">
             <Progress value={uploadProgress} />
@@ -413,9 +571,16 @@ function DocumentsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-foreground">All documents</h3>
-            <Badge variant="secondary" className="font-normal">{filtered.length}</Badge>
+            <Badge variant="secondary" className="font-normal">
+              {filtered.length}
+            </Badge>
           </div>
-          <Input placeholder="Search by name" value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 w-64" />
+          <Input
+            placeholder="Search by name"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-9 w-64"
+          />
         </div>
         <div className="overflow-x-auto">
           <Table>
@@ -432,10 +597,24 @@ function DocumentsPage() {
             </TableHeader>
             <TableBody>
               {docsQ.isLoading && (
-                <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">Loading…</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-sm text-muted-foreground py-10"
+                  >
+                    Loading…
+                  </TableCell>
+                </TableRow>
               )}
               {!docsQ.isLoading && filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-10">No documents yet — upload one to get started.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-sm text-muted-foreground py-10"
+                  >
+                    No documents yet — upload one to get started.
+                  </TableCell>
+                </TableRow>
               )}
               {filtered.map((doc) => {
                 const a = analysesQ.data?.get(doc.id);
@@ -447,40 +626,105 @@ function DocumentsPage() {
                           <FileText className="h-4 w-4" />
                         </div>
                         <div className="min-w-0 max-w-[240px] sm:max-w-[320px] lg:max-w-[440px]">
-                          <p className="truncate text-sm font-medium text-foreground" title={doc.name}>{doc.name}</p>
-                          <p className="text-xs text-muted-foreground">{doc.file_type} · {(doc.size_bytes / 1024).toFixed(1)} KB</p>
+                          <p
+                            className="truncate text-sm font-medium text-foreground"
+                            title={doc.name}
+                          >
+                            {doc.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {doc.file_type} · {(doc.size_bytes / 1024).toFixed(1)} KB
+                          </p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">v{doc.latest_version}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn("capitalize", statusStyles[doc.status] ?? statusStyles.queued)}>{doc.status}</Badge>
+                    <TableCell className="text-sm text-muted-foreground">
+                      v{doc.latest_version}
                     </TableCell>
                     <TableCell>
-                      {a?.similarity_score != null ? <SimilarityPill value={Number(a.similarity_score)} /> : <span className="text-xs text-muted-foreground">—</span>}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "capitalize",
+                          statusStyles[doc.status] ?? statusStyles.queued,
+                        )}
+                      >
+                        {doc.status}
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      {a?.ai_score != null ? <span className="text-sm font-medium text-foreground">{Number(a.ai_score).toFixed(0)}%</span> : <span className="text-xs text-muted-foreground">—</span>}
+                      {a?.similarity_score != null ? (
+                        <SimilarityPill value={Number(a.similarity_score)} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{new Date(doc.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {a?.ai_score != null ? (
+                        <span className="text-sm font-medium text-foreground">
+                          {Number(a.ai_score).toFixed(0)}%
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(doc.created_at).toLocaleDateString()}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" asChild title="Open analysis"><Link to="/analysis" search={{ doc: doc.id }}><Eye className="h-4 w-4" /></Link></Button>
-                        <Button variant="ghost" size="sm" title="Version history" onClick={() => setHistoryOpen(doc)}><History className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" asChild title="Open analysis">
+                          <Link to="/analysis" search={{ doc: doc.id }}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Version history"
+                          onClick={() => setHistoryOpen(doc)}
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild><Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setVersionTarget(doc.id); versionRef.current?.click(); }}>
-                              <Upload className="mr-2 h-4 w-4" />Upload new version
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setVersionTarget(doc.id);
+                                versionRef.current?.click();
+                              }}
+                            >
+                              <Upload className="mr-2 h-4 w-4" />
+                              Upload new version
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => reanalyze(doc)}>
-                              <ScanSearch className="mr-2 h-4 w-4" />Re-analyze
+                              <ScanSearch className="mr-2 h-4 w-4" />
+                              Re-analyze
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild><Link to="/analysis" search={{ doc: doc.id }}><Eye className="mr-2 h-4 w-4" />View analysis</Link></DropdownMenuItem>
-                            <DropdownMenuItem asChild><Link to="/reports" search={{ doc: doc.id }}><FileDown className="mr-2 h-4 w-4" />Reports & PDF</Link></DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/analysis" search={{ doc: doc.id }}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View analysis
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link to="/reports" search={{ doc: doc.id }}>
+                                <FileDown className="mr-2 h-4 w-4" />
+                                Reports & PDF
+                              </Link>
+                            </DropdownMenuItem>
 
-                            <DropdownMenuItem className="text-destructive" onClick={() => deleteDoc(doc.id)}>
-                              <Trash2 className="mr-2 h-4 w-4" />Delete
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => deleteDoc(doc.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -516,7 +760,13 @@ function DocumentsPage() {
                     <TableCell>{(v.size_bytes / 1024).toFixed(1)} KB</TableCell>
                     <TableCell>{new Date(v.created_at).toLocaleString()}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => downloadVersion(v.storage_path, `${historyOpen?.name}-v${v.version}`)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          downloadVersion(v.storage_path, `${historyOpen?.name}-v${v.version}`)
+                        }
+                      >
                         <Download className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -538,39 +788,63 @@ function DocumentsPage() {
             </p>
             <div className="space-y-1.5">
               <Label>Document type</Label>
-              <Select value={meta.docType} onValueChange={(v) => setMeta((m) => ({ ...m, docType: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+              <Select
+                value={meta.docType}
+                onValueChange={(v) => setMeta((m) => ({ ...m, docType: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
                 <SelectContent>
-                  {DOC_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                  {DOC_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="paper-title">Title of the paper</Label>
-              <Input id="paper-title" value={meta.paperTitle} maxLength={200}
+              <Input
+                id="paper-title"
+                value={meta.paperTitle}
+                maxLength={200}
                 onChange={(e) => setMeta((m) => ({ ...m, paperTitle: e.target.value }))}
-                placeholder="e.g. Deep learning for climate modelling" />
+                placeholder="e.g. Deep learning for climate modelling"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="author-name">Author name</Label>
-              <Input id="author-name" value={meta.authorName} maxLength={120}
+              <Input
+                id="author-name"
+                value={meta.authorName}
+                maxLength={120}
                 onChange={(e) => setMeta((m) => ({ ...m, authorName: e.target.value }))}
-                placeholder="e.g. Jane Doe" />
+                placeholder="e.g. Jane Doe"
+              />
             </div>
             <p className="text-xs text-muted-foreground truncate">File: {pending?.file.name}</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPending(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setPending(null)}>
+              Cancel
+            </Button>
             <Button
               disabled={!meta.paperTitle.trim() || !meta.authorName.trim()}
               onClick={() => {
                 const p = pending;
                 setPending(null);
-                if (p) void uploadFile(p.file, {
-                  docType: meta.docType,
-                  authorName: meta.authorName.trim(),
-                  paperTitle: meta.paperTitle.trim(),
-                }, p.existingDocId);
+                if (p)
+                  void uploadFile(
+                    p.file,
+                    {
+                      docType: meta.docType,
+                      authorName: meta.authorName.trim(),
+                      paperTitle: meta.paperTitle.trim(),
+                    },
+                    p.existingDocId,
+                  );
               }}
             >
               Upload & analyze
@@ -584,6 +858,17 @@ function DocumentsPage() {
 }
 
 function SimilarityPill({ value }: { value: number }) {
-  const tone = value < 15 ? "bg-success/15 text-success" : value < 30 ? "bg-warning/20 text-warning" : "bg-destructive/15 text-destructive";
-  return <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium", tone)}>{value.toFixed(0)}%</span>;
+  const tone =
+    value < 15
+      ? "bg-success/15 text-success"
+      : value < 30
+        ? "bg-warning/20 text-warning"
+        : "bg-destructive/15 text-destructive";
+  return (
+    <span
+      className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium", tone)}
+    >
+      {value.toFixed(0)}%
+    </span>
+  );
 }

@@ -40,24 +40,38 @@ Deno.serve(async (request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
+    const serviceRoleKey =
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
     const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
     const appUrl = Deno.env.get("APP_URL");
     if (!supabaseUrl || !anonKey || !serviceRoleKey || !stripeSecret || !appUrl) {
-      return json({ error: "Billing is not configured. Ask the workspace administrator to finish the Stripe setup." }, 503);
+      return json(
+        {
+          error:
+            "Billing is not configured. Ask the workspace administrator to finish the Stripe setup.",
+        },
+        503,
+      );
     }
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) return json({ error: "Your session is no longer valid. Please sign in again." }, 401);
+    const {
+      data: { user },
+      error: authError,
+    } = await userClient.auth.getUser();
+    if (authError || !user)
+      return json({ error: "Your session is no longer valid. Please sign in again." }, 401);
 
     const body = await request.json();
     const planId = body?.planId;
     const billingCycle = body?.billingCycle;
-    if (!["pro", "plus", "premium"].includes(planId) || !["monthly", "annual"].includes(billingCycle)) {
+    if (
+      !["pro", "plus", "premium"].includes(planId) ||
+      !["monthly", "annual"].includes(billingCycle)
+    ) {
       return json({ error: "Choose a valid paid plan and billing cycle." }, 400);
     }
 
@@ -87,8 +101,14 @@ Deno.serve(async (request) => {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (existing?.stripe_customer_id && ["active", "trialing", "past_due", "unpaid"].includes(existing.status)) {
-      return json({ error: "You already have a subscription. Open Manage billing to change or cancel it." }, 409);
+    if (
+      existing?.stripe_customer_id &&
+      ["active", "trialing", "past_due", "unpaid"].includes(existing.status)
+    ) {
+      return json(
+        { error: "You already have a subscription. Open Manage billing to change or cancel it." },
+        409,
+      );
     }
 
     let customerId = existing?.stripe_customer_id ?? null;
@@ -98,14 +118,18 @@ Deno.serve(async (request) => {
       customerParams.set("metadata[user_id]", user.id);
       const customer = await stripePost("customers", customerParams, stripeSecret);
       customerId = customer.id as string;
-      const { error: saveCustomerError } = await admin.from("subscriptions").upsert({
-        user_id: user.id,
-        stripe_customer_id: customerId,
-        plan_id: "free",
-        status: "inactive",
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id" });
-      if (saveCustomerError) throw new Error("Could not save the billing customer. Please try again.");
+      const { error: saveCustomerError } = await admin.from("subscriptions").upsert(
+        {
+          user_id: user.id,
+          stripe_customer_id: customerId,
+          plan_id: "free",
+          status: "inactive",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" },
+      );
+      if (saveCustomerError)
+        throw new Error("Could not save the billing customer. Please try again.");
     }
 
     const params = new URLSearchParams();
@@ -127,6 +151,9 @@ Deno.serve(async (request) => {
     return json({ url: session.url });
   } catch (error) {
     console.error("create-checkout-session failed:", error);
-    return json({ error: error instanceof Error ? error.message : "Unable to start checkout." }, 500);
+    return json(
+      { error: error instanceof Error ? error.message : "Unable to start checkout." },
+      500,
+    );
   }
 });

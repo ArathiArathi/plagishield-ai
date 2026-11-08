@@ -39,7 +39,8 @@ export function HighlightedDocument({
   if (!text.trim()) {
     return (
       <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No extracted document text is stored for this analysis. Re-analyze the document to generate highlights.
+        No extracted document text is stored for this analysis. Re-analyze the document to generate
+        highlights.
       </p>
     );
   }
@@ -62,7 +63,9 @@ export function HighlightedDocument({
             </Badge>
           </button>
         ))}
-        <span className="text-xs text-muted-foreground">Click a category to toggle its highlights</span>
+        <span className="text-xs text-muted-foreground">
+          Click a category to toggle its highlights
+        </span>
       </div>
 
       <div className="max-h-[460px] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-card p-4 min-w-0">

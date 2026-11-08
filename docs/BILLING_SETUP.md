@@ -6,18 +6,18 @@ PlagiShield uses Stripe-hosted Checkout and the Stripe customer portal. Paid acc
 
 The connected Stripe account has these products and active INR recurring prices in **test mode**:
 
-| Plan | Monthly | Annual | Product ID |
-| --- | ---: | ---: | --- |
-| Pro | ₹1,300 | ₹11,300 | `prod_VaecTO2bcGM2ul` |
-| Plus | ₹2,700 | ₹22,600 | `prod_VaecaIarnwnWbb` |
-| Premium | ₹4,600 | ₹39,500 | `prod_Vaecu2tn0zrLKb` |
+| Plan    | Monthly |  Annual | Product ID            |
+| ------- | ------: | ------: | --------------------- |
+| Pro     |  ₹1,300 | ₹11,300 | `prod_VaecTO2bcGM2ul` |
+| Plus    |  ₹2,700 | ₹22,600 | `prod_VaecaIarnwnWbb` |
+| Premium |  ₹4,600 | ₹39,500 | `prod_Vaecu2tn0zrLKb` |
 
 The six Stripe Price IDs are mapped in the server-side Checkout and webhook Edge Functions:
 
-| Plan | Monthly Price ID | Annual Price ID |
-| --- | --- | --- |
-| Pro | `price_1UZTJCEP3hMKlBIwIIilnrzC` | `price_1UZTJEEP3hMKlBIwn5ARqR7j` |
-| Plus | `price_1UZTJGEP3hMKlBIwtzHPMqfs` | `price_1UZTJIEP3hMKlBIwEtH6ofUj` |
+| Plan    | Monthly Price ID                 | Annual Price ID                  |
+| ------- | -------------------------------- | -------------------------------- |
+| Pro     | `price_1UZTJCEP3hMKlBIwIIilnrzC` | `price_1UZTJEEP3hMKlBIwn5ARqR7j` |
+| Plus    | `price_1UZTJGEP3hMKlBIwtzHPMqfs` | `price_1UZTJIEP3hMKlBIwEtH6ofUj` |
 | Premium | `price_1UZTJKEP3hMKlBIw3EazNMVF` | `price_1UZTJLEP3hMKlBIwbtyQdVv2` |
 
 These prices preserve the existing plan tiers and approximate their former USD values using a rounded INR conversion. The user confirmed no GST collection for now; Stripe automatic tax is not enabled. Do not enable automatic tax unless the business confirms its tax registrations and collection requirements.
@@ -51,6 +51,7 @@ https://efqiekytujylkcnlxnod.supabase.co/functions/v1/stripe-webhook
 ```
 
 Subscribe to:
+
 - `customer.subscription.created`
 - `customer.subscription.updated`
 - `customer.subscription.deleted`

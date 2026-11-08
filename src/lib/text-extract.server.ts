@@ -6,7 +6,10 @@
  * so it runs inside the edge/worker runtime with no native dependencies.
  */
 
-async function inflate(bytes: Uint8Array, format: "deflate" | "deflate-raw" | "gzip"): Promise<Uint8Array> {
+async function inflate(
+  bytes: Uint8Array,
+  format: "deflate" | "deflate-raw" | "gzip",
+): Promise<Uint8Array> {
   const ds = new DecompressionStream(format);
   const copy = new Uint8Array(bytes.length);
   copy.set(bytes);
@@ -23,7 +26,6 @@ async function inflate(bytes: Uint8Array, format: "deflate" | "deflate-raw" | "g
   return new Uint8Array(await new Response(ds.readable).arrayBuffer());
 }
 
-
 function decodeUtf8(bytes: Uint8Array) {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
@@ -36,7 +38,13 @@ async function readZipEntry(bytes: Uint8Array, wanted: string): Promise<ZipEntry
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   // Scan local file headers (PK\x03\x04)
   for (let i = 0; i + 30 < bytes.length; i++) {
-    if (bytes[i] !== 0x50 || bytes[i + 1] !== 0x4b || bytes[i + 2] !== 0x03 || bytes[i + 3] !== 0x04) continue;
+    if (
+      bytes[i] !== 0x50 ||
+      bytes[i + 1] !== 0x4b ||
+      bytes[i + 2] !== 0x03 ||
+      bytes[i + 3] !== 0x04
+    )
+      continue;
     const method = view.getUint16(i + 8, true);
     let compressedSize = view.getUint32(i + 18, true);
     const nameLen = view.getUint16(i + 26, true);
@@ -49,7 +57,11 @@ async function readZipEntry(bytes: Uint8Array, wanted: string): Promise<ZipEntry
       // streamed entry — read until next local header / central directory
       let end = bytes.length;
       for (let j = dataStart; j + 4 < bytes.length; j++) {
-        if (bytes[j] === 0x50 && bytes[j + 1] === 0x4b && (bytes[j + 2] === 0x03 || bytes[j + 2] === 0x01 || bytes[j + 2] === 0x07)) {
+        if (
+          bytes[j] === 0x50 &&
+          bytes[j + 1] === 0x4b &&
+          (bytes[j + 2] === 0x03 || bytes[j + 2] === 0x01 || bytes[j + 2] === 0x07)
+        ) {
           end = j;
           break;
         }
@@ -106,7 +118,10 @@ function trimStreamBytes(bytes: Uint8Array): Uint8Array {
   while (start < end && (bytes[start] === 0x0a || bytes[start] === 0x0d || bytes[start] === 0x20)) {
     start++;
   }
-  while (end > start && (bytes[end - 1] === 0x0a || bytes[end - 1] === 0x0d || bytes[end - 1] === 0x20)) {
+  while (
+    end > start &&
+    (bytes[end - 1] === 0x0a || bytes[end - 1] === 0x0d || bytes[end - 1] === 0x20)
+  ) {
     end--;
   }
   return bytes.subarray(start, end);
@@ -114,7 +129,10 @@ function trimStreamBytes(bytes: Uint8Array): Uint8Array {
 
 function pdfUnescape(value: string) {
   return value
-    .replace(/\\([nrtbf])/g, (_, c) => ({ n: "\n", r: "\n", t: "\t", b: "", f: "" }[c as string] ?? ""))
+    .replace(
+      /\\([nrtbf])/g,
+      (_, c) => ({ n: "\n", r: "\n", t: "\t", b: "", f: "" })[c as string] ?? "",
+    )
     .replace(/\\(\d{1,3})/g, (_, o) => String.fromCharCode(parseInt(o, 8)))
     .replace(/\\(.)/g, "$1");
 }
@@ -222,12 +240,18 @@ async function extractPdf(bytes: Uint8Array): Promise<string> {
     }
   }
 
-  return text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return text
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /* ---------------------------------------------------------------- public */
 
-export async function extractText(buffer: ArrayBuffer, fileName: string): Promise<{ text: string; method: string }> {
+export async function extractText(
+  buffer: ArrayBuffer,
+  fileName: string,
+): Promise<{ text: string; method: string }> {
   const bytes = new Uint8Array(buffer);
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
   const isPdf = ext === "pdf" || (bytes[0] === 0x25 && bytes[1] === 0x50);

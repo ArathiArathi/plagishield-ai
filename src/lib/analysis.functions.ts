@@ -31,7 +31,9 @@ async function execute(
   // Never trust a storage path supplied by the browser for a privileged download.
   const { data: ownedAnalysis, error: ownershipError } = await supabaseAdmin
     .from("analyses")
-    .select("id,document_id,version_id,documents!inner(id,owner_id,name,doc_type,author_name,paper_title)")
+    .select(
+      "id,document_id,version_id,documents!inner(id,owner_id,name,doc_type,author_name,paper_title)",
+    )
     .eq("id", data.analysisId)
     .eq("document_id", data.documentId)
     .eq("version_id", data.versionId)
@@ -39,11 +41,16 @@ async function execute(
     .maybeSingle();
 
   if (ownershipError) throw ownershipError;
-  if (!ownedAnalysis) throw new Error("The requested analysis does not belong to your account or document version.");
+  if (!ownedAnalysis)
+    throw new Error("The requested analysis does not belong to your account or document version.");
 
   const doc = ownedAnalysis.documents as {
-    id: string; owner_id: string; name: string; doc_type: string | null;
-    author_name: string | null; paper_title: string | null;
+    id: string;
+    owner_id: string;
+    name: string;
+    doc_type: string | null;
+    author_name: string | null;
+    paper_title: string | null;
   };
   const { data: version, error: versionError } = await supabaseAdmin
     .from("document_versions")
@@ -103,7 +110,8 @@ async function execute(
     const extractedWords = normalizedText.match(/[\p{L}\p{N}]+/gu) ?? [];
     const visibleCharacters = normalizedText.replace(/\s/g, "");
     const readableCharacters = (visibleCharacters.match(/[\p{L}\p{N}.,;:!?'"()-]/gu) ?? []).length;
-    const readableRatio = visibleCharacters.length > 0 ? readableCharacters / visibleCharacters.length : 0;
+    const readableRatio =
+      visibleCharacters.length > 0 ? readableCharacters / visibleCharacters.length : 0;
     const replacementCharacters = (normalizedText.match(/�/g) ?? []).length;
 
     if (
@@ -126,22 +134,22 @@ async function execute(
       onStage: (stage) => setStage(stage),
     });
 
-function sanitizeForPostgres<T>(val: T): T {
-  if (typeof val === "string") {
-    return val.replace(/\0/g, "").replace(/\u0000/g, "") as unknown as T;
-  }
-  if (Array.isArray(val)) {
-    return val.map((v) => sanitizeForPostgres(v)) as unknown as T;
-  }
-  if (val !== null && typeof val === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(val)) {
-      out[k] = sanitizeForPostgres(v);
+    function sanitizeForPostgres<T>(val: T): T {
+      if (typeof val === "string") {
+        return val.replace(/\0/g, "").replace(/\u0000/g, "") as unknown as T;
+      }
+      if (Array.isArray(val)) {
+        return val.map((v) => sanitizeForPostgres(v)) as unknown as T;
+      }
+      if (val !== null && typeof val === "object") {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(val)) {
+          out[k] = sanitizeForPostgres(v);
+        }
+        return out as unknown as T;
+      }
+      return val;
     }
-    return out as unknown as T;
-  }
-  return val;
-}
 
     // 5. Save completed results
     const cleanResults = sanitizeForPostgres({
@@ -186,10 +194,7 @@ function sanitizeForPostgres<T>(val: T): T {
         })
         .eq("id", data.analysisId);
 
-      await supabaseAdmin
-        .from("documents")
-        .update({ status: "failed" })
-        .eq("id", data.documentId);
+      await supabaseAdmin.from("documents").update({ status: "failed" }).eq("id", data.documentId);
     } catch (saveErr) {
       console.error("[Analysis Worker] Failed updating error status:", saveErr);
     }
@@ -208,7 +213,9 @@ export const runAnalysis = createServerFn({ method: "POST" })
     if (!rateLimit.isAllowed) {
       return {
         ok: false as const,
-        error: rateLimit.message || `Rate limit reached. Please wait ${rateLimit.retryAfterSeconds}s before re-analyzing.`,
+        error:
+          rateLimit.message ||
+          `Rate limit reached. Please wait ${rateLimit.retryAfterSeconds}s before re-analyzing.`,
         retryAfter: rateLimit.retryAfterSeconds,
       };
     }
@@ -266,10 +273,7 @@ export const processQueue = createServerFn({ method: "POST" })
           })
           .eq("id", s.id);
 
-        await supabaseAdmin
-          .from("documents")
-          .update({ status: "failed" })
-          .eq("id", s.document_id);
+        await supabaseAdmin.from("documents").update({ status: "failed" }).eq("id", s.document_id);
       } catch (err) {
         console.warn("[processQueue] Error cleaning stale job:", err);
       }
@@ -309,10 +313,7 @@ export const processQueue = createServerFn({ method: "POST" })
         })
         .eq("id", next.id);
 
-      await supabaseAdmin
-        .from("documents")
-        .update({ status: "failed" })
-        .eq("id", next.document_id);
+      await supabaseAdmin.from("documents").update({ status: "failed" }).eq("id", next.document_id);
 
       return {
         started: true as const,

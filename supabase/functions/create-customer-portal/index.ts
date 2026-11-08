@@ -24,19 +24,30 @@ Deno.serve(async (request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
+    const serviceRoleKey =
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY");
     const stripeSecret = Deno.env.get("STRIPE_SECRET_KEY");
     const appUrl = Deno.env.get("APP_URL");
     if (!supabaseUrl || !anonKey || !serviceRoleKey || !stripeSecret || !appUrl) {
-      return json({ error: "Billing is not configured. Ask the workspace administrator to finish the Stripe setup." }, 503);
+      return json(
+        {
+          error:
+            "Billing is not configured. Ask the workspace administrator to finish the Stripe setup.",
+        },
+        503,
+      );
     }
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
-    if (authError || !user) return json({ error: "Your session is no longer valid. Please sign in again." }, 401);
+    const {
+      data: { user },
+      error: authError,
+    } = await userClient.auth.getUser();
+    if (authError || !user)
+      return json({ error: "Your session is no longer valid. Please sign in again." }, 401);
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -64,10 +75,14 @@ Deno.serve(async (request) => {
       body: params,
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error?.message ?? "Stripe could not open the billing portal.");
+    if (!response.ok)
+      throw new Error(payload?.error?.message ?? "Stripe could not open the billing portal.");
     return json({ url: payload.url });
   } catch (error) {
     console.error("create-customer-portal failed:", error);
-    return json({ error: error instanceof Error ? error.message : "Unable to open billing settings." }, 500);
+    return json(
+      { error: error instanceof Error ? error.message : "Unable to open billing settings." },
+      500,
+    );
   }
 });

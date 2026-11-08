@@ -9,7 +9,9 @@ type SignInOptions = {
   extraParams?: Record<string, string>;
 };
 
-async function isSupabaseProviderEnabled(provider: string): Promise<{ enabled: boolean; projectRef?: string }> {
+async function isSupabaseProviderEnabled(
+  provider: string,
+): Promise<{ enabled: boolean; projectRef?: string }> {
   try {
     const url =
       (supabase as any)?.supabaseUrl ||
@@ -46,13 +48,21 @@ async function isSupabaseProviderEnabled(provider: string): Promise<{ enabled: b
 
 export const lovable = {
   auth: {
-    signInWithOAuth: async (provider: "google" | "apple" | "microsoft" | "lovable", opts?: SignInOptions) => {
+    signInWithOAuth: async (
+      provider: "google" | "apple" | "microsoft" | "lovable",
+      opts?: SignInOptions,
+    ) => {
       const isClient = typeof window !== "undefined";
-      const redirectUri = opts?.redirect_uri || (isClient ? `${window.location.origin}/auth/callback` : undefined);
+      const redirectUri =
+        opts?.redirect_uri || (isClient ? `${window.location.origin}/auth/callback` : undefined);
 
       // In a Lovable iframe editor environment, try lovable broker
       const isFramed = isClient && window.parent && window.parent !== window;
-      const isLovableHost = isClient && ["lovable.app", "lovableproject.com", "gptengineer.run"].some((h) => window.location.hostname.endsWith(h));
+      const isLovableHost =
+        isClient &&
+        ["lovable.app", "lovableproject.com", "gptengineer.run"].some((h) =>
+          window.location.hostname.endsWith(h),
+        );
 
       if (isFramed && isLovableHost) {
         try {
@@ -78,7 +88,7 @@ export const lovable = {
         if (!status.enabled) {
           return {
             error: new Error(
-              `Unsupported provider: ${provider} is not enabled in your Supabase project (${status.projectRef || "efqiekytujylkcnlxnod"}). Please enable it in the Supabase Dashboard under Authentication → Providers → Google.`
+              `Unsupported provider: ${provider} is not enabled in your Supabase project (${status.projectRef || "efqiekytujylkcnlxnod"}). Please enable it in the Supabase Dashboard under Authentication → Providers → Google.`,
             ),
             isProviderNotEnabled: true,
           };
@@ -111,4 +121,3 @@ export const lovable = {
     },
   },
 };
-

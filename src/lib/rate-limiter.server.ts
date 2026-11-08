@@ -76,10 +76,7 @@ export const RATE_LIMITS = {
 /**
  * Check and record a request in the sliding window.
  */
-export function checkRateLimit(
-  identifier: string,
-  config: RateLimitConfig,
-): RateLimitResult {
+export function checkRateLimit(identifier: string, config: RateLimitConfig): RateLimitResult {
   pruneStore();
 
   const now = Date.now();

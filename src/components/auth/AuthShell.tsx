@@ -2,18 +2,34 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 
-export function AuthShell({ title, subtitle, footer, children }: {
-  title: string; subtitle: string; children: ReactNode; footer?: ReactNode;
+export function AuthShell({
+  title,
+  subtitle,
+  footer,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+  footer?: ReactNode;
 }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
-      <div className="hidden flex-col justify-between bg-sidebar p-10 text-sidebar-foreground lg:flex" style={{ backgroundImage: "var(--gradient-primary)" }}>
+      <div
+        className="hidden flex-col justify-between bg-sidebar p-10 text-sidebar-foreground lg:flex"
+        style={{ backgroundImage: "var(--gradient-primary)" }}
+      >
         <Link to="/" className="flex items-center">
           <Logo size="md" />
         </Link>
         <div>
-          <h2 className="text-3xl font-semibold leading-tight text-white">Plagiarism intelligence for the modern academic.</h2>
-          <p className="mt-3 max-w-md text-sm text-white/80">Trusted by universities, publishers, and research institutions to safeguard content authenticity at scale.</p>
+          <h2 className="text-3xl font-semibold leading-tight text-white">
+            Plagiarism intelligence for the modern academic.
+          </h2>
+          <p className="mt-3 max-w-md text-sm text-white/80">
+            Trusted by universities, publishers, and research institutions to safeguard content
+            authenticity at scale.
+          </p>
         </div>
         <p className="text-xs text-white/60">© 2026 PlagiShield AI</p>
       </div>

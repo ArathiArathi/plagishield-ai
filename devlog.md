@@ -4,14 +4,14 @@
 
 ## Brand Phrases
 
-- **Tagline:** *Defend originality. Detect AI. Deliver trust.*
+- **Tagline:** _Defend originality. Detect AI. Deliver trust._
 - **Short pitch:** PlagiShield AI is the enterprise integrity layer for academic and editorial workflows.
 - **Marketing lines:**
-  - *Beyond plagiarism — true content authenticity.*
-  - *From submission to certainty in seconds.*
-  - *Plagiarism, AI, grammar, citations — one verdict.*
-  - *Built for the era of generative writing.*
-  - *Integrity at the speed of research.*
+  - _Beyond plagiarism — true content authenticity._
+  - _From submission to certainty in seconds._
+  - _Plagiarism, AI, grammar, citations — one verdict._
+  - _Built for the era of generative writing._
+  - _Integrity at the speed of research._
 
 ## What the Platform Does
 
@@ -26,14 +26,14 @@
 
 ## Tech Stack
 
-| Layer | Choice |
-| --- | --- |
-| Framework | TanStack Start v1 (React 19, Vite 7, SSR-ready) |
-| Styling | Tailwind CSS v4 + shadcn/ui + Recharts |
-| Backend | Lovable Cloud (Supabase) — Postgres, Auth, Storage |
-| Server logic | `createServerFn` (TanStack) — no edge functions |
-| AI gateway | Lovable AI Gateway (Gemini 2.5 Flash) |
-| Auth | Supabase Auth + Google OAuth via Lovable broker |
+| Layer        | Choice                                             |
+| ------------ | -------------------------------------------------- |
+| Framework    | TanStack Start v1 (React 19, Vite 7, SSR-ready)    |
+| Styling      | Tailwind CSS v4 + shadcn/ui + Recharts             |
+| Backend      | Lovable Cloud (Supabase) — Postgres, Auth, Storage |
+| Server logic | `createServerFn` (TanStack) — no edge functions    |
+| AI gateway   | Lovable AI Gateway (Gemini 2.5 Flash)              |
+| Auth         | Supabase Auth + Google OAuth via Lovable broker    |
 
 ## Architecture
 
@@ -60,13 +60,13 @@ supabase/migrations/         # Schema, RLS, triggers
 
 ## Data Model
 
-| Table | Purpose | Key columns |
-| --- | --- | --- |
-| `profiles` | Public user profile | `id`, `first_name`, `last_name`, `institution` |
-| `user_roles` | RBAC mapping | `user_id`, `role` (enum) |
-| `documents` | Document record | `owner_id`, `name`, `status`, `latest_version` |
-| `document_versions` | Each upload revision | `document_id`, `version`, `storage_path` |
-| `analyses` | Per-version results | `similarity_score`, `ai_score`, `grammar_score`, `citation_score`, `results` (jsonb) |
+| Table               | Purpose              | Key columns                                                                          |
+| ------------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| `profiles`          | Public user profile  | `id`, `first_name`, `last_name`, `institution`                                       |
+| `user_roles`        | RBAC mapping         | `user_id`, `role` (enum)                                                             |
+| `documents`         | Document record      | `owner_id`, `name`, `status`, `latest_version`                                       |
+| `document_versions` | Each upload revision | `document_id`, `version`, `storage_path`                                             |
+| `analyses`          | Per-version results  | `similarity_score`, `ai_score`, `grammar_score`, `citation_score`, `results` (jsonb) |
 
 Storage bucket: **`documents`** (private). Path pattern: `{user_id}/{document_id}/v{n}-{timestamp}-{filename}`.
 
@@ -74,11 +74,11 @@ Storage bucket: **`documents`** (private). Path pattern: `{user_id}/{document_id
 
 Roles: `student`, `faculty`, `institution_admin`, `super_admin`.
 
-| Route | Allowed roles |
-| --- | --- |
-| `/`, `/documents`, `/analysis`, `/reports`, `/settings` | all roles |
-| `/analytics`, `/repository` | faculty, institution_admin, super_admin |
-| `/team`, `/subscription` | institution_admin, super_admin |
+| Route                                                   | Allowed roles                           |
+| ------------------------------------------------------- | --------------------------------------- |
+| `/`, `/documents`, `/analysis`, `/reports`, `/settings` | all roles                               |
+| `/analytics`, `/repository`                             | faculty, institution_admin, super_admin |
+| `/team`, `/subscription`                                | institution_admin, super_admin          |
 
 Enforced by `RoleGuard` in `src/routes/__root.tsx` and by sidebar visibility in `AppSidebar.tsx`. Database access is independently enforced by Supabase RLS using the `has_role()` security-definer function.
 
