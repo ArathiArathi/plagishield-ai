@@ -71,7 +71,7 @@ function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Documents" value={(stats?.totalDocuments ?? 0).toLocaleString()} icon={FileBarChart} tone="primary" />
           <StatCard label="Completed reviews" value={(stats?.analyzed ?? 0).toLocaleString()} icon={Activity} tone="primary" />
-          <StatCard label="Average observed overlap" value={stats?.similarity ?? 0} suffix="%" icon={FileBarChart} tone="primary" />
+          <StatCard label="Average observed overlap" value={stats?.analyzed ? stats.similarity : "—"} suffix={stats?.analyzed ? "%" : undefined} icon={FileBarChart} tone="primary" />
           <StatCard label="Documents with matches" value={(stats?.matchedDocuments ?? 0).toLocaleString()} icon={AlertTriangle} tone="warning" />
         </div>
       )}
@@ -107,10 +107,6 @@ function DashboardPage() {
                   <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
                     <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-destructive)" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="var(--color-destructive)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
