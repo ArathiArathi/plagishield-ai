@@ -12,9 +12,9 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "PlagiShield AI — Plagiarism & AI Content Detection" },
-      { name: "description", content: "Check originality, detect AI-generated text, fix grammar, and verify citations — all in one private workspace." },
+      { name: "description", content: "Review text similarity, AI-style signals, writing clarity, and citations in one private workspace." },
       { property: "og:title", content: "PlagiShield AI — Plagiarism & AI Content Detection" },
-      { property: "og:description", content: "Check originality, detect AI-generated text, fix grammar, and verify citations in one private workspace." },
+      { property: "og:description", content: "Review text similarity, AI-style signals, writing clarity, and citations in one private workspace." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -23,12 +23,18 @@ export const Route = createFileRoute("/")({
 });
 
 const features = [
-  { icon: ScanSearch, title: "Similarity detection", copy: "Sentence-level matching that surfaces exactly which passages need attention." },
-  { icon: Sparkles, title: "AI content analysis", copy: "Estimate how much of a draft reads as machine-generated, with reasoning." },
-  { icon: SpellCheck, title: "Grammar & clarity", copy: "Actionable writing feedback grouped by issue type and severity." },
-  { icon: Quote, title: "Citation verification", copy: "Validate references and catch incomplete or malformed citations." },
-  { icon: FileBarChart, title: "Shareable reports", copy: "Executive-ready summaries with scores, trends, and recommendations." },
-  { icon: Lock, title: "Private by default", copy: "Your documents and results are visible only to you — never to other users." },
+  { icon: ScanSearch, title: "Text similarity review", copy: "Find passages that resemble retrieved sources and inspect the matching context." },
+  { icon: Sparkles, title: "AI-style indicators", copy: "Review writing-pattern signals as prompts for closer reading, not proof of authorship." },
+  { icon: SpellCheck, title: "Grammar & clarity", copy: "Get actionable writing feedback grouped by issue type and severity." },
+  { icon: Quote, title: "Citation review", copy: "Spot incomplete or malformed references that may need a manual check." },
+  { icon: FileBarChart, title: "Readable reports", copy: "Bring scores, highlighted passages, and review notes together in one report." },
+  { icon: Lock, title: "Private workspace", copy: "Keep your documents and results in your own account workspace." },
+];
+
+const steps = [
+  { number: "01", title: "Add your document", copy: "Upload a supported file or paste your writing into the workspace." },
+  { number: "02", title: "Review the findings", copy: "Explore similarity matches, writing signals, grammar feedback, and citation notes." },
+  { number: "03", title: "Use your judgement", copy: "Open the source context, verify the evidence, and make any changes you consider appropriate." },
 ];
 
 function WelcomePage() {
@@ -66,52 +72,87 @@ function WelcomePage() {
       <main>
         <section className="mx-auto max-w-6xl px-4 py-20 text-center md:px-6 md:py-28">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-primary" /> Academic integrity, powered by AI
+            <Sparkles className="h-3.5 w-3.5 text-primary" /> A thoughtful writing-review workspace
           </span>
           <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold tracking-tight text-foreground md:text-5xl">
-            Write with confidence. Publish with proof.
+            Understand your writing. Review with confidence.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-base text-muted-foreground md:text-lg">
-            PlagiShield AI checks originality, detects AI-generated text, reviews grammar, and verifies
-            citations — in one private workspace built for students, faculty, and researchers.
+            Explore text similarity, AI-style indicators, grammar suggestions, and citation checks
+            in one workspace designed for students, faculty, and researchers.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Button size="lg" asChild>
-              <Link to="/register">Get started free <ArrowRight className="ml-1.5 h-4 w-4" /></Link>
+              <Link to="/register">Get started <ArrowRight className="ml-1.5 h-4 w-4" /></Link>
             </Button>
             <Button size="lg" variant="outline" asChild><Link to="/login">I already have an account</Link></Button>
           </div>
+          <p className="mx-auto mt-5 max-w-xl text-xs leading-5 text-muted-foreground">
+            Analysis results are review aids. Similarity coverage depends on available sources, and
+            AI-style indicators cannot establish who wrote a document.
+          </p>
         </section>
 
-        <section className="border-t border-border bg-muted/30 py-16 md:py-20">
+        <section className="border-y border-border bg-muted/30 py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 md:px-6">
-            <h2 className="text-center text-2xl font-semibold tracking-tight text-foreground">
-              Everything you need in one review pass
-            </h2>
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                Everything in one review workspace
+              </h2>
+              <p className="mt-3 text-sm text-muted-foreground md:text-base">
+                Clear signals and useful context to help you decide what deserves a closer look.
+              </p>
+            </div>
             <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {features.map((f) => (
-                <Card key={f.title} className="p-6">
+                <Card key={f.title} className="p-6 transition-shadow hover:shadow-md">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                     <f.icon className="h-5 w-5" />
                   </div>
                   <h3 className="mt-4 text-base font-semibold text-foreground">{f.title}</h3>
-                  <p className="mt-1.5 text-sm text-muted-foreground">{f.copy}</p>
+                  <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{f.copy}</p>
                 </Card>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-4xl px-4 py-20 text-center md:px-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-            Your first check takes under a minute
-          </h2>
-          <p className="mt-3 text-sm text-muted-foreground md:text-base">
-            Create an account, upload a document, and get a full integrity report with scores and fixes.
-          </p>
-          <Button size="lg" className="mt-7" asChild>
-            <Link to="/register">Create your account <ArrowRight className="ml-1.5 h-4 w-4" /></Link>
-          </Button>
+        <section className="mx-auto max-w-6xl px-4 py-16 md:px-6 md:py-20">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+              From upload to useful next steps
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground md:text-base">
+              A simple workflow keeps the evidence visible and the final decision in your hands.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {steps.map((step) => (
+              <Card key={step.number} className="p-6">
+                <span className="text-xs font-semibold tracking-widest text-primary">{step.number}</span>
+                <h3 className="mt-3 text-base font-semibold text-foreground">{step.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.copy}</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-t border-border bg-muted/20 px-4 py-16 text-center md:px-6 md:py-20">
+          <div className="mx-auto max-w-3xl">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <h2 className="mt-5 text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+              Evidence first. Human judgement always.
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground md:text-base">
+              No automated score should be treated as a final academic-integrity decision. Check
+              matched-source context, review the document, and follow your institution’s guidance.
+            </p>
+            <Button size="lg" className="mt-7" asChild>
+              <Link to="/register">Create your account <ArrowRight className="ml-1.5 h-4 w-4" /></Link>
+            </Button>
+          </div>
         </section>
       </main>
 
