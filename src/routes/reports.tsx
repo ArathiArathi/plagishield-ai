@@ -90,9 +90,6 @@ function ReportsPage() {
   }
 
   const similarity = Math.round(Number(analysis.similarity_score ?? 0));
-  const ai = Math.round(Number(analysis.ai_score ?? 0));
-  const grammar = Math.round(Number(analysis.grammar_score ?? 0));
-  const citation = Math.round(Number(analysis.citation_score ?? 0));
   const matches = results.plagiarism?.matches ?? [];
   const grammarIssues = results.grammar?.issues ?? [];
   const citationIssues = results.citations?.issues ?? [];
