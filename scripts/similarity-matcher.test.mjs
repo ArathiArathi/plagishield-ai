@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { matchDocumentAgainstSources } from "../src/lib/similarity-matcher.server.ts";
+import { buildSegments } from "../src/components/analysis/analysis-shared.ts";
 
 const phrase = "The proposed framework combines secure key management with mutual authentication across distributed services";
 const source = {
@@ -54,4 +55,16 @@ test("does not report short or non-matching text as a source match", () => {
   assert.equal(result.matched_words, 0);
   assert.equal(result.matches.length, 0);
   assert.equal(result.highlights.length, 0);
+});
+
+test("keeps every character and resolves overlapping highlights without dropping text", () => {
+  const text = "0123456789abcdef";
+  const highlights = [
+    { start: 2, end: 10, text: text.slice(2, 10), category: "plagiarism", score: 100 },
+    { start: 6, end: 14, text: text.slice(6, 14), category: "grammar", score: 80 },
+  ];
+  const segments = buildSegments(text, highlights);
+  assert.equal(segments.map((segment) => segment.text).join(""), text);
+  assert.equal(segments.find((segment) => segment.highlight?.category === "plagiarism")?.text, "23456789");
+  assert.equal(segments.find((segment) => segment.highlight?.category === "grammar")?.text, "abcd");
 });
