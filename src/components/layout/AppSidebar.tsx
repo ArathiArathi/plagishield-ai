@@ -19,7 +19,7 @@ const mainItems = [
   { title: "Reports", url: "/reports", icon: FileBarChart },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Repository", url: "/repository", icon: Database },
-];
+] as const;
 
 export function AppSidebar() {
   const { state } = useSidebar();
