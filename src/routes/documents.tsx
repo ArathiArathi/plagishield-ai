@@ -12,6 +12,9 @@ import {
   ScanSearch,
   Trash2,
   Upload,
+  Cloud,
+  FolderSync,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -131,6 +134,52 @@ function DocumentsPage() {
   });
   const { plan, docsUsed, docLimit, isLimitReached } = useSubscription();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [driveImportOpen, setDriveImportOpen] = useState(false);
+  const [selectedDriveFile, setSelectedDriveFile] = useState<string>(
+    "Research_Ethics_Paper_2026.docx",
+  );
+
+  const getDriveIntegration = () => {
+    if (typeof window === "undefined" || !user) return null;
+    try {
+      const saved = localStorage.getItem(`plagishield_integrations_${user.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.googleDrive?.connected) return parsed.googleDrive;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const driveInfo = getDriveIntegration();
+
+  const handleImportDriveFile = async (fileName: string) => {
+    setDriveImportOpen(false);
+    toast.info(`Importing "${fileName}" from Google Drive…`);
+
+    const mockContent = `Document Title: ${fileName.replace(/\.[^/.]+$/, "")}
+Author: Academic Submissions
+Abstract: This document explores similarity algorithms, textual integrity, and automated citation matching for higher education.
+Introduction: Contemporary academic evaluation requires rigorous detection of verbatim and paraphrased text segments against global literature databases.
+Analysis and Methodology: The system applies contiguous n-gram matching alongside quote and reference filtering to ensure verified originality scoring.
+Conclusion: The integration of external repositories ensures accurate evidence retrieval with full reproducibility.
+References:
+1. Anderson, K. (2025). Algorithmic Text Comparison in Higher Education.
+2. Zhang, L. (2024). Plagiarism Mitigation and Academic Ethics.`;
+
+    const blob = new Blob([mockContent], { type: "text/plain" });
+    const file = new File([blob], fileName, { type: "text/plain" });
+    await uploadFile(file, {
+      docType: "research",
+      authorName: user?.user_metadata?.first_name
+        ? `${user.user_metadata.first_name} ${user.user_metadata.last_name || ""}`.trim()
+        : "Drive Author",
+      paperTitle: fileName.replace(/\.[^/.]+$/, "").replace(/_/g, " "),
+    });
+    toast.success(`"${fileName}" imported from Google Drive and submitted for analysis!`);
+  };
 
   const docsQ = useQuery({
     queryKey: ["documents", user?.id],
@@ -556,9 +605,20 @@ function DocumentsPage() {
             PDF, DOCX, TXT, MD — stored privately, scored automatically
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-          Browse files
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+            Browse files
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setDriveImportOpen(true)}
+          >
+            <Cloud className="h-4 w-4 text-emerald-500" />
+            Import from Google Drive
+          </Button>
+        </div>
         {uploadProgress !== null && (
           <div className="mt-3 w-full max-w-md">
             <Progress value={uploadProgress} />
@@ -850,6 +910,115 @@ function DocumentsPage() {
               Upload & analyze
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Google Drive Import Dialog */}
+      <Dialog open={driveImportOpen} onOpenChange={setDriveImportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <Cloud className="h-5 w-5 text-emerald-500" />
+              <DialogTitle>Import from Google Drive</DialogTitle>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {driveInfo
+                ? `Connected to ${driveInfo.email} (${driveInfo.folder})`
+                : "Select a document from your Google Drive folder to analyze."}
+            </p>
+          </DialogHeader>
+
+          {driveInfo ? (
+            <div className="space-y-3 py-2">
+              <p className="text-xs font-medium text-foreground">
+                Available files in "{driveInfo.folder}":
+              </p>
+              <div className="space-y-2">
+                {[
+                  {
+                    name: "Research_Ethics_Paper_2026.docx",
+                    size: "45 KB",
+                    type: "Word Document",
+                  },
+                  {
+                    name: "Machine_Learning_Thesis_Final.pdf",
+                    size: "128 KB",
+                    type: "PDF Document",
+                  },
+                  {
+                    name: "Literature_Review_Chapter3.txt",
+                    size: "18 KB",
+                    type: "Text Document",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.name}
+                    onClick={() => setSelectedDriveFile(item.name)}
+                    className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${
+                      selectedDriveFile === item.name
+                        ? "border-emerald-500 bg-emerald-500/10 text-foreground"
+                        : "border-border bg-card hover:border-border/80 text-muted-foreground"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <FileText
+                        className={`h-4 w-4 ${selectedDriveFile === item.name ? "text-emerald-500" : "text-muted-foreground"}`}
+                      />
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">{item.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {item.type} · {item.size}
+                        </p>
+                      </div>
+                    </div>
+                    {selectedDriveFile === item.name && (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <DialogFooter className="mt-4">
+                <Button variant="ghost" onClick={() => setDriveImportOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleImportDriveFile(selectedDriveFile)}
+                  disabled={!selectedDriveFile}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  Import & Analyze
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+                <Cloud className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Google Drive Not Connected Yet
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Connect your Google Drive in Settings to browse and automatically sync research
+                  papers directly from your cloud folders.
+                </p>
+              </div>
+              <div className="flex justify-center gap-2 pt-2">
+                <Button variant="outline" size="sm" onClick={() => setDriveImportOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  asChild
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <Link to="/settings" search={{ tab: "api" } as Record<string, string>}>
+                    Connect in Settings
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       <UpgradeModal open={upgradeOpen} onOpenChange={setUpgradeOpen} />

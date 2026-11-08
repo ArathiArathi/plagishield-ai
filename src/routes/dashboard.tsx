@@ -71,20 +71,45 @@ function DashboardPage() {
       />
 
       {isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-24 w-full" />
+            <Skeleton key={index} className="h-24 w-full rounded-xl" />
           ))}
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Summary label="Documents" value={stats?.totalDocuments ?? documents.length} />
-          <Summary label="Completed reviews" value={stats?.analyzed ?? completed.length} />
-          <Summary label="Source records matched" value={stats?.matchedSourceRecords ?? 0} />
-          <Summary
-            label="Matched words"
-            value={Number(stats?.matchedWords ?? 0).toLocaleString()}
-          />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-5 shadow-sm">
+            <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Documents</p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+              {stats?.totalDocuments ?? documents.length}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">In workspace</p>
+          </div>
+          <div className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-5 shadow-sm">
+            <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              Completed reviews
+            </p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+              {stats?.analyzed ?? completed.length}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Scored & indexed</p>
+          </div>
+          <div className="rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-5 shadow-sm">
+            <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+              Source records matched
+            </p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+              {stats?.matchedSourceRecords ?? 0}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Public literature & web</p>
+          </div>
+          <div className="rounded-xl border border-rose-500/20 bg-gradient-to-br from-rose-500/10 via-rose-500/5 to-transparent p-5 shadow-sm">
+            <p className="text-xs font-medium text-rose-600 dark:text-rose-400">Matched words</p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+              {Number(stats?.matchedWords ?? 0).toLocaleString()}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Deduplicated across sources</p>
+          </div>
         </div>
       )}
 
@@ -127,6 +152,7 @@ function DashboardPage() {
                   const result = (analysis?.results ?? {}) as PlagiarismResults;
                   const matchCount = result.plagiarism?.matches?.length ?? 0;
                   const state = analysis?.status ?? document.status;
+                  const sim = Math.round(Number(analysis?.similarity_score ?? 0));
                   return (
                     <li key={document.id}>
                       <Link
@@ -147,9 +173,22 @@ function DashboardPage() {
                           <span className="text-xs text-muted-foreground">
                             {state === "completed" ? `${matchCount} source matches` : state}
                           </span>
-                          <Badge variant={state === "completed" ? "secondary" : "outline"}>
-                            {state}
-                          </Badge>
+                          {state === "completed" ? (
+                            <Badge
+                              variant="secondary"
+                              className={`font-semibold border text-xs px-2 py-0.5 ${
+                                sim < 15
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                  : sim <= 30
+                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                    : "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30"
+                              }`}
+                            >
+                              {sim}% similarity
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">{state}</Badge>
+                          )}
                         </div>
                       </Link>
                     </li>

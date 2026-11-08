@@ -32,33 +32,45 @@ export type IssueItem = {
 
 export const CATEGORY_STYLE: Record<
   HighlightCategory,
-  { chip: string; mark: string; label: string }
+  { chip: string; mark: string; label: string; dot: string; color: string }
 > = {
   plagiarism: {
-    chip: "border-destructive/30 bg-destructive/15 text-destructive",
-    mark: "bg-destructive/20 text-foreground underline decoration-destructive decoration-2",
+    chip: "border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400",
+    mark: "bg-red-500/20 text-foreground underline decoration-red-500 decoration-2",
     label: "Text similarity",
+    dot: "bg-red-500",
+    color: "#ef4444",
   },
   ai: {
-    chip: "border-warning/30 bg-warning/20 text-warning",
-    mark: "bg-warning/25 text-foreground underline decoration-warning decoration-2",
+    chip: "border-amber-500/30 bg-amber-500/20 text-amber-600 dark:text-amber-400",
+    mark: "bg-amber-500/25 text-foreground underline decoration-amber-500 decoration-2",
     label: "Writing-pattern signal",
+    dot: "bg-amber-500",
+    color: "#f59e0b",
   },
   grammar: {
-    chip: "border-info/30 bg-info/15 text-info",
-    mark: "bg-info/20 text-foreground underline decoration-info decoration-dotted decoration-2",
+    chip: "border-sky-500/30 bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    mark: "bg-sky-500/20 text-foreground underline decoration-sky-500 decoration-dotted decoration-2",
     label: "Grammar",
+    dot: "bg-sky-500",
+    color: "#0284c7",
   },
   citation: {
-    chip: "border-primary/30 bg-primary/15 text-primary",
-    mark: "bg-primary/20 text-foreground underline decoration-primary decoration-2",
+    chip: "border-purple-500/30 bg-purple-500/15 text-purple-600 dark:text-purple-400",
+    mark: "bg-purple-500/20 text-foreground underline decoration-purple-500 decoration-2",
     label: "Citation",
+    dot: "bg-purple-500",
+    color: "#8b5cf6",
   },
 };
 
 export const COMPOSITION_COLOR: Record<string, string> = {
-  "Matched in retrieved sources": "var(--color-destructive)",
-  "No match in retrieved sources": "var(--color-muted)",
+  "Matched in retrieved sources": "#ef4444",
+  "No match in retrieved sources": "#10b981",
+  "Original text": "#10b981",
+  "Writing-pattern signals": "#f59e0b",
+  "Grammar issues": "#0284c7",
+  "Citations & references": "#8b5cf6",
 };
 
 export type Segment = { text: string; highlight?: Highlight };

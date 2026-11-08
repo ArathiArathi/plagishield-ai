@@ -1,6 +1,12 @@
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { COMPOSITION_COLOR, type CompositionSlice } from "./analysis-shared";
 
+const PALETTE = ["#ef4444", "#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#06b6d4"];
+
+function getSliceColor(category: string, index: number): string {
+  return COMPOSITION_COLOR[category] || PALETTE[index % PALETTE.length];
+}
+
 export function CompositionChart({ data }: { data: CompositionSlice[] }) {
   const slices = data.filter((d) => d.percent > 0);
   if (slices.length === 0) {
@@ -24,11 +30,8 @@ export function CompositionChart({ data }: { data: CompositionSlice[] }) {
               outerRadius={78}
               paddingAngle={2}
             >
-              {slices.map((s) => (
-                <Cell
-                  key={s.category}
-                  fill={COMPOSITION_COLOR[s.category] ?? "var(--color-muted-foreground)"}
-                />
+              {slices.map((s, idx) => (
+                <Cell key={s.category} fill={getSliceColor(s.category, idx)} />
               ))}
             </Pie>
             <Tooltip
@@ -45,7 +48,7 @@ export function CompositionChart({ data }: { data: CompositionSlice[] }) {
         </ResponsiveContainer>
       </div>
       <div className="space-y-2">
-        {slices.map((s) => (
+        {slices.map((s, idx) => (
           <div key={s.category}>
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="text-muted-foreground">{s.category}</span>
@@ -58,7 +61,7 @@ export function CompositionChart({ data }: { data: CompositionSlice[] }) {
                 className="h-full rounded-full"
                 style={{
                   width: `${Math.min(100, s.percent)}%`,
-                  background: COMPOSITION_COLOR[s.category] ?? "var(--color-muted-foreground)",
+                  background: getSliceColor(s.category, idx),
                 }}
               />
             </div>

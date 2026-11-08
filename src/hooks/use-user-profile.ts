@@ -38,15 +38,24 @@ export function useUserProfile() {
 
           if (profileErr) throw profileErr;
 
-          // 2. Fetch role
-          const { data: roleData, error: roleErr } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", userId)
-            .maybeSingle();
+          // 2. Fetch role safely (fallback to user metadata or default student role)
+          let resolvedRole: UserProfile["role"] =
+            (user?.app_metadata?.role as UserProfile["role"]) ||
+            (user?.user_metadata?.role as UserProfile["role"]) ||
+            "student";
 
-          if (roleErr && roleErr.code !== "PGRST116") {
-            console.warn("[UserProfile] Error fetching role:", roleErr);
+          try {
+            const { data: roleData, error: roleErr } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            if (!roleErr && roleData?.role) {
+              resolvedRole = roleData.role as UserProfile["role"];
+            }
+          } catch {
+            // Fall back silently without throwing or noisy console warnings
           }
 
           const defaultFirst = (user?.user_metadata?.first_name as string) || "";
@@ -59,7 +68,7 @@ export function useUserProfile() {
             last_name: profileData?.last_name ?? defaultLast,
             institution: profileData?.institution ?? "Academic Institution",
             avatar_url: profileData?.avatar_url ?? null,
-            role: (roleData?.role as UserProfile["role"]) ?? "student",
+            role: resolvedRole,
             email,
           };
 

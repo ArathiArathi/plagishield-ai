@@ -148,6 +148,9 @@ function ReportsPage() {
   }
 
   const similarity = Math.round(Number(analysis.similarity_score ?? 0));
+  const ai = Math.round(Number(analysis.ai_score ?? 0));
+  const grammar = Math.round(Number(analysis.grammar_score ?? 0));
+  const citation = Math.round(Number(analysis.citation_score ?? 0));
   const matches = results.plagiarism?.matches ?? [];
   const grammarIssues = results.grammar?.issues ?? [];
   const citationIssues = results.citations?.issues ?? [];
@@ -183,6 +186,8 @@ function ReportsPage() {
     desc: string;
     icon: typeof FileSearch;
     metric: string;
+    colorClass: string;
+    badgeClass: string;
   }> = [
     {
       kind: "similarity",
@@ -190,6 +195,13 @@ function ReportsPage() {
       desc: `Matched sources, overlap index and per-source match table (${matches.length} source${matches.length === 1 ? "" : "s"}).`,
       icon: FileSearch,
       metric: `${similarity}% similarity`,
+      colorClass: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+      badgeClass:
+        similarity < 15
+          ? "text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+          : similarity <= 30
+            ? "text-amber-600 dark:text-amber-400 bg-amber-500/15 border-amber-500/30"
+            : "text-red-600 dark:text-red-400 bg-red-500/15 border-red-500/30",
     },
     {
       kind: "ai",
@@ -197,6 +209,8 @@ function ReportsPage() {
       desc: "Experimental style signals for cautious human review; not an authorship verdict.",
       icon: Bot,
       metric: `${results.ai_detection?.highlights?.length ?? 0} passages`,
+      colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+      badgeClass: "text-amber-600 dark:text-amber-400 bg-amber-500/15 border-amber-500/30",
     },
     {
       kind: "grammar",
@@ -204,6 +218,8 @@ function ReportsPage() {
       desc: `Corrections returned by the enabled grammar checker (${grammarIssues.length} issues).`,
       icon: SpellCheck,
       metric: `${grammarIssues.length} issues`,
+      colorClass: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+      badgeClass: "text-sky-600 dark:text-sky-400 bg-sky-500/15 border-sky-500/30",
     },
     {
       kind: "citation",
@@ -211,6 +227,8 @@ function ReportsPage() {
       desc: `Reference-title lookups and warnings from connected scholarly indexes (${citationIssues.length}).`,
       icon: Quote,
       metric: `${citationIssues.length} warnings`,
+      colorClass: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+      badgeClass: "text-purple-600 dark:text-purple-400 bg-purple-500/15 border-purple-500/30",
     },
     {
       kind: "full",
@@ -218,6 +236,8 @@ function ReportsPage() {
       desc: "All four modules combined into a single institutional integrity dossier.",
       icon: FileStack,
       metric: "All modules",
+      colorClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+      badgeClass: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 border-emerald-500/30",
     },
   ];
 
@@ -301,15 +321,18 @@ function ReportsPage() {
           {bundle.map((b) => (
             <div
               key={b.kind}
-              className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-4"
+              className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-border/80"
             >
-              <div className="rounded-md bg-primary/10 p-2 text-primary">
+              <div className={`rounded-md p-2 border ${b.colorClass}`}>
                 <b.icon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="truncate text-sm font-semibold text-foreground">{b.title}</p>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                  <Badge
+                    variant="outline"
+                    className={`shrink-0 text-[10px] font-medium border ${b.badgeClass}`}
+                  >
                     {b.metric}
                   </Badge>
                 </div>
