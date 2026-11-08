@@ -59,6 +59,7 @@ function ReportsPage() {
   const selected = reportable.find((d) => d.id === doc) ?? reportable[0];
   const analysis = analyses.find((a) => a.document_id === selected?.id);
   const results = (analysis?.results ?? {}) as Results;
+  const isOutdated = results.meta?.engine_version !== "3.0.0";
 
   if (isLoading) {
     return (
@@ -161,6 +162,18 @@ function ReportsPage() {
           </>
         }
       />
+
+      {isOutdated && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-warning/30 bg-warning/5 p-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">This report was created with an older analysis engine</p>
+            <p className="mt-1 text-xs text-muted-foreground">Re-run the analysis to regenerate source matches and include the full extracted paper with updated highlights.</p>
+          </div>
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/analysis" search={{ doc: selected.id }}>Open analysis</Link>
+          </Button>
+        </Card>
+      )}
 
       <Card className="border-warning/30 bg-warning/5 p-4">
         <div className="flex items-start gap-3">
