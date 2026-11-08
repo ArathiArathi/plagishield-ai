@@ -38,7 +38,7 @@ function AnalyticsPage() {
   }
 
   const stats = data?.summaryStats;
-  const analyses = (data?.analyses ?? []).filter((analysis) => analysis.status === "completed");
+  const analyses = (data?.analyses ?? []).filter((analysis) => analysis.status === "completed" && (analysis.results as { meta?: { engine_version?: string } } | null)?.meta?.engine_version === "3.0.0");
   const errorCounts = new Map<string, number>();
   for (const analysis of analyses as AnalysisRow[]) {
     const issues = ((analysis.results ?? {}) as Results).grammar?.issues ?? [];
