@@ -32,7 +32,7 @@ export type ReportResults = {
     matched_words?: number;
     matches?: Array<{ source?: string; url?: string; similarity?: number; snippet?: string; type?: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
     highlights?: PdfHighlight[];
-    source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string };
+    source_coverage?: { sources_retrieved?: number; providers?: string[]; matching_method?: string; limitation?: string; comparison_words?: number; excluded_quoted_words?: number; excluded_bibliography_words?: number };
   };
   ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: PdfHighlight[] };
   grammar?: { score?: number | null; provider?: string; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: PdfHighlight[] };
@@ -589,7 +589,7 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
 
 const KIND_TITLE: Record<ReportKind, string> = {
   similarity: "Similarity & Plagiarism Report",
-  ai: "AI Content & Stylometric Report",
+  ai: "AI Authorship Assessment Status",
   grammar: "Grammar & Academic Language Report",
   citation: "Citation Verification Report",
   full: "Comprehensive Integrity Dossier",
@@ -758,8 +758,6 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
 
   if (kind === "ai") {
     aiSection(ctx, input);
-    compositionSection(ctx, input);
-    highlightedBody(ctx, input, ["ai"]);
     issuesSection(ctx, input, ["ai"]);
   }
 
@@ -780,7 +778,7 @@ export function buildReport(kind: ReportKind, input: ReportInput): jsPDF {
     aiSection(ctx, input);
     grammarSection(ctx, input);
     citationSection(ctx, input);
-    highlightedBody(ctx, input, ["plagiarism", "ai", "grammar"]);
+    highlightedBody(ctx, input, ["plagiarism", "grammar"]);
     issuesSection(ctx, input);
   }
 
