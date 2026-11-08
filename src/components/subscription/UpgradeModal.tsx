@@ -82,7 +82,7 @@ export function UpgradeModal({
               )}
             >
               Annual
-              <Badge variant="secondary" className="bg-success/20 px-1.5 py-0 text-[10px] text-success">Save up to 29%</Badge>
+              <Badge variant="secondary" className="bg-success/20 px-1.5 py-0 text-[10px] text-success">Annual billing</Badge>
             </button>
           </div>
         </DialogHeader>
