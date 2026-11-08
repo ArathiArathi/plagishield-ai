@@ -605,8 +605,8 @@ function heuristicGrammarCheck(text: string, author?: string | null, title?: str
 
 async function checkGrammar(text: string, author?: string | null, title?: string | null) {
   const chunks: Array<{ text: string; offset: number }> = [];
-  const limit = 1600;
-  for (let i = 0; i < text.length && chunks.length < 6; i += limit) {
+  const limit = 10000;
+  for (let i = 0; i < text.length; i += limit) {
     chunks.push({ text: text.slice(i, i + limit), offset: i });
   }
 
@@ -668,24 +668,17 @@ async function checkGrammar(text: string, author?: string | null, title?: string
     }
   }
 
-  // If LanguageTool failed (rate limited or down) or found few issues, supplement with heuristic check
-  if (ok === 0 || issues.length === 0) {
+  // Use local fallback rules only when the external service failed for every
+  // chunk. A successful zero-issue response is a real zero, not a reason to
+  // manufacture heuristic warnings.
+  if (ok === 0) {
     const heuristic = heuristicGrammarCheck(text, author, title);
-    if (ok === 0) {
-      provider = "PlagiShield Forensic Grammar & Style Engine";
-      issues.push(...heuristic.issues);
-      highlights.push(...heuristic.highlights);
-    } else if (heuristic.issues.length > 0) {
-      issues.push(...heuristic.issues.slice(0, 5));
-      highlights.push(...heuristic.highlights.slice(0, 5));
-    }
+    provider = "PlagiShield local fallback (LanguageTool unavailable)";
+    issues.push(...heuristic.issues);
+    highlights.push(...heuristic.highlights);
   }
 
-  const checkedWords = tokenize(chunks.map((c) => c.text).join(" ")).length || 1;
-  const density = (issues.length / checkedWords) * 100; // issues per 100 words
-  const score = Math.max(30, Math.min(100, Math.round(100 - density * 3.5)));
-
-  return { score, provider, issues: issues.slice(0, 80), highlights: highlights.slice(0, 120) };
+  return { score: null, provider, issues: issues.slice(0, 80), highlights: highlights.slice(0, 120) };
 }
 
 function chunk_slice(text: string, offset: number, length: number) {
@@ -698,11 +691,11 @@ function chunk_slice(text: string, offset: number, length: number) {
 function extractReferences(text: string) {
   const lines = text.split(/\n+/).map((l) => l.trim());
   const refIndex = lines.findIndex((l) => /^(references|bibliography|works cited)\b/i.test(l));
-  const pool = refIndex >= 0 ? lines.slice(refIndex + 1) : lines;
+  const pool = refIndex >= 0 ? lines.slice(refIndex + 1) : [];
   const refs = pool
     .filter((l) => l.length > 40 && /\(?(19|20)\d{2}\)?/.test(l) && /[A-Z][a-z]+/.test(l))
     .map((l) => l.replace(/^\[\d+\]\s*/, "").replace(/^\d+\.\s*/, ""))
-    .slice(0, 20);
+    .slice(0, 50);
   const inText = (text.match(/\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g) ?? []).length;
   return { refs, inText, hasSection: refIndex >= 0 };
 }
@@ -741,7 +734,7 @@ async function verifyCitations(text: string) {
     );
     for (const item of crData?.message?.items ?? []) {
       const itTitle: string = item?.title?.[0] ?? "";
-      if (titleSimilarity(extractedTitle, itTitle) >= 0.45) {
+      if (titleSimilarity(extractedTitle, itTitle) >= 0.85) {
         verified = true;
         matchedTitle = itTitle;
         doi = item?.DOI;
@@ -758,7 +751,7 @@ async function verifyCitations(text: string) {
       );
       for (const w of oaData?.results ?? []) {
         const wTitle: string = w?.title ?? "";
-        if (titleSimilarity(extractedTitle, wTitle) >= 0.45) {
+        if (titleSimilarity(extractedTitle, wTitle) >= 0.85) {
           verified = true;
           matchedTitle = wTitle;
           doi = w?.doi ?? w?.id;
@@ -780,25 +773,15 @@ async function verifyCitations(text: string) {
     };
   });
 
-  if (!hasSection && refs.length > 0) issues.push("No dedicated References/Bibliography section header detected.");
-  if (refs.length === 0) issues.push("No parsable reference entries were found in the submission.");
-  if (inText === 0 && refs.length > 0) issues.push("Reference list present but no in-text citations were detected.");
+  if (refs.length === 0) {
+    issues.push("No reference-list entries were detected; reference verification was not assessed.");
+  }
+  if (inText === 0 && refs.length > 0) {
+    issues.push("Reference list detected, but no supported in-text citation pattern was found.");
+  }
 
   const verified = references.filter((r) => r.verified).length;
-  let base: number;
-  let penalty = 0;
-  if (refs.length > 0) {
-    base = (verified / refs.length) * 100;
-    penalty = (inText === 0 ? 15 : 0) + (!hasSection ? 8 : 0);
-  } else {
-    // If no references, check if document is an academic paper or standard prose
-    const isAcademic = /(abstract|methodology|dataset|references|bibliography|ieee|acm|doi:)/i.test(text);
-    base = isAcademic ? 45 : 85;
-    if (isAcademic) {
-      issues.push("Academic paper structure detected, but no reference list found. Scholarly submissions should include bibliography entries.");
-    }
-  }
-  const score = Math.max(20, Math.min(100, Math.round(base - penalty + (verified > 0 ? 5 : 0))));
+  const score = refs.length > 0 ? Math.round((verified / refs.length) * 100) : null;
 
   return { score, total: refs.length, verified, in_text: inText, references, issues: issues.slice(0, 25) };
 }
