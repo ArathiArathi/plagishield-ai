@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "postinstall": "node scripts/patch-tanstack-history.cjs"
+    "postinstall": "node scripts/patch-tanstack-history.cjs",
+    "test:matcher": "node --experimental-strip-types --test scripts/similarity-matcher.test.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
