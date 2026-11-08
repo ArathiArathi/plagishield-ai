@@ -5,8 +5,8 @@ import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
  *
  * Real pipeline — no mock scores:
  *  1. Sentence segmentation + fingerprinting of the submitted text.
- *  2. Source retrieval over the open internet (Wikipedia REST/API, OpenAlex,
- *     Crossref) and n-gram containment scoring against the retrieved text.
+ *  2. Source retrieval over open scholarly indexes and the web, followed by
+ *     offset-preserving exact phrase matching with overlapping-source evidence.
  *  3. Stylometric AI-detection classifier (logistic regression over burstiness,
  *     lexical diversity, function-word and boilerplate features) blended with an
  *     LLM judgement from Lovable AI.
@@ -262,6 +262,44 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
     .filter((c) => c.text.length > 60);
 }
 
+async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
+  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+  if (!query) return [];
+  const data = await getJson(
+    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=3&fields=title,abstract,url,year,externalIds`,
+    6500,
+  );
+  const papers: any[] = data?.data ?? [];
+  return papers
+    .filter((paper) => paper.abstract && paper.abstract.length > 80)
+    .map((paper) => ({
+      title: `${paper.title ?? "Scholarly paper"}${paper.year ? ` (${paper.year})` : ""}`,
+      url: paper.url ?? (paper.externalIds?.DOI ? `https://doi.org/${paper.externalIds.DOI}` : undefined),
+      text: [paper.title, paper.abstract].filter(Boolean).join(". "),
+      kind: "Scholarly publication (abstract)",
+      provider: "Semantic Scholar Graph API",
+    }));
+}
+
+async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
+  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+  if (!query) return [];
+  const data = await getJson(
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=3&resultType=core`,
+    6500,
+  );
+  const results: any[] = data?.resultList?.result ?? [];
+  return results
+    .filter((item) => item.abstractText && item.abstractText.length > 80)
+    .map((item) => ({
+      title: `${item.title ?? "Biomedical publication"}${item.pubYear ? ` (${item.pubYear})` : ""}`,
+      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
+      text: [item.title, item.abstractText].filter(Boolean).join(". "),
+      kind: "Scholarly publication (abstract)",
+      provider: "Europe PMC REST API",
+    }));
+}
+
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
   const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
   const keywords = words.filter((w) => w.length > 4).slice(0, 7).join(" ");
@@ -321,12 +359,14 @@ async function detectPlagiarism(
 
   const cache: SourceCache = new Map();
   let queried = 0;
-  const [docWiki, docAlex, docCross] = await Promise.all([
+  const [docWiki, docAlex, docCross, docSemantic, docEuropePmc] = await Promise.all([
     wikipediaCandidates(docKeywords, cache),
     openAlexCandidates(docKeywords),
     crossrefCandidates(docKeywords),
+    semanticScholarCandidates(docKeywords),
+    europePmcCandidates(docKeywords),
   ]);
-  const docPool = [...docWiki, ...docAlex, ...docCross];
+  const docPool = [...docWiki, ...docAlex, ...docCross, ...docSemantic, ...docEuropePmc];
   queried += docPool.length;
 
   await mapLimit(candidates, 3, async (sentence) => {
