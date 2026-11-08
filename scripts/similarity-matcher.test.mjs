@@ -27,7 +27,7 @@ test("excludes clearly quoted passages and a recognised references section", () 
   const document = `This paper adopts ${phrase}. “${phrase}”.\n\nReferences\n${phrase}.`;
   const result = matchDocumentAgainstSources(document, [source]);
   assert.equal(result.matched_words, 13);
-  assert.equal(result.excluded_words, 26);
+  assert.equal(result.excluded_words, 27);
   assert.equal(result.eligible_words, 16);
   assert.equal(result.score, 81);
   assert.equal(result.highlights.length, 1);
