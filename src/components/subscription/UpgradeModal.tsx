@@ -120,7 +120,7 @@ export function UpgradeModal({
                   )}
                   <p className="mt-3 rounded-md bg-muted/60 p-2 text-center text-xs">
                     <strong className="text-sm text-foreground">{p.docLimit}</strong>{" "}
-                    <span className="text-muted-foreground">documents in your workspace allowance</span>
+                    <span className="text-muted-foreground">document reviews each month</span>
                   </p>
                   <ul className="mt-4 space-y-2 border-t border-border pt-4 text-xs text-muted-foreground">
                     {p.features.map((feature) => (
