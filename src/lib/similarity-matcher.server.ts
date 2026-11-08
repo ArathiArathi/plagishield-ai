@@ -213,9 +213,7 @@ export function matchDocumentAgainstSources(
         documentWords[first.last]!.end,
       );
       const sourceSnippet = entry.source.text.slice(
-        entry.source.text.indexOf(entry.sourceWords[first.sourceFirst]!.value) >= 0
-          ? entry.sourceWords[first.sourceFirst]!.start
-          : 0,
+        entry.sourceWords[first.sourceFirst]!.start,
         entry.sourceWords[first.sourceLast]!.end,
       );
       return {
