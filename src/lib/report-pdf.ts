@@ -458,11 +458,16 @@ const CATEGORY_FILL: Record<string, [number, number, number]> = {
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
-  plagiarism: "Text similarity match",
+  plagiarism: "Source-linked text match",
   ai: "AI-style indicator",
   grammar: "Language & grammar issue",
   citation: "Scholarly citation",
 };
+
+const SOURCE_HIGHLIGHT_COLORS: Array<[number, number, number]> = [
+  [254, 240, 138], [191, 219, 254], [187, 247, 208],
+  [251, 207, 232], [221, 214, 254], [254, 215, 170],
+];
 
 function legendRow(ctx: Ctx, categories: string[]) {
   const { doc } = ctx;
@@ -533,12 +538,30 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
         continue;
       }
       if (seg.highlight) {
-        doc.setFillColor(...(CATEGORY_FILL[String(seg.highlight.category)] ?? [235, 235, 235]));
+        const sourceIndex = seg.highlight.category === "plagiarism"
+          ? (input.results.plagiarism?.matches ?? []).findIndex((match) =>
+              match.source === seg.highlight?.source && match.url === seg.highlight?.url
+            )
+          : -1;
+        const fill = sourceIndex >= 0
+          ? SOURCE_HIGHLIGHT_COLORS[sourceIndex % SOURCE_HIGHLIGHT_COLORS.length]!
+          : CATEGORY_FILL[String(seg.highlight.category)] ?? [235, 235, 235] as [number, number, number];
+        doc.setFillColor(...fill);
         doc.rect(x - 0.4, ctx.y - 3, w + 0.8, 4.2, "F");
       }
       doc.setTextColor(35, 45, 60);
       doc.text(tk, x, ctx.y);
       x += w;
+    }
+    if (seg.highlight?.category === "plagiarism") {
+      const sourceIndex = (input.results.plagiarism?.matches ?? []).findIndex((match) =>
+        match.source === seg.highlight?.source && match.url === seg.highlight?.url
+      );
+      if (sourceIndex >= 0) {
+        doc.setFont("helvetica", "bold").setFontSize(6).setTextColor(...MUTED);
+        doc.text(String(sourceIndex + 1), Math.min(x + 0.6, W - M - 3), ctx.y - 1.5);
+        setBody();
+      }
     }
   }
   ctx.y += lineH + 4;
