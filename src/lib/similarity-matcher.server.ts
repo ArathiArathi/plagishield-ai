@@ -176,8 +176,8 @@ function documentExclusions(text: string): Range[] {
   // markers only; the surrounding sentence remains eligible for comparison.
   const citationPatterns = [
     /\[[0-9]+(?:[,;\s–-]+[0-9]+)*\]/g,
-    /\([A-Z][A-Za-z'’\-]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2}[a-z]?\)/g,
-    /\b[A-Z][A-Za-z'’\-]+(?:\s+et\s+al\.)?\s+\((?:19|20)\d{2}[a-z]?\)/g,
+    /\([A-Z][A-Za-z'’-]+(?:\s+et\s+al\.)?,\s*(?:19|20)\d{2}[a-z]?\)/g,
+    /\b[A-Z][A-Za-z'’-]+(?:\s+et\s+al\.)?\s+\((?:19|20)\d{2}[a-z]?\)/g,
   ];
   for (const pattern of citationPatterns) {
     let match: RegExpExecArray | null;
