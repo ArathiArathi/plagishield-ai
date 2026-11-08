@@ -157,7 +157,7 @@ function SettingsPage() {
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  You are on the <span className="font-medium text-foreground">{plan.name}</span>. Document usage is checked against this plan's workspace allowance.
+                  You are on the <span className="font-medium text-foreground">{plan.name}</span>. Document uploads this month are counted against your plan's allowance.
                   {periodEndLabel && <span className="block mt-1">Current billing period ends {periodEndLabel}.</span>}
                 </p>
               </div>
@@ -179,9 +179,9 @@ function SettingsPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-foreground">Document Usage</span>
+                <span className="font-medium text-foreground">Monthly Document Usage</span>
                 <span className="font-semibold text-foreground">
-                  {docsUsed} / {docLimit} documents used ({Math.max(0, docLimit - docsUsed)} remaining)
+                  {docsUsed} / {docLimit} documents used this month ({Math.max(0, docLimit - docsUsed)} remaining)
                 </span>
               </div>
               <Progress value={usagePercent} className="h-3" />
