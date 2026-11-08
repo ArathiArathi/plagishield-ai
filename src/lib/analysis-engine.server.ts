@@ -17,7 +17,7 @@ import { extractText } from "@/lib/text-extract.server";
  */
 
 const UA = "PlagiShieldAI/1.0 (academic integrity analysis)";
-const ENGINE_VERSION = "2.1.0";
+const ENGINE_VERSION = "2.2.0";
 
 export type Highlight = {
   start: number;
