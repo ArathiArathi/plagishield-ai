@@ -129,6 +129,40 @@ async function getJson(url: string, timeoutMs = 9000): Promise<any | null> {
   }
 }
 
+async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/xml,text/plain;q=0.9" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function xmlToPlainText(xml: string): string {
+  const body = xml.match(/<body[ >][\\s\\S]*?<\\/body>/i)?.[0] ?? xml;
+  return body
+    .replace(/<(?:ref-list|fig|table-wrap|supplementary-material|ack)[\\s\\S]*?<\\/(?:ref-list|fig|table-wrap|supplementary-material|ack)>/gi, " ")
+    .replace(/<\\/(?:p|title|sec|list-item|caption)>/gi, "\\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code: string) => {
+      const value = code[0]?.toLowerCase() === "x" ? parseInt(code.slice(1), 16) : parseInt(code, 10);
+      try { return Number.isFinite(value) ? String.fromCodePoint(value) : " "; } catch { return " "; }
+    })
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/[ \\t]+/g, " ")
+    .replace(/\\n[ \\t]+/g, "\\n")
+    .replace(/\\n{3,}/g, "\\n\\n")
+    .trim();
+}
+
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length) as R[];
   let cursor = 0;
@@ -290,19 +324,29 @@ async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
   const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
-    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=3&resultType=core`,
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(`${query} AND OPEN_ACCESS:Y`)}&format=json&pageSize=3&resultType=core`,
     6500,
   );
   const results: any[] = data?.resultList?.result ?? [];
-  return results
-    .filter((item) => item.abstractText && item.abstractText.length > 80)
-    .map((item) => ({
+
+  return mapLimit(results, 2, async (item): Promise<Candidate | null> => {
+    const pmcid = String(item.pmcid ?? "");
+    const fullTextXml = pmcid
+      ? await getText(`https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(pmcid)}/fullTextXML`, 8000)
+      : null;
+    const fullText = fullTextXml ? xmlToPlainText(fullTextXml) : "";
+    const abstract = String(item.abstractText ?? "");
+    const body = fullText.length > 500 ? fullText.slice(0, 120000) : abstract;
+    if (body.length < 80) return null;
+
+    return {
       title: `${item.title ?? "Biomedical publication"}${item.pubYear ? ` (${item.pubYear})` : ""}`,
-      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
-      text: [item.title, item.abstractText].filter(Boolean).join(". "),
-      kind: "Scholarly publication (abstract)",
-      provider: "Europe PMC REST API",
-    }));
+      url: item.doi ? `https://doi.org/${item.doi}` : pmcid ? `https://europepmc.org/articles/${pmcid}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
+      text: [item.title, body].filter(Boolean).join(". "),
+      kind: fullText.length > 500 ? "Open-access scholarly full text" : "Scholarly publication (abstract)",
+      provider: fullText.length > 500 ? "Europe PMC Open Access Full Text" : "Europe PMC REST API",
+    };
+  }).then((items) => items.filter(Boolean) as Candidate[]);
 }
 
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
