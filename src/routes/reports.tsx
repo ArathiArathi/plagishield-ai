@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, Download, FileBarChart, FileSearch, FileStack, Quote, SpellCheck } from "lucide-react";
+import { AlertTriangle, Bot, Download, FileBarChart, FileSearch, FileStack, Quote, SpellCheck } from "lucide-react";
 import { toast } from "sonner";
 import { downloadReport, type ReportInput, type ReportKind } from "@/lib/report-pdf";
 
@@ -160,6 +160,19 @@ function ReportsPage() {
           </>
         }
       />
+
+      <Card className="border-warning/30 bg-warning/5 p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Interpret automated findings with care</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Similarity scores depend on the sources retrieved for this document and do not guarantee complete repository coverage.
+              AI-style indicators cannot prove who wrote a passage. Open the matched-source evidence and review context before drawing conclusions.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
