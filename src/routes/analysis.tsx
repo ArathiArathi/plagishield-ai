@@ -64,9 +64,8 @@ type Results = {
 };
 
 
-function tone(score: number, invert = false) {
-  const s = invert ? 100 - score : score;
-  return s >= 75 ? "success" : s >= 50 ? "warning" : "destructive";
+function tone(_score: number, _invert = false) {
+  return "primary";
 }
 
 function AnalysisPage() {
@@ -360,7 +359,7 @@ function AnalysisPage() {
         <Card className="p-5 min-w-0 overflow-hidden">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Integrity summary</h3>
           <div className="space-y-4">
-            <ScoreBlock label="Similarity" value={similarity} tone={tone(similarity, true)} sub={similarity < 25 ? "Below 25% threshold" : "Above recommended threshold"} />
+            <ScoreBlock label="Observed similarity" value={similarity} tone={tone(similarity)} sub={Number(results.plagiarism?.matched_words ?? 0).toLocaleString() + " matched words across " + matches.length + " retrieved source records"} />
             <div className="rounded-md border border-border p-3">
               <p className="text-sm font-medium text-foreground">AI authorship</p>
               <p className="mt-1 text-sm text-muted-foreground">Not assessed — no independently validated detector is configured.</p>
@@ -374,12 +373,6 @@ function AnalysisPage() {
               <p className="mt-1 text-sm text-muted-foreground">{results.citations?.verified ?? 0} of {results.citations?.total ?? 0} detected references matched to a public scholarly record.</p>
             </div>
           </div>
-          <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
-            <Legend color="success" label="Healthy" />
-            <Legend color="warning" label="Needs review" />
-            <Legend color="destructive" label="High risk" />
-          </div>
-
           <div className="mt-6 border-t border-border pt-5">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Content composition</h3>
             <CompositionChart data={composition} />
@@ -404,14 +397,14 @@ function AnalysisPage() {
 
             <TabsContent value="highlights" className="mt-5 space-y-4">
               <p className="text-xs text-muted-foreground">
-                Plagiarised, AI-generated and language-issue passages are highlighted directly in the submitted text.
+                Exact text matches and language issues are highlighted in the extracted submission text. AI-authorship highlights are not generated.
               </p>
               <HighlightedDocument text={excerpt} highlights={allHighlights} />
             </TabsContent>
 
             <TabsContent value="evidence" className="mt-5 space-y-4">
               <p className="text-xs text-muted-foreground">
-                Every flagged segment with its matched source snippet, retrieval provider and confidence.
+                Each exact matched passage is paired with the retrieved source excerpt and a link to the source record.
               </p>
               <EvidencePanel highlights={allHighlights} />
             </TabsContent>
@@ -478,9 +471,9 @@ function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="grammar" className="mt-5 space-y-3">
-              <ScoreBlock label="Writing quality" value={grammarScore} tone={tone(grammarScore)} sub={`${grammarIssues.length} issues across the document`} />
+              <p className="text-sm text-muted-foreground">{grammarIssues.length} issue(s) returned by the configured language checker.</p>
               {grammarIssues.length === 0 ? (
-                <Empty label="No grammar issues detected." />
+                <Empty label="The configured checker returned no issues for the text it processed." />
               ) : grammarIssues.map((g, i) => (
                 <div key={i} className="rounded-md border border-border p-3">
                   <div className="mb-1 flex items-center gap-2">
@@ -498,21 +491,12 @@ function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="citation" className="mt-5 space-y-4">
-              <div className="grid grid-cols-4 gap-2">
-                {["APA", "MLA", "IEEE", "Harvard"].map((s) => (
-                  <div key={s} className="rounded-md border border-border bg-muted/30 px-3 py-2 text-center text-xs font-medium text-foreground">
-                    <GraduationCap className="mx-auto mb-1 h-4 w-4 text-primary" />{s}
-                  </div>
-                ))}
-              </div>
-              <ScoreBlock
-                label="Citation quality"
-                value={citationScore}
-                tone={tone(citationScore)}
-                sub={`${results.citations?.verified ?? 0} verified of ${results.citations?.total ?? 0} references`}
-              />
+              <Card className="border-border bg-muted/20 p-4">
+                <p className="text-sm font-medium text-foreground">Reference records</p>
+                <p className="mt-1 text-sm text-muted-foreground">{results.citations?.verified ?? 0} of {results.citations?.total ?? 0} detected entries matched a public scholarly record. This checks record identity, not APA, MLA, IEEE or Harvard formatting.</p>
+              </Card>
               {citationIssues.length === 0 ? (
-                <Empty label="No citation issues found." />
+                <Empty label="No additional reference verification notes were returned." />
               ) : citationIssues.map((c, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-md border border-border p-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -615,7 +599,7 @@ function AnalysisPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-foreground">Forensic AI Stylometrics & Authorship Evaluation</p>
+                    <p className="text-sm font-medium text-foreground">AI authorship assessment status</p>
                     <span className="text-[11px] text-muted-foreground">{stageIdx > 2 ? "Complete" : stageIdx === 2 ? "Active" : "Pending"}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
@@ -706,7 +690,7 @@ function buildRecommendations({ similarity, grammarIssues, citationIssues }: {
 }
 
 function ScoreBlock({ label, value, tone, sub }: { label: string; value: number; tone: string; sub?: string }) {
-  const bar = tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : "bg-destructive";
+  const bar = tone === "primary" ? "bg-primary" : tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : "bg-destructive";
   return (
     <div>
       <div className="mb-1.5 flex items-end justify-between">
@@ -722,14 +706,6 @@ function ScoreBlock({ label, value, tone, sub }: { label: string; value: number;
 }
 
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn("h-2.5 w-2.5 rounded-full", color === "success" ? "bg-success" : color === "warning" ? "bg-warning" : "bg-destructive")} />
-      {label}
-    </span>
-  );
-}
 
 function Empty({ label }: { label: string }) {
   return (
