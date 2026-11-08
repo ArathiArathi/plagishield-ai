@@ -29,7 +29,7 @@ export type PdfIssue = {
 export type ReportResults = {
   text_excerpt?: string;
   document_text?: string;
-  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; characters?: number; sources_queried?: number; checked_at?: string };
+  meta?: { engine_version?: string; extraction?: string; words?: number; sentences?: number; characters?: number; truncated?: boolean; character_limit?: number; sources_queried?: number; checked_at?: string };
   plagiarism?: {
     matched_words?: number;
     eligible_words?: number;
@@ -346,6 +346,7 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
   }
 
   if (!input.results.document_text) paragraph(ctx, "This older saved analysis contains only a text excerpt. Re-run the analysis to export the complete extracted submission. The text below is reconstructed from extraction and does not retain the source file's page layout or images.", { size: 7.5, color: MUTED });
+  else if (input.results.meta?.truncated) paragraph(ctx, `The first ${Number(input.results.meta.character_limit ?? 120000).toLocaleString()} characters were analyzed and are reproduced below. The remainder of the source file was not included. Original page layout, embedded images and typography are not retained by the text extractor.`, { size: 7.5, color: MUTED });
   else paragraph(ctx, "The complete extracted submission is reproduced below in reading order. Original page layout, embedded images and typography are not retained by the text extractor.", { size: 7.5, color: MUTED });
   legendRow(ctx, categories);
 
