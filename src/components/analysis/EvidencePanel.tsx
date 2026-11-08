@@ -76,6 +76,20 @@ export function EvidencePanel({
                 </div>
               )}
 
+              {h.alternate_sources && h.alternate_sources.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Also found in</p>
+                  <ul className="mt-1 space-y-1">
+                    {h.alternate_sources.map((source, index) => (
+                      <li key={`${source.url ?? source.source}-${index}`} className="text-xs text-muted-foreground">
+                        {source.url ? <a href={source.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{source.source}</a> : source.source}
+                        {source.type ? ` · ${source.type}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {(h.source || h.url || h.note) && (
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground min-w-0">
                   {h.source && <span className="font-medium text-foreground break-words">{h.source}</span>}
