@@ -37,6 +37,9 @@ declare
   v_limit integer := 10;
   v_count integer := 0;
 begin
+  -- Serialize inserts for a user so concurrent uploads cannot exceed the limit.
+  perform pg_advisory_xact_lock(hashtextextended(new.owner_id::text, 0));
+
   select
     case
       when s.status in ('active', 'trialing')
@@ -48,6 +51,10 @@ begin
   from public.subscriptions s
   where s.user_id = new.owner_id;
 
+  if v_plan is null then
+    v_plan := 'free';
+  end if;
+
   v_limit := case v_plan
     when 'pro' then 15
     when 'plus' then 25
@@ -57,12 +64,13 @@ begin
 
   select count(*) into v_count
   from public.documents d
-  where d.owner_id = new.owner_id;
+  where d.owner_id = new.owner_id
+    and d.created_at >= date_trunc('month', now());
 
   if v_count >= v_limit then
     raise exception using
       errcode = 'P0001',
-      message = format('Your %s plan allows up to %s documents. Upgrade your plan to add another document.', v_plan, v_limit);
+      message = format('Your %s plan allows up to %s new documents per month. Upgrade your plan to add another document.', v_plan, v_limit);
   end if;
 
   return new;
