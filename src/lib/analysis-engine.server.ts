@@ -1,3 +1,5 @@
+import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
+
 /**
  * PlagiShield analysis engine (server-only).
  *
@@ -13,7 +15,7 @@
  */
 
 const UA = "PlagiShieldAI/1.0 (academic integrity analysis)";
-const ENGINE_VERSION = "2.0.0";
+const ENGINE_VERSION = "2.1.0";
 
 export type Highlight = {
   start: number;
@@ -57,8 +59,9 @@ export type AnalysisResults = {
   plagiarism: {
     score: number;
     matched_words: number;
-    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string }>;
+    matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
     highlights: Highlight[];
+    source_coverage: { sources_retrieved: number; providers: string[]; matching_method: string; limitation: string };
   };
   ai_detection: {
     score: number;
@@ -106,22 +109,6 @@ export function splitSentences(text: string): Sentence[] {
     out.push({ text: t, start, end: start + t.length, words: tokenize(t) });
   }
   return out;
-}
-
-function ngrams(words: string[], n: number) {
-  const set = new Set<string>();
-  for (let i = 0; i + n <= words.length; i++) set.add(words.slice(i, i + n).join(" "));
-  return set;
-}
-
-/** Containment of a sentence inside a candidate source text (0..100). */
-function containment(sentence: string[], sourceText: string, n = 4) {
-  if (sentence.length < n) return 0;
-  const src = ngrams(tokenize(sourceText), n);
-  if (src.size === 0) return 0;
-  const grams = [...ngrams(sentence, n)];
-  const hit = grams.filter((g) => src.has(g)).length;
-  return Math.round((hit / grams.length) * 100);
 }
 
 async function getJson(url: string, timeoutMs = 9000): Promise<any | null> {
@@ -298,72 +285,42 @@ async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
   }).filter((c) => c.text.length > 40);
 }
 
-function keywordOverlap(sentenceWords: string[], sourceText: string): number {
-  const stopWords = new Set([
-    "this", "that", "these", "those", "with", "from", "have", "been", "were", "which",
-    "will", "would", "their", "there", "what", "when", "where", "also", "such", "into",
-    "each", "than", "them", "about", "after", "before", "between", "through", "during"
-  ]);
-  const sKeys = sentenceWords.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase()));
-  if (sKeys.length < 3) return 0;
-  const srcWords = new Set(tokenize(sourceText));
-  let hits = 0;
-  for (const k of sKeys) {
-    if (srcWords.has(k)) hits++;
-  }
-  return Math.round((hits / sKeys.length) * 100);
-}
-
-function sentenceSimilarity(sentenceWords: string[], sourceText: string): number {
-  // Require repeated phrase evidence before flagging a source. Keyword overlap
-  // alone is not plagiarism: academic writing naturally reuses domain terms.
-  // Five-gram evidence is strongest; shorter n-grams need substantially higher
-  // coverage and corroborating lexical overlap.
-  const c5 = containment(sentenceWords, sourceText, 5);
-  const c4 = containment(sentenceWords, sourceText, 4);
-  const c3 = containment(sentenceWords, sourceText, 3);
-  const kw = keywordOverlap(sentenceWords, sourceText);
-
-  if (c5 >= 30) return Math.min(100, Math.round(c5 * 1.05));
-  if (c4 >= 45) return Math.min(100, Math.round(c4 * 0.9));
-  if (c3 >= 60 && kw >= 70) {
-    return Math.min(100, Math.round(c3 * 0.65 + kw * 0.35));
-  }
-  return 0;
-}
-
 async function detectPlagiarism(
   text: string,
   sentences: Sentence[],
   meta?: { title?: string | null; docType?: string | null }
 ) {
-  const totalWords = tokenize(text).length || 1;
   const usable = sentences.filter((s) => s.words.length >= 8 && s.words.length <= 80);
-  // A wider, evenly spaced sample improves retrieval coverage while keeping
-  // external provider traffic bounded. Every sentence is still scored against
-  // the deduplicated source pool below.
-  const target = Math.min(12, usable.length);
+  // Sample across the full document rather than relying only on the opening
+  // paragraphs. This improves retrieval diversity without claiming exhaustive
+  // crawling of the web or licensed academic databases.
+  const target = Math.min(16, usable.length);
   const step = usable.length > target ? usable.length / target : 1;
   const candidates: Sentence[] = [];
   for (let i = 0; candidates.length < target && Math.floor(i * step) < usable.length; i++) {
     candidates.push(usable[Math.floor(i * step)]!);
   }
 
-  // Document-level key terms: use user-provided title if available, plus top extracted keywords
-  const titleWords = meta?.title ? meta.title.trim() : "";
-  const docKeywords = [
-    titleWords,
-    ...(text.slice(0, 1500).match(/[A-Za-z0-9]+/g) ?? [])
-      .filter((w) => w.length > 5 && !["introduction", "abstract", "during", "preliminary"].includes(w.toLowerCase()))
-      .slice(0, 8),
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const stopWords = new Set([
+    "about", "above", "after", "again", "also", "among", "because", "been", "before",
+    "being", "between", "could", "during", "each", "from", "have", "into", "more",
+    "most", "other", "over", "same", "such", "than", "that", "their", "there",
+    "these", "they", "this", "those", "through", "under", "very", "were", "which",
+    "while", "will", "with", "would", "your", "using", "used", "paper", "study",
+    "research", "results", "method", "methods", "analysis", "approach",
+  ]);
+  const frequency = new Map<string, number>();
+  for (const word of tokenize(text)) {
+    if (word.length >= 5 && !stopWords.has(word)) frequency.set(word, (frequency.get(word) ?? 0) + 1);
+  }
+  const topicalTerms = [...frequency.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([word]) => word);
+  const docKeywords = [meta?.title?.trim() ?? "", topicalTerms.join(" ")].filter(Boolean).join(" ");
 
   const cache: SourceCache = new Map();
   let queried = 0;
-
-  // Retrieve foundational topical candidates first
   const [docWiki, docAlex, docCross] = await Promise.all([
     wikipediaCandidates(docKeywords, cache),
     openAlexCandidates(docKeywords),
@@ -372,97 +329,36 @@ async function detectPlagiarism(
   const docPool = [...docWiki, ...docAlex, ...docCross];
   queried += docPool.length;
 
-  // Retrieve sentence-specific candidates for sampled key sentences
-  await mapLimit(candidates, 3, async (s) => {
+  await mapLimit(candidates, 3, async (sentence) => {
     const [wiki, alex, cross] = await Promise.all([
-      wikipediaCandidates(s.text, cache),
-      openAlexCandidates(s.text),
-      crossrefCandidates(s.text),
+      wikipediaCandidates(sentence.text, cache),
+      openAlexCandidates(sentence.text),
+      crossrefCandidates(sentence.text),
     ]);
     docPool.push(...wiki, ...alex, ...cross);
     queried += wiki.length + alex.length + cross.length;
   });
 
-  // Deduplicate docPool by title/url to keep in-memory matching efficient
   const poolMap = new Map<string, Candidate>();
-  for (const c of docPool) {
-    const key = c.url || c.title;
-    if (!poolMap.has(key)) poolMap.set(key, c);
+  for (const candidate of docPool) {
+    const key = candidate.url?.replace(/\/$/, "").toLowerCase() ?? candidate.title.toLowerCase();
+    const previous = poolMap.get(key);
+    // Prefer the candidate with the longer text when providers return the same
+    // record more than once.
+    if (!previous || candidate.text.length > previous.text.length) poolMap.set(key, candidate);
   }
   const uniquePool = [...poolMap.values()];
-
-  // Evaluate ALL sentences in the document against the retrieved candidate sources
-  const hits: Array<{
-    sentence: Sentence;
-    source: Candidate;
-    similarity: number;
-    matched_snippet: string;
-  }> = [];
-
-  for (const s of sentences) {
-    if (s.words.length < 6) continue;
-    let best: { c: Candidate; score: number } | null = null;
-    for (const c of uniquePool) {
-      const score = sentenceSimilarity(s.words, c.text);
-      if (score > (best?.score ?? 0)) best = { c, score };
-    }
-    if (best && best.score >= 20) {
-      hits.push({
-        sentence: s,
-        source: best.c,
-        similarity: Math.min(100, best.score),
-        matched_snippet: bestWindow(s.words, best.c.text),
-      });
-    }
-  }
-
-  const highlights: Highlight[] = hits.map((h) => ({
-    start: h.sentence.start,
-    end: h.sentence.end,
-    text: h.sentence.text,
-    category: "plagiarism",
-    score: h.similarity,
-    source: h.source.title,
-    url: h.source.url,
-    note: h.source.kind,
-    matched_snippet: h.matched_snippet.slice(0, 600),
-    provider: h.source.provider ?? "Open web retrieval",
-    confidence: h.similarity >= 60 ? "high" : h.similarity >= 35 ? "medium" : "low",
-  }));
-
-  // True Turnitin/DrillBit similarity: matched words divided by total words
-  const matchedWords = hits.reduce(
-    (sum, h) => sum + Math.round((h.sentence.words.length * Math.min(100, h.similarity)) / 100),
-    0
-  );
-  const score = Math.max(0, Math.min(100, Math.round((matchedWords / Math.max(1, totalWords)) * 100)));
-
-  const bySource = new Map<
-    string,
-    { source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string }
-  >();
-  for (const h of hits) {
-    const key = h.source.title;
-    const prev = bySource.get(key);
-    if (!prev || h.similarity > prev.similarity) {
-      bySource.set(key, {
-        source: h.source.title,
-        url: h.source.url,
-        similarity: h.similarity,
-        snippet: h.sentence.text.slice(0, 320),
-        type: h.source.kind,
-        matched_snippet: h.matched_snippet.slice(0, 600),
-        provider: h.source.provider ?? "Open web retrieval",
-      });
-    }
-  }
+  const compared = matchDocumentAgainstSources(text, uniquePool);
 
   return {
-    score,
-    matched_words: matchedWords,
-    matches: [...bySource.values()].sort((a, b) => b.similarity - a.similarity),
-    highlights,
+    ...compared,
     queried,
+    source_coverage: {
+      sources_retrieved: uniquePool.length,
+      providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
+      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words)",
+      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
+    },
   };
 }
 
