@@ -363,10 +363,17 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
     const safeSegmentText = sanitizePdfText(seg.text);
     const tokens = safeSegmentText.split(/(\s+)/).filter((t) => t !== "");
     for (const tk of tokens) {
-      if (/\n/.test(tk)) {
-        x = M;
-        ctx.y += lineH;
-        if (ctx.y > H - 24) { newPage(ctx); setBody(); }
+      if (/^\s+$/.test(tk)) {
+        const lineBreaks = (tk.match(/\n/g) ?? []).length;
+        if (lineBreaks > 0) {
+          for (let line = 0; line < lineBreaks; line++) {
+            x = M;
+            ctx.y += lineH;
+            if (ctx.y > H - 24) { newPage(ctx); setBody(); }
+          }
+        } else if (x > M) {
+          x += doc.getTextWidth(tk);
+        }
         continue;
       }
       const w = doc.getTextWidth(tk);
@@ -374,10 +381,6 @@ function highlightedBody(ctx: Ctx, input: ReportInput, categories: string[]) {
         x = M;
         ctx.y += lineH;
         if (ctx.y > H - 24) { newPage(ctx); setBody(); }
-      }
-      if (/^\s+$/.test(tk)) {
-        if (x > M) x += w;
-        continue;
       }
       if (seg.highlight) {
         doc.setFillColor(...(CATEGORY_FILL[String(seg.highlight.category)] ?? [235, 235, 235]));
@@ -427,11 +430,11 @@ function issuesSection(ctx: Ctx, input: ReportInput, categories?: string[]) {
 /* ------------------------------------------------------------- report body */
 
 const KIND_TITLE: Record<ReportKind, string> = {
-  similarity: "Similarity & Plagiarism Report",
-  ai: "AI Content & Stylometric Report",
+  similarity: "Document Similarity Report",
+  ai: "Experimental Writing-pattern Review",
   grammar: "Grammar & Academic Language Report",
   citation: "Citation Verification Report",
-  full: "Comprehensive Integrity Dossier",
+  full: "Document Review Report",
 };
 
 function similaritySection(ctx: Ctx, input: ReportInput) {
