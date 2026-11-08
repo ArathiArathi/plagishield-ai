@@ -8,7 +8,7 @@ import {
   type HighlightCategory,
 } from "./analysis-shared";
 
-const ORDER: HighlightCategory[] = ["plagiarism", "ai", "grammar", "citation"];
+const ORDER: HighlightCategory[] = ["plagiarism", "grammar", "citation"];
 
 export function HighlightedDocument({
   text,
@@ -26,6 +26,17 @@ export function HighlightedDocument({
     [highlights, active],
   );
   const segments = useMemo(() => buildSegments(text, visible), [text, visible]);
+
+  const sourceColors = ["#FDE68A", "#BFDBFE", "#BBF7D0", "#FBCFE8", "#DDD6FE", "#FED7AA"];
+  const sourceNumbers = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const highlight of highlights) {
+      if (highlight.category !== "plagiarism" || !highlight.source) continue;
+      const key = highlight.source + (highlight.url ?? "");
+      if (!map.has(key)) map.set(key, map.size + 1);
+    }
+    return map;
+  }, [highlights]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -71,10 +82,18 @@ export function HighlightedDocument({
             s.highlight ? (
               <mark
                 key={i}
-                title={`${CATEGORY_STYLE[s.highlight.category].label} · ${s.highlight.score}%${s.highlight.source ? ` · ${s.highlight.source}` : ""}${s.highlight.note ? ` · ${s.highlight.note}` : ""}`}
+                title={`${CATEGORY_STYLE[s.highlight.category].label}${s.highlight.category === "plagiarism" ? " · exact phrase match" : ""}${s.highlight.source ? ` · ${s.highlight.source}` : ""}${s.highlight.note ? ` · ${s.highlight.note}` : ""}`}
                 className={cn("rounded px-0.5", CATEGORY_STYLE[s.highlight.category].mark)}
+                style={s.highlight.category === "plagiarism" && s.highlight.source ? {
+                  backgroundColor: sourceColors[((sourceNumbers.get(s.highlight.source + (s.highlight.url ?? "")) ?? 1) - 1) % sourceColors.length],
+                  borderBottom: "2px solid #64748b",
+                  color: "#1f2937",
+                } : undefined}
               >
                 {s.text}
+                {s.highlight.category === "plagiarism" && s.highlight.source ? (
+                  <sup className="ml-0.5 text-[9px] font-semibold text-slate-700">{sourceNumbers.get(s.highlight.source + (s.highlight.url ?? ""))}</sup>
+                ) : null}
               </mark>
             ) : (
               <span key={i}>{s.text}</span>

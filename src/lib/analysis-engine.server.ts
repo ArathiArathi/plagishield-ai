@@ -8,15 +8,16 @@ import { matchDocumentAgainstSources } from "@/lib/similarity-matcher.server";
  *  1. Sentence segmentation + fingerprinting of the submitted text.
  *  2. Source retrieval over open scholarly indexes and the web, followed by
  *     offset-preserving exact phrase matching with overlapping-source evidence.
- *  3. Stylometric AI-detection classifier (logistic regression over burstiness,
- *     lexical diversity, function-word and boilerplate features) blended with an
- *     LLM judgement from Lovable AI.
- *  4. Grammar/language checking through the public LanguageTool API.
- *  5. Citation verification through Crossref bibliographic matching.
+ *  3. Grammar/language checking through LanguageTool, with a small local
+ *     fallback only when the service is unavailable.
+ *  4. Reference-list verification against Crossref and OpenAlex.
+ *
+ *  AI authorship scores are intentionally not emitted until a detector has
+ *  been independently validated on a representative, labelled dataset.
  */
 
 const UA = "PlagiShieldAI/1.0 (academic integrity analysis)";
-const ENGINE_VERSION = "2.1.0";
+const ENGINE_VERSION = "3.0.0";
 
 export type Highlight = {
   start: number;
@@ -33,6 +34,7 @@ export type Highlight = {
   provider?: string;
   /** Human-readable confidence label for this individual segment. */
   confidence?: "high" | "medium" | "low";
+  alternate_sources?: Array<{ source: string; url?: string; type: string }>;
 };
 
 
@@ -62,25 +64,25 @@ export type AnalysisResults = {
     matched_words: number;
     matches: Array<{ source: string; url?: string; similarity: number; snippet: string; type: string; matched_snippet?: string; provider?: string; matched_words?: number; match_count?: number; match_strength?: number; domain?: string }>;
     highlights: Highlight[];
-    source_coverage: { sources_retrieved: number; providers: string[]; matching_method: string; limitation: string };
+    source_coverage: { sources_retrieved: number; providers: string[]; matching_method: string; limitation: string; comparison_words: number; excluded_quoted_words: number; excluded_bibliography_words: number };
   };
   ai_detection: {
-    score: number;
-    confidence: string;
+    score: number | null;
+    confidence: "not_assessed";
     reasoning: string;
-    model_score: number | null;
-    stylometry_score: number;
+    model_score: null;
+    stylometry_score: null;
     features: Record<string, number>;
     highlights: Highlight[];
   };
   grammar: {
-    score: number;
+    score: number | null;
     provider: string;
     issues: Array<{ type: string; severity: string; text: string; suggestion: string; message?: string; offset?: number }>;
     highlights: Highlight[];
   };
   citations: {
-    score: number;
+    score: number | null;
     total: number;
     verified: number;
     in_text: number;
@@ -123,6 +125,41 @@ async function getJson(url: string, timeoutMs = 9000): Promise<any | null> {
   } catch {
     return null;
   }
+}
+
+async function getText(url: string, timeoutMs = 9000): Promise<string | null> {
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "application/xml,text/plain" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function stripXmlText(xml: string): string {
+  return xml
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => {
+      const value = Number(code);
+      return value > 0 && value <= 0x10ffff ? String.fromCodePoint(value) : " ";
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => {
+      const value = parseInt(code, 16);
+      return value > 0 && value <= 0x10ffff ? String.fromCodePoint(value) : " ";
+    })
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -210,21 +247,38 @@ async function wikiExtract(title: string, cache: SourceCache): Promise<Candidate
 /**
  * Build several keyword queries per sentence to query open academic repositories.
  */
+const QUERY_STOP_WORDS = new Set([
+  "this", "that", "these", "those", "with", "from", "have", "been", "were", "what",
+  "when", "where", "which", "will", "would", "could", "should", "their", "there",
+  "about", "after", "before", "between", "through", "during", "under", "above", "into",
+  "also", "such", "other", "more", "most", "some", "only", "both", "each", "than",
+  "paper", "study", "research", "results", "method", "methods", "analysis", "approach",
+  "using", "used", "based", "shown", "demonstrate", "demonstrates", "proposed",
+]);
+
+function informativeTerms(phrase: string, limit = 8): string[] {
+  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
+  const seen = new Set<string>();
+  const terms: string[] = [];
+  for (const word of words) {
+    const normalized = word.toLowerCase();
+    if (normalized.length < 4 || QUERY_STOP_WORDS.has(normalized) || seen.has(normalized)) continue;
+    seen.add(normalized);
+    terms.push(normalized);
+  }
+  return terms.slice(0, limit);
+}
+
 function searchQueries(sentence: string): string[] {
   const words = sentence.match(/[A-Za-z0-9'’-]+/g) ?? [];
   if (words.length < 6) return [];
-  const stopWords = new Set([
-    "this", "that", "these", "those", "with", "from", "have", "been", "were", "what",
-    "when", "where", "which", "will", "would", "could", "should", "their", "there",
-    "about", "after", "before", "between", "through", "during", "under", "above", "into",
-    "also", "such", "other", "more", "most", "some", "only", "both", "each", "than"
-  ]);
-  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 8).join(" ");
-  const queries: string[] = [];
-  if (keywords.split(" ").length >= 3) queries.push(keywords);
-  const win = words.slice(0, 7).join(" ");
-  if (win && win !== keywords) queries.push(win);
-  return queries;
+  const keywords = informativeTerms(sentence, 8).join(" ");
+  const middle = Math.max(0, Math.floor(words.length / 2) - 4);
+  const centralPhrase = words.slice(middle, middle + 8).join(" ");
+  const queries = [keywords, centralPhrase]
+    .map((query) => query.trim())
+    .filter((query, index, all) => query.split(/\s+/).length >= 3 && all.indexOf(query) === index);
+  return queries.slice(0, 2);
 }
 
 async function wikipediaCandidates(sentence: string, cache: SourceCache): Promise<Candidate[]> {
@@ -238,9 +292,7 @@ async function wikipediaCandidates(sentence: string, cache: SourceCache): Promis
 }
 
 async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
-  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
-  const stopWords = new Set(["this", "that", "with", "from", "have", "been", "were", "which", "will", "would", "their"]);
-  const keywords = words.filter((w) => w.length > 3 && !stopWords.has(w.toLowerCase())).slice(0, 7).join(" ");
+  const keywords = informativeTerms(phrase, 8).join(" ");
   if (!keywords) return [];
   const q = encodeURIComponent(keywords);
   const data = await getJson(
@@ -264,7 +316,7 @@ async function openAlexCandidates(phrase: string): Promise<Candidate[]> {
 }
 
 async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
-  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+  const query = informativeTerms(phrase, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=3&fields=title,abstract,url,year,externalIds`,
@@ -282,28 +334,44 @@ async function semanticScholarCandidates(phrase: string): Promise<Candidate[]> {
     }));
 }
 
-async function europePmcCandidates(phrase: string): Promise<Candidate[]> {
-  const query = phrase.match(/[A-Za-z0-9]+/g)?.filter((word) => word.length > 3).slice(0, 8).join(" ");
+async function europePmcCandidates(phrase: string, includeFullText = false): Promise<Candidate[]> {
+  const query = informativeTerms(phrase, 8).join(" ");
   if (!query) return [];
   const data = await getJson(
     `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=3&resultType=core`,
     6500,
   );
-  const results: any[] = data?.resultList?.result ?? [];
-  return results
-    .filter((item) => item.abstractText && item.abstractText.length > 80)
-    .map((item) => ({
+  const results: any[] = (data?.resultList?.result ?? [])
+    .filter((item: any) => item.abstractText && item.abstractText.length > 80)
+    .slice(0, 3);
+
+  return mapLimit(results, includeFullText ? 2 : 3, async (item) => {
+    let sourceText = [item.title, item.abstractText].filter(Boolean).join(". ");
+    let kind = "Scholarly publication (abstract)";
+    if (includeFullText && item.pmcid) {
+      const fullXml = await getText(
+        `https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(item.pmcid)}/fullTextXML`,
+        10000,
+      );
+      const body = fullXml?.match(/<body[\s\S]*?<\/body>/i)?.[0] ?? "";
+      const extractedBody = body ? stripXmlText(body).slice(0, 120000) : "";
+      if (extractedBody.length > sourceText.length + 500) {
+        sourceText = extractedBody;
+        kind = "Open-access full text (Europe PMC)";
+      }
+    }
+    return {
       title: `${item.title ?? "Biomedical publication"}${item.pubYear ? ` (${item.pubYear})` : ""}`,
-      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : undefined,
-      text: [item.title, item.abstractText].filter(Boolean).join(". "),
-      kind: "Scholarly publication (abstract)",
+      url: item.doi ? `https://doi.org/${item.doi}` : item.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/` : item.pmcid ? `https://europepmc.org/articles/${item.pmcid}` : undefined,
+      text: sourceText,
+      kind,
       provider: "Europe PMC REST API",
-    }));
+    };
+  });
 }
 
 async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
-  const words = phrase.match(/[A-Za-z0-9]+/g) ?? [];
-  const keywords = words.filter((w) => w.length > 4).slice(0, 7).join(" ");
+  const keywords = informativeTerms(phrase, 8).join(" ");
   if (!keywords) return [];
   const data = await getJson(
     `https://api.crossref.org/works?rows=2&select=title,DOI,abstract,container-title&query=${encodeURIComponent(keywords)}&mailto=integrity@plagishield.app`,
@@ -322,6 +390,34 @@ async function crossrefCandidates(phrase: string): Promise<Candidate[]> {
       provider: "Crossref Scholarly Index",
     };
   }).filter((c) => c.text.length > 40);
+}
+
+type ExcludedTextRange = { start: number; end: number; reason: "quotation" | "bibliography" };
+
+function findExcludedRanges(text: string): { ranges: ExcludedTextRange[] } {
+  const ranges: ExcludedTextRange[] = [];
+  const quotePattern = /["“«「『]([^"”»」』]{20,3000})["”»」』]/gu;
+  let quote: RegExpExecArray | null;
+  while ((quote = quotePattern.exec(text)) !== null) {
+    ranges.push({ start: quote.index, end: quote.index + quote[0].length, reason: "quotation" });
+  }
+
+  const bibliographyHeading = /^\s*(?:references|bibliography|works cited|literature cited|reference list)\s*:?\s*$/im;
+  const heading = bibliographyHeading.exec(text);
+  if (heading) ranges.push({ start: heading.index, end: text.length, reason: "bibliography" });
+
+  ranges.sort((a, b) => a.start - b.start);
+  const merged: ExcludedTextRange[] = [];
+  for (const range of ranges) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+      if (range.reason === "bibliography") previous.reason = "bibliography";
+    } else {
+      merged.push({ ...range });
+    }
+  }
+  return { ranges: merged };
 }
 
 async function detectPlagiarism(
@@ -365,19 +461,21 @@ async function detectPlagiarism(
     openAlexCandidates(docKeywords),
     crossrefCandidates(docKeywords),
     semanticScholarCandidates(docKeywords),
-    europePmcCandidates(docKeywords),
+    europePmcCandidates(docKeywords, true),
   ]);
   const docPool = [...docWiki, ...docAlex, ...docCross, ...docSemantic, ...docEuropePmc];
   queried += docPool.length;
 
   await mapLimit(candidates, 3, async (sentence) => {
-    const [wiki, alex, cross] = await Promise.all([
+    const [wiki, alex, cross, semantic, europePmc] = await Promise.all([
       wikipediaCandidates(sentence.text, cache),
       openAlexCandidates(sentence.text),
       crossrefCandidates(sentence.text),
+      semanticScholarCandidates(sentence.text),
+      europePmcCandidates(sentence.text),
     ]);
-    docPool.push(...wiki, ...alex, ...cross);
-    queried += wiki.length + alex.length + cross.length;
+    docPool.push(...wiki, ...alex, ...cross, ...semantic, ...europePmc);
+    queried += wiki.length + alex.length + cross.length + semantic.length + europePmc.length;
   });
 
   const poolMap = new Map<string, Candidate>();
@@ -389,7 +487,15 @@ async function detectPlagiarism(
     if (!previous || candidate.text.length > previous.text.length) poolMap.set(key, candidate);
   }
   const uniquePool = [...poolMap.values()];
-  const compared = matchDocumentAgainstSources(text, uniquePool);
+  const excluded = findExcludedRanges(text);
+  const compared = matchDocumentAgainstSources(text, uniquePool, { excludedRanges: excluded.ranges });
+  const countWords = (reason: ExcludedTextRange["reason"]) => tokenize(
+    excluded.ranges.filter((range) => range.reason === reason)
+      .map((range) => text.slice(range.start, range.end)).join(" "),
+  ).length;
+  const excludedQuotedWords = countWords("quotation");
+  const excludedBibliographyWords = countWords("bibliography");
+  const comparisonWords = Math.max(0, tokenize(text).length - excludedQuotedWords - excludedBibliographyWords);
 
   return {
     ...compared,
@@ -397,363 +503,12 @@ async function detectPlagiarism(
     source_coverage: {
       sources_retrieved: uniquePool.length,
       providers: [...new Set(uniquePool.map((source) => source.provider ?? "Unknown provider"))],
-      matching_method: "Normalized exact word-sequence matching (minimum 8 consecutive words)",
-      limitation: "Only retrieved source text was compared. The current providers do not represent a complete web archive, licensed journal corpus, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
+      matching_method: "Normalized exact word-sequence matching; minimum 8 consecutive words",
+      comparison_words: comparisonWords,
+      excluded_quoted_words: excludedQuotedWords,
+      excluded_bibliography_words: excludedBibliographyWords,
+      limitation: "Compared only text returned by the listed public providers. Detected quoted passages and the detected reference-list section are excluded. In-text citation context is not automatically excluded. These providers do not include a complete web archive, licensed publisher full text, or private student-paper repository. Paraphrased reuse and sources not retrieved may not be detected.",
     },
-  };
-}
-
-
-/* --------------------------------------------- 2. AI content detection */
-
-const AI_SPECIFIC_PHRASES = [
-  "in today's rapidly evolving",
-  "in today's digital era",
-  "in the contemporary landscape",
-  "delving into the realm",
-  "delve into the",
-  "delves into",
-  "a testament to",
-  "plays a pivotal role",
-  "play a pivotal role",
-  "serves as a cornerstone",
-  "is a cornerstone of",
-  "multifaceted nature",
-  "multifaceted approach",
-  "multifaceted power",
-  "holistic understanding",
-  "holistic approach",
-  "it is important to note",
-  "it is worth noting",
-  "it is crucial to remember",
-  "navigating the complexities",
-  "navigate the complexities",
-  "navigate the nuances",
-  "foster a deeper",
-  "fosters a",
-  "foster a",
-  "rich tapestry",
-  "vibrant tapestry",
-  "beacon of hope",
-  "catalyst for change",
-  "a myriad of",
-  "paves the way for",
-  "paving the way",
-  "by embracing this",
-  "by leveraging the",
-  "seamlessly integrate",
-  "seamless integration",
-  "deep dive into",
-  "in conclusion,",
-  "to conclude,",
-  "in summary,",
-  "to sum up,",
-  "crucial role in",
-  "resilient future for all",
-  "not without its challenges",
-];
-
-const AI_KEYWORDS = [
-  "delve", "delving", "pivotal", "multifaceted", "holistic", "tapestry", "seamlessly",
-  "underscores", "fosters", "cornerstone", "linchpin", "navigating",
-  "transformative", "burgeoning", "intertwined", "unravel", "myriad",
-  "paramount", "imperative", "catalyst", "overarching", "bespoke"
-];
-
-function stylometry(text: string, sentences: Sentence[]) {
-  const words = tokenize(text);
-  const totalWords = words.length || 1;
-  const numSentences = Math.max(1, sentences.length);
-  const lower = text.toLowerCase();
-
-  // 1. Sentence length distribution & burstiness (human writing has high variance)
-  const lens = sentences.map((s) => s.words.length).filter((l) => l > 0);
-  const meanLen = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 15;
-  const variance = lens.length ? lens.reduce((a, b) => a + (b - meanLen) ** 2, 0) / lens.length : 0;
-  const sd = Math.sqrt(variance);
-  const burstiness = meanLen > 0 ? sd / meanLen : 0;
-
-  // First-order delta burstiness (adjacent sentence jump differences)
-  let jumpSum = 0;
-  for (let i = 0; i < lens.length - 1; i++) {
-    jumpSum += Math.abs(lens[i + 1]! - lens[i]!);
-  }
-  const deltaBurstiness = lens.length > 1 ? (jumpSum / (lens.length - 1)) / meanLen : 0.35;
-
-  // 2. AI Multi-word phrase matches
-  let aiPhraseHits = 0;
-  for (const phrase of AI_SPECIFIC_PHRASES) {
-    let pos = 0;
-    while ((pos = lower.indexOf(phrase, pos)) !== -1) {
-      aiPhraseHits++;
-      pos += phrase.length;
-    }
-  }
-  const aiPhraseDensity = (aiPhraseHits / totalWords) * 1000;
-
-  // 3. AI Keyword matches
-  let aiKeywordHits = 0;
-  for (const kw of AI_KEYWORDS) {
-    const re = new RegExp(`\\b${kw}\\b`, "g");
-    const m = lower.match(re);
-    if (m) aiKeywordHits += m.length;
-  }
-  const aiKeywordDensity = (aiKeywordHits / totalWords) * 1000;
-
-  // 4. Triad grouping pattern (X, Y, and Z)
-  const triadRegex = /\b\w{4,},\s+\w{4,},\s+and\s+\w{4,}\b/g;
-  const triads = (text.match(triadRegex) ?? []).length;
-  const triadDensity = triads / numSentences;
-
-  // 5. Formulaic transition openers (Furthermore, Moreover, Additionally, In conclusion)
-  let transitionOpeners = 0;
-  for (const s of sentences) {
-    const st = s.text.trim().toLowerCase();
-    if (/^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(st)) {
-      transitionOpeners++;
-    }
-  }
-  const transitionOpenerRatio = transitionOpeners / numSentences;
-
-  // 6. Positive Human Research & Scholarly Indicators
-  const empiricalMetrics = (text.match(/\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/gi) ?? []).length;
-  const artifactRefs = (text.match(/\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm|appendix)\s+\d+([a-z]|\.\d+)?\b/gi) ?? []).length;
-  const authorialAgency = (text.match(/\b(we\s+(propose|evaluate|investigate|demonstrate|observe|implement|collected|conducted|designed|developed|found|measured|analyzed|tested)|our\s+(framework|approach|system|model|dataset|experiments?|findings?|results?|prototype|pipeline|architecture|analysis|methodology)|in\s+this\s+(work|paper|study|section))\b/gi) ?? []).length;
-  const citations = (text.match(/\[\d+(?:[,\s–-]+\d+)*\]|\([A-Z][a-z]+(?:\s+et\s+al\.)?,\s*\d{4}\)/g) ?? []).length;
-
-  const humanEvidenceCount = empiricalMetrics * 1.5 + artifactRefs * 2 + authorialAgency * 2 + citations * 1.5;
-  const humanEvidenceRate = (humanEvidenceCount / totalWords) * 1000;
-
-  // Dampen phrase penalty if text contains substantial human empirical research evidence
-  const dampener = humanEvidenceRate > 40 ? 0.6 : 1.0;
-
-  // 7. Composite Calibrated Logistic Score
-  let z = -2.2;
-
-  // These stylometric cues are weak and overlap heavily with ordinary
-  // academic prose. Keep each contribution small; the uncalibrated heuristic
-  // must not dominate the result or create an illusion of forensic certainty.
-  z += Math.min(1.2, aiPhraseDensity * 0.08 * dampener);
-  z += Math.min(0.6, aiKeywordDensity * 0.06 * dampener);
-  z += Math.min(0.6, triadDensity * 0.7);
-  z += Math.min(0.6, transitionOpenerRatio * 0.9);
-
-  if (burstiness < 0.22) z += (0.22 - burstiness) * 2.0;
-  if (deltaBurstiness < 0.25) z += (0.25 - deltaBurstiness) * 1.8;
-
-  // Sentence variation is a weak stylistic feature, not proof of human
-  // authorship. Keep its contribution bounded and do not treat citations,
-  // numbers, or research terminology as evidence that a person wrote the text.
-  if (burstiness > 0.30) {
-    z -= Math.min(0.8, (burstiness - 0.30) * 1.5);
-  }
-  if (deltaBurstiness > 0.32) {
-    z -= Math.min(0.8, (deltaBurstiness - 0.32) * 1.3);
-  }
-
-  const probability = 1 / (1 + Math.exp(-z));
-  const score = Math.max(1, Math.min(99, Math.round(probability * 100)));
-
-  // Generate detailed forensic reasoning
-  let reasoning = "";
-  if (score < 25) {
-    reasoning = `Analysis confirms authentic human authorship (estimated ${score}% AI likelihood). Text exhibits natural sentence-length burstiness (CV = ${burstiness.toFixed(2)}) with healthy structural delta (${deltaBurstiness.toFixed(2)}). Rich empirical markers, experimental references, and authorial agency (${humanEvidenceCount.toFixed(0)} evidentiary markers) are present without formulaic generative AI transitions.`;
-  } else if (score < 60) {
-    reasoning = `Text shows mixed stylometric characteristics (${score}% AI likelihood). While core sections display human research framing and empirical detail, localized passages contain standardized transition structures and predictable phrasing (${aiPhraseDensity.toFixed(1)} AI markers per 1k words), suggesting potential AI-assisted editing or automated paraphrasing.`;
-  } else {
-    reasoning = `High probability of synthetic generative AI authorship (${score}% AI likelihood). The text exhibits low sentence-length entropy (CV = ${burstiness.toFixed(2)}), repetitive triadic parallelisms, and a dense concentration of formulaic LLM transition idioms (${aiPhraseDensity.toFixed(1)} markers per 1k words) without primary empirical or experimental signatures.`;
-  }
-
-  return {
-    score,
-    reasoning,
-    features: {
-      burstiness: Number(burstiness.toFixed(3)),
-      delta_burstiness: Number(deltaBurstiness.toFixed(3)),
-      avg_sentence_length: Number(meanLen.toFixed(1)),
-      ai_phrase_density: Number(aiPhraseDensity.toFixed(2)),
-      ai_keyword_density: Number(aiKeywordDensity.toFixed(2)),
-      triad_density: Number(triadDensity.toFixed(2)),
-      transition_opener_ratio: Number(transitionOpenerRatio.toFixed(2)),
-      human_evidence_count: Number(humanEvidenceCount.toFixed(1)),
-      human_evidence_rate: Number(humanEvidenceRate.toFixed(2)),
-    },
-  };
-}
-
-export type SentenceVerdict = { p: number; why: string };
-
-/**
- * Sentence-level AI highlights. Evaluates multi-word phrases, transition openers,
- * triadic parallelism, and discounts sentences bearing primary empirical research metrics.
- */
-function aiHighlights(
-  sentences: Sentence[],
-  baseline: number,
-  model?: Map<number, SentenceVerdict>,
-): Highlight[] {
-  const scored = sentences.map((s, i) => {
-    const lower = s.text.toLowerCase();
-    
-    // Check for AI phrases
-    let phraseHits = 0;
-    let matchedPhrase = "";
-    for (const p of AI_SPECIFIC_PHRASES) {
-      if (lower.includes(p)) {
-        phraseHits++;
-        if (!matchedPhrase) matchedPhrase = p;
-      }
-    }
-
-    // Check for AI keywords
-    let kwHits = 0;
-    for (const kw of AI_KEYWORDS) {
-      if (new RegExp(`\\b${kw}\\b`).test(lower)) kwHits++;
-    }
-
-    // Check for transition opener
-    const isOpener = /^(furthermore|moreover|additionally|in conclusion|in summary|ultimately|consequently|to conclude)[,]/i.test(s.text.trim());
-
-    // Check for triadic pattern
-    const hasTriad = /\b\w{4,},\s+\w{4,},\s+and\s+\w{4,}\b/.test(s.text);
-
-    // Check for empirical numbers / research metrics (human credit)
-    const hasEmpirical = /\b\d+(\.\d+)?\s*(%|ms|s|gb|mb|kb|ghz|mhz|khz|fps|km|m|cm|mm|clients?|nodes?|packets?|epochs?)\b/i.test(s.text) ||
-      /\b(table|figure|fig\.|section|sec\.|eq\.|equation|algorithm)\s+\d+/i.test(s.text) ||
-      /\[\d+(?:[,\s–-]+\d+)*\]/.test(s.text);
-
-    // Compute sentence-level probability
-    let local = baseline;
-    if (phraseHits > 0) local += phraseHits * 32;
-    if (kwHits > 0) local += kwHits * 18;
-    if (isOpener) local += 22;
-    if (hasTriad) local += 20;
-    if (hasEmpirical) local -= 35; // Strongly protect genuine research sentences
-
-    local = Math.max(0, Math.min(100, local));
-
-    const verdict = model?.get(i);
-    const finalScore = verdict ? Math.round(verdict.p * 0.70 + local * 0.30) : local;
-
-    let note = "Formulaic LLM sentence structure";
-    if (matchedPhrase) note = `Contains stereotypical LLM phrase "${matchedPhrase}"`;
-    else if (isOpener) note = "Formulaic transition opener with low entropy";
-    else if (hasTriad) note = "Predictable triadic parallel clause structure";
-
-    return {
-      s,
-      score: finalScore,
-      why: verdict?.why || note,
-      fromModel: Boolean(verdict),
-      hasAiSignatures: phraseHits > 0 || kwHits > 0 || isOpener || hasTriad,
-    };
-  });
-
-  return scored
-    // A high document-level score alone must not paint every sentence as AI.
-    // A passage needs its own model verdict or observable heuristic signal.
-    .filter((x) => x.score >= 60 && (x.fromModel || x.hasAiSignatures))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 14)
-    .map((x) => ({
-      start: x.s.start,
-      end: x.s.end,
-      text: x.s.text,
-      category: "ai" as const,
-      score: Math.round(x.score),
-      note: x.why,
-      provider: x.fromModel ? `Language-model sentence classifier (${AI_MODEL})` : "Forensic stylometric classifier",
-      confidence: (x.score >= 75 ? "high" : x.score >= 60 ? "medium" : "low") as "high" | "medium" | "low",
-    }));
-}
-
-const AI_MODEL = "google/gemini-2.5-flash";
-
-async function callGateway(body: unknown, timeoutMs = 35000): Promise<any | null> {
-  const apiKey =
-    process.env["LOVABLE_API_KEY"] ||
-    process.env["GEMINI_API_KEY"] ||
-    process.env["OPENAI_API_KEY"];
-  if (!apiKey) return null;
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Lovable-API-Key": apiKey, "Content-Type": "application/json", "X-Lovable-AIG-SDK": "fetch" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) {
-      console.error("[engine] AI gateway error", res.status, (await res.text()).slice(0, 300));
-      return null;
-    }
-    const json: any = await res.json();
-    const rawContent = json.choices?.[0]?.message?.content ?? "{}";
-    const cleanContent = rawContent.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-    return JSON.parse(cleanContent);
-  } catch (e) {
-    console.error("[engine] AI gateway call failed", e);
-    return null;
-  }
-}
-
-/** Per-sentence machine-generation verdicts from the language model. */
-async function llmSentenceScores(sentences: Sentence[]): Promise<Map<number, SentenceVerdict>> {
-  const out = new Map<number, SentenceVerdict>();
-  const indexed = sentences.map((s, i) => ({ s, i })).filter((x) => x.s.words.length >= 10);
-  if (indexed.length === 0) return out;
-  const limit = Math.min(30, indexed.length);
-  const step = indexed.length / limit;
-  const picked = Array.from({ length: limit }, (_, k) => indexed[Math.floor(k * step)]!);
-
-  const parsed = await callGateway({
-    model: AI_MODEL,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an academic writing-style reviewer. For each numbered sentence, estimate how strongly its observable textual features resemble common LLM-generated patterns (0-100). This is not a reliable authorship test: do not infer authorship from formality, grammar, topic, or polished writing alone. Use low scores when evidence is weak or ambiguous. Reply with strict JSON only.",
-      },
-      {
-        role: "user",
-        content:
-          'Return {"items":[{"i":<id>,"p":<0-100>,"why":"<max 12 words of evidence>"}]} for every sentence.\n\n' +
-          picked.map((x) => `${x.i}: ${x.s.text.slice(0, 400)}`).join("\n"),
-      },
-    ],
-    response_format: { type: "json_object" },
-  });
-
-  for (const item of (parsed?.items ?? []) as Array<{ i: number; p: number; why?: string }>) {
-    const p = Number(item.p);
-    if (!Number.isFinite(p) || !sentences[Number(item.i)]) continue;
-    out.set(Number(item.i), { p: Math.max(0, Math.min(100, p)), why: String(item.why ?? "").slice(0, 90) });
-  }
-  return out;
-}
-
-
-async function llmJudgement(sample: string, docType: string) {
-  const parsed = await callGateway({
-    model: AI_MODEL,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an academic writing-style reviewer. Assess only observable stylistic signals in the supplied excerpt. Do not claim to identify an author's identity or prove AI use; formal, fluent, or grammatically correct prose is not sufficient evidence. When evidence is ambiguous, report a cautious low-to-medium estimate and explain the limitation. Respond with strict JSON only.",
-      },
-      {
-        role: "user",
-        content: `Document type: ${docType}. Return JSON {"ai_probability": 0-100, "confidence": "low|medium|high", "reasoning": "3-4 sentences of concrete stylistic evidence", "summary": "2 sentence integrity summary"}.\n\nExcerpt:\n${sample.slice(0, 6000)}`,
-      },
-    ],
-    response_format: { type: "json_object" },
-  });
-  if (!parsed) return null;
-  return {
-    probability: Math.max(0, Math.min(100, Number(parsed.ai_probability ?? 0))),
-    confidence: String(parsed.confidence ?? "medium"),
-    reasoning: String(parsed.reasoning ?? ""),
-    summary: String(parsed.summary ?? ""),
   };
 }
 
@@ -918,8 +673,8 @@ function heuristicGrammarCheck(text: string, author?: string | null, title?: str
 
 async function checkGrammar(text: string, author?: string | null, title?: string | null) {
   const chunks: Array<{ text: string; offset: number }> = [];
-  const limit = 1600;
-  for (let i = 0; i < text.length && chunks.length < 6; i += limit) {
+  const limit = 10000;
+  for (let i = 0; i < text.length; i += limit) {
     chunks.push({ text: text.slice(i, i + limit), offset: i });
   }
 
@@ -927,7 +682,7 @@ async function checkGrammar(text: string, author?: string | null, title?: string
   const highlights: Highlight[] = [];
   let provider = "LanguageTool (api.languagetool.org)";
 
-  const results = await mapLimit(chunks, 2, async (chunk) => {
+  const results = await mapLimit(chunks, 4, async (chunk) => {
     try {
       const res = await fetch("https://api.languagetool.org/v2/check", {
         method: "POST",
@@ -981,24 +736,17 @@ async function checkGrammar(text: string, author?: string | null, title?: string
     }
   }
 
-  // If LanguageTool failed (rate limited or down) or found few issues, supplement with heuristic check
-  if (ok === 0 || issues.length === 0) {
+  // Use local fallback rules only when the external service failed for every
+  // chunk. A successful zero-issue response is a real zero, not a reason to
+  // manufacture heuristic warnings.
+  if (ok === 0) {
     const heuristic = heuristicGrammarCheck(text, author, title);
-    if (ok === 0) {
-      provider = "PlagiShield Forensic Grammar & Style Engine";
-      issues.push(...heuristic.issues);
-      highlights.push(...heuristic.highlights);
-    } else if (heuristic.issues.length > 0) {
-      issues.push(...heuristic.issues.slice(0, 5));
-      highlights.push(...heuristic.highlights.slice(0, 5));
-    }
+    provider = "PlagiShield local fallback (LanguageTool unavailable)";
+    issues.push(...heuristic.issues);
+    highlights.push(...heuristic.highlights);
   }
 
-  const checkedWords = tokenize(chunks.map((c) => c.text).join(" ")).length || 1;
-  const density = (issues.length / checkedWords) * 100; // issues per 100 words
-  const score = Math.max(30, Math.min(100, Math.round(100 - density * 3.5)));
-
-  return { score, provider, issues: issues.slice(0, 80), highlights: highlights.slice(0, 120) };
+  return { score: null, provider, issues: issues.slice(0, 80), highlights: highlights.slice(0, 120) };
 }
 
 function chunk_slice(text: string, offset: number, length: number) {
@@ -1009,22 +757,46 @@ function chunk_slice(text: string, offset: number, length: number) {
 /* -------------------------------------------- 4. citation verification */
 
 function extractReferences(text: string) {
-  const lines = text.split(/\n+/).map((l) => l.trim());
-  const refIndex = lines.findIndex((l) => /^(references|bibliography|works cited)\b/i.test(l));
-  const pool = refIndex >= 0 ? lines.slice(refIndex + 1) : lines;
-  const refs = pool
-    .filter((l) => l.length > 40 && /\(?(19|20)\d{2}\)?/.test(l) && /[A-Z][a-z]+/.test(l))
-    .map((l) => l.replace(/^\[\d+\]\s*/, "").replace(/^\d+\.\s*/, ""))
-    .slice(0, 20);
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const refIndex = lines.findIndex((line) =>
+    /^(references|bibliography|works cited|literature cited|reference list)\b/i.test(line)
+  );
+  if (refIndex < 0) {
+    const inText = (text.match(/\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g) ?? []).length;
+    return { refs: [] as string[], inText, hasSection: false };
+  }
+
+  const entries: string[] = [];
+  for (const line of lines.slice(refIndex + 1)) {
+    if (/^(appendix|appendices|acknowledg(?:e)?ments|glossary)\b/i.test(line)) break;
+    const numbered = /^(?:\[\d+\]|\d+[.)])\s*/.test(line);
+    const hasYear = /\(?(?:19|20)\d{2}\)?/.test(line);
+    const currentHasYear = entries.length > 0 && /\(?(?:19|20)\d{2}\)?/.test(entries[entries.length - 1]!);
+    if (entries.length === 0 || numbered || (hasYear && currentHasYear)) {
+      entries.push(line.replace(/^(?:\[\d+\]|\d+[.)])\s*/, ""));
+    } else {
+      entries[entries.length - 1] += " " + line;
+    }
+  }
+
+  const refs = entries
+    .map((entry) => entry.replace(/\s+/g, " ").trim())
+    .filter((entry) => entry.length > 40 && /\(?(?:19|20)\d{2}\)?/.test(entry))
+    .slice(0, 50);
   const inText = (text.match(/\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g) ?? []).length;
-  return { refs, inText, hasSection: refIndex >= 0 };
+  return { refs, inText, hasSection: true };
 }
 
 function extractTitleFromRef(raw: string): string {
   const quoted = raw.match(/["“]([^"”]+)["”]/);
   if (quoted && quoted[1].length > 10) return quoted[1].trim();
-  const parts = raw.split(/[.,]/).map((p) => p.trim()).filter((p) => p.length > 15);
-  return parts[0] || raw;
+
+  // APA-style references usually place the title immediately after the year.
+  const afterYear = raw.match(/\(?(?:19|20)\d{2}[a-z]?\)?\.\s+([^.!?]{12,300})/i);
+  if (afterYear?.[1]) return afterYear[1].trim();
+
+  const parts = raw.split(/[.,]/).map((part) => part.trim()).filter((part) => part.length > 15);
+  return parts.length > 1 ? parts[1]! : parts[0] || raw;
 }
 
 function titleSimilarity(a: string, b: string) {
@@ -1054,7 +826,7 @@ async function verifyCitations(text: string) {
     );
     for (const item of crData?.message?.items ?? []) {
       const itTitle: string = item?.title?.[0] ?? "";
-      if (titleSimilarity(extractedTitle, itTitle) >= 0.45) {
+      if (titleSimilarity(extractedTitle, itTitle) >= 0.85) {
         verified = true;
         matchedTitle = itTitle;
         doi = item?.DOI;
@@ -1071,7 +843,7 @@ async function verifyCitations(text: string) {
       );
       for (const w of oaData?.results ?? []) {
         const wTitle: string = w?.title ?? "";
-        if (titleSimilarity(extractedTitle, wTitle) >= 0.45) {
+        if (titleSimilarity(extractedTitle, wTitle) >= 0.85) {
           verified = true;
           matchedTitle = wTitle;
           doi = w?.doi ?? w?.id;
@@ -1093,25 +865,15 @@ async function verifyCitations(text: string) {
     };
   });
 
-  if (!hasSection && refs.length > 0) issues.push("No dedicated References/Bibliography section header detected.");
-  if (refs.length === 0) issues.push("No parsable reference entries were found in the submission.");
-  if (inText === 0 && refs.length > 0) issues.push("Reference list present but no in-text citations were detected.");
+  if (refs.length === 0) {
+    issues.push("No reference-list entries were detected; reference verification was not assessed.");
+  }
+  if (inText === 0 && refs.length > 0) {
+    issues.push("Reference list detected, but no supported in-text citation pattern was found.");
+  }
 
   const verified = references.filter((r) => r.verified).length;
-  let base: number;
-  let penalty = 0;
-  if (refs.length > 0) {
-    base = (verified / refs.length) * 100;
-    penalty = (inText === 0 ? 15 : 0) + (!hasSection ? 8 : 0);
-  } else {
-    // If no references, check if document is an academic paper or standard prose
-    const isAcademic = /(abstract|methodology|dataset|references|bibliography|ieee|acm|doi:)/i.test(text);
-    base = isAcademic ? 45 : 85;
-    if (isAcademic) {
-      issues.push("Academic paper structure detected, but no reference list found. Scholarly submissions should include bibliography entries.");
-    }
-  }
-  const score = Math.max(20, Math.min(100, Math.round(base - penalty + (verified > 0 ? 5 : 0))));
+  const score = refs.length > 0 ? Math.round((verified / refs.length) * 100) : null;
 
   return { score, total: refs.length, verified, in_text: inText, references, issues: issues.slice(0, 25) };
 }
@@ -1143,60 +905,28 @@ export async function analyzeDocument(
   const words = tokenize(text);
 
   await stage("retrieving");
-  const [plag, grammar, citations, judgement, sentenceModel] = await Promise.all([
+  const [plag, grammar, citations] = await Promise.all([
     detectPlagiarism(text, sentences, { title: meta.title, docType: meta.docType }),
     checkGrammar(text, meta.author, meta.title),
     verifyCitations(text),
-    llmJudgement(text, meta.docType),
-    llmSentenceScores(sentences),
   ]);
 
   await stage("scoring");
-  const sty = stylometry(text, sentences);
-
-  const modelScore = judgement?.probability ?? null;
-  const sentenceMean =
-    sentenceModel.size > 0 ? [...sentenceModel.values()].reduce((a, v) => a + v.p, 0) / sentenceModel.size : null;
-  const aiScore = Math.round(
-    modelScore === null && sentenceMean === null
-      ? sty.score
-      : sty.score * 0.35 + (modelScore ?? sentenceMean!) * 0.4 + (sentenceMean ?? modelScore!) * 0.25,
-  );
-  // Without an independent model assessment, heuristic-only output is low
-  // confidence. Even model-assisted text classification is capped at medium:
-  // this feature is an indicator, not a validated authorship detector.
-  const confidence = judgement
-    ? (judgement.confidence === "low" ? "low" : "medium")
-    : "low";
-
-
   const totalWords = words.length || 1;
-  const plagWords = Math.min(totalWords, plag.matched_words);
-  const quotedWords = Math.min(
-    totalWords - plagWords,
-    Math.round(tokenize((text.match(/[“"][^”"]{25,400}[”"]/g) ?? []).join(" ")).length),
-  );
-  const aiWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords),
-    Math.round(((totalWords - plagWords) * aiScore) / 100),
-  );
-  const grammarWords = Math.min(
-    Math.max(0, totalWords - plagWords - quotedWords - aiWords),
-    grammar.issues.length * 6,
-  );
-  const unmatchedWords = Math.max(0, totalWords - plagWords - quotedWords - aiWords - grammarWords);
-  const pct = (w: number) => Number(((w / totalWords) * 100).toFixed(1));
+  const matchedWords = Math.min(totalWords, plag.matched_words);
+  const unmatchedWords = Math.max(0, totalWords - matchedWords);
+  const pct = (count: number) => Number(((count / totalWords) * 100).toFixed(1));
 
+  // Only measurable document categories are shown. No estimated AI share or
+  // invented "human-written" residual is inferred from unmatched text.
   const composition: CompositionSlice[] = [
-    { category: "Plagiarised / matched", percent: pct(plagWords), words: plagWords },
-    { category: "AI-style indicators (estimated)", percent: pct(aiWords), words: aiWords },
-    { category: "Quoted & attributed", percent: pct(quotedWords), words: quotedWords },
-    { category: "Language issues", percent: pct(grammarWords), words: grammarWords },
-    { category: "Unmatched in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
+    { category: "Observed source overlap", percent: pct(matchedWords), words: matchedWords },
+    { category: "No match found in retrieved sources", percent: pct(unmatchedWords), words: unmatchedWords },
   ];
 
   await stage("rendering");
-  const aiHl = aiHighlights(sentences, aiScore, sentenceModel);
+  const aiReasoning = "AI authorship scoring is not reported. This deployment has no independently validated detector and representative benchmark dataset; stylistic patterns alone cannot establish authorship.";
+  const aiHl: Highlight[] = [];
 
   const issues: IssueItem[] = [];
 
@@ -1206,15 +936,6 @@ export async function analyzeDocument(
       severity: h.score >= 65 ? "high" : h.score >= 45 ? "medium" : "low",
       title: `${h.score}% overlap with ${h.source ?? "an external source"}`,
       detail: h.url ? `Source: ${h.url}` : "Matched against retrieved internet source.",
-      excerpt: h.text.slice(0, 260),
-    });
-  }
-  for (const h of aiHl.slice(0, 12)) {
-    issues.push({
-      category: "AI content",
-      severity: h.score >= 75 ? "high" : "medium",
-      title: `Passage reads as machine generated (${h.score}%)`,
-      detail: h.note ?? "Stylometric markers of LLM output.",
       excerpt: h.text.slice(0, 260),
     });
   }
@@ -1243,7 +964,9 @@ export async function analyzeDocument(
       sources_queried: plag.queried,
       checked_at: new Date().toISOString(),
     },
-    text_excerpt: text.slice(0, 24000),
+    // Preserve the complete extracted text (up to the 120k ingestion limit).
+    // PDF and on-screen highlights use offsets into this exact string.
+    text_excerpt: text,
     plagiarism: {
       score: plag.score,
       matched_words: plag.matched_words,
@@ -1252,12 +975,12 @@ export async function analyzeDocument(
       source_coverage: plag.source_coverage,
     },
     ai_detection: {
-      score: aiScore,
-      confidence,
-      reasoning: judgement?.reasoning || sty.reasoning,
-      model_score: modelScore,
-      stylometry_score: sty.score,
-      features: sty.features,
+      score: null,
+      confidence: "not_assessed",
+      reasoning: aiReasoning,
+      model_score: null,
+      stylometry_score: null,
+      features: {},
       highlights: aiHl,
     },
     grammar,

@@ -1,11 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  Activity, AlertTriangle, CheckCircle2, FileBarChart, FileText, Gauge,
-  PercentIcon, Sparkles, Upload,
+  Activity, AlertTriangle, CheckCircle2, FileBarChart, Upload,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/layout/StatCard";
@@ -22,9 +21,9 @@ export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — PlagiShield AI" },
-      { name: "description", content: "Overview of text similarity, writing-pattern signals, and document quality across your workspace." },
+      { name: "description", content: "Overview of documents, observed text matches, and source coverage in your workspace." },
       { property: "og:title", content: "Dashboard — PlagiShield AI" },
-      { property: "og:description", content: "Live integrity metrics across every document in your workspace." },
+      { property: "og:description", content: "Document activity and evidence-backed text comparison results." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -69,13 +68,11 @@ function DashboardPage() {
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <StatCard label="Writing Quality" value={stats?.qualityScore ?? 0} suffix="/100" icon={Gauge} tone="primary" />
-          <StatCard label="Similarity" value={stats?.similarity ?? 0} suffix="%" icon={PercentIcon} tone="success" />
-          <StatCard label="AI-style signals" value={stats?.aiDetection ?? 0} suffix="%" icon={Sparkles} tone="info" />
-          <StatCard label="Grammar" value={stats?.grammar ?? 0} suffix="/100" icon={CheckCircle2} tone="success" />
-          <StatCard label="Citation" value={stats?.citation ?? 0} suffix="/100" icon={FileText} tone="warning" />
-          <StatCard label="Total Documents" value={(stats?.totalDocuments ?? 0).toLocaleString()} icon={Activity} tone="primary" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Documents" value={(stats?.totalDocuments ?? 0).toLocaleString()} icon={FileBarChart} tone="primary" />
+          <StatCard label="Completed reviews" value={(stats?.analyzed ?? 0).toLocaleString()} icon={Activity} tone="primary" />
+          <StatCard label="Average observed overlap" value={stats?.analyzed ? stats.similarity : "—"} suffix={stats?.analyzed ? "%" : undefined} icon={FileBarChart} tone="primary" />
+          <StatCard label="Documents with matches" value={(stats?.matchedDocuments ?? 0).toLocaleString()} icon={AlertTriangle} tone="warning" />
         </div>
       )}
 
@@ -87,7 +84,7 @@ function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-foreground">No documents yet</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload your first document to review text similarity, writing signals, grammar, and citations.
+              Upload your first document to compare its text with available public sources and review the evidence.
             </p>
           </div>
           <Button size="sm" asChild><Link to="/documents">Upload a document</Link></Button>
@@ -98,8 +95,8 @@ function DashboardPage() {
         <Card className="p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-foreground">Submission Trends</h3>
-              <p className="text-xs text-muted-foreground">Submissions and documents with higher review signals</p>
+              <h3 className="text-sm font-semibold text-foreground">Document activity</h3>
+              <p className="text-xs text-muted-foreground">Uploads and completed analyses by month</p>
             </div>
             <Badge variant="secondary" className="font-normal">Last 7 months</Badge>
           </div>
@@ -111,42 +108,36 @@ function DashboardPage() {
                     <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
                     <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-destructive)" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="var(--color-destructive)" stopOpacity={0} />
-                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                 <XAxis dataKey="month" stroke="var(--color-muted-foreground)" fontSize={12} />
                 <YAxis allowDecimals={false} stroke="var(--color-muted-foreground)" fontSize={12} />
                 <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
                 <Area type="monotone" dataKey="submissions" stroke="var(--color-primary)" strokeWidth={2} fill="url(#g1)" />
-                <Area type="monotone" dataKey="flagged" stroke="var(--color-destructive)" strokeWidth={2} fill="url(#g2)" />
+                <Area type="monotone" dataKey="analyses" stroke="var(--color-success)" strokeWidth={2} fill="none" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
         <Card className="p-5">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Writing-pattern indicators</h3>
-            <p className="text-xs text-muted-foreground">Estimated detector signals across reviewed passages</p>
+          <h3 className="text-sm font-semibold text-foreground">What the numbers mean</h3>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Similarity is the observed share of eligible words matched in retrieved public sources. It is not a plagiarism verdict.
+          </p>
+          <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4">
+            <div>
+              <p className="text-2xl font-semibold text-foreground">{Number(stats?.matchedWords ?? 0).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Matched words</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-foreground">{Number(stats?.sourceRecordsRetrieved ?? 0).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Source records retrieved</p>
+            </div>
           </div>
-          <div className="h-64">
-            {hasAnalyses ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={data?.aiContentAnalysis ?? []} dataKey="value" nameKey="name" innerRadius={50} outerRadius={85} paddingAngle={3}>
-                    {(data?.aiContentAnalysis ?? []).map((e, i) => <Cell key={i} fill={e.fill} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyChart label="No completed analyses yet" />
-            )}
-          </div>
+          <p className="mt-4 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
+            AI authorship scoring is not assessed. Private student-paper repositories and licensed publisher full text are not connected.
+          </p>
         </Card>
       </div>
 
@@ -154,8 +145,8 @@ function DashboardPage() {
         <Card className="p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-semibold text-foreground">Similarity Distribution</h3>
-              <p className="text-xs text-muted-foreground">Documents grouped by similarity range</p>
+              <h3 className="text-sm font-semibold text-foreground">Observed similarity distribution</h3>
+              <p className="text-xs text-muted-foreground">Completed reviews grouped by observed overlap</p>
             </div>
           </div>
           <div className="h-56">

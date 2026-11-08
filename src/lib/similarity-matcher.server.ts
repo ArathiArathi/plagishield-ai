@@ -49,6 +49,12 @@ type Span = { first: number; last: number; sourceFirst: number; sourceLast: numb
 const DEFAULT_SHINGLE_SIZE = 8;
 const MIN_MATCH_WORDS = 8;
 
+export type ExcludedRange = { start: number; end: number };
+
+function overlapsExcludedRange(start: number, end: number, ranges: ExcludedRange[]): boolean {
+  return ranges.some((range) => start < range.end && end > range.start);
+}
+
 function normalizedWord(value: string): string {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("en");
 }
@@ -79,7 +85,7 @@ function buildSourceIndex(words: Token[], size: number): Map<string, number[]> {
     // A repeated boilerplate phrase can occur thousands of times. Keep a
     // bounded sample of positions to avoid quadratic blow-ups on templates.
     if (positions) {
-      if (positions.length < 40) positions.push(i);
+      if (positions.length < 200) positions.push(i);
     } else {
       index.set(key, [i]);
     }
@@ -185,6 +191,7 @@ function unionWordCount(spans: Array<{ first: number; last: number }>): number {
 export function matchDocumentAgainstSources(
   text: string,
   sources: MatchSource[],
+  options: { excludedRanges?: ExcludedRange[] } = {},
 ): {
   score: number;
   matched_words: number;
@@ -192,15 +199,26 @@ export function matchDocumentAgainstSources(
   highlights: MatchHighlight[];
 } {
   const documentWords = tokensWithOffsets(text);
-  const totalWords = documentWords.length || 1;
-  if (documentWords.length < MIN_MATCH_WORDS || sources.length === 0) {
+  const excludedRanges = options.excludedRanges ?? [];
+  const eligibleWords = documentWords.filter((word) =>
+    !overlapsExcludedRange(word.start, word.end, excludedRanges)
+  );
+  const totalWords = eligibleWords.length || 1;
+  if (eligibleWords.length < MIN_MATCH_WORDS || sources.length === 0) {
     return { score: 0, matched_words: 0, matches: [], highlights: [] };
   }
 
   const sourceEvidence = sources.map((source) => {
     const sourceWords = tokensWithOffsets(source.text);
     const index = buildSourceIndex(sourceWords, DEFAULT_SHINGLE_SIZE);
-    const spans = mergeSpans(findExactSpans(documentWords, sourceWords, index, DEFAULT_SHINGLE_SIZE));
+    const spans = mergeSpans(
+      findExactSpans(documentWords, sourceWords, index, DEFAULT_SHINGLE_SIZE)
+        .filter((span) => {
+          const start = documentWords[span.first]!.start;
+          const end = documentWords[span.last]!.end;
+          return !overlapsExcludedRange(start, end, excludedRanges);
+        }),
+    );
     return { source, sourceWords, spans, matchedWords: unionWordCount(spans) };
   }).filter((entry) => entry.matchedWords >= MIN_MATCH_WORDS);
 

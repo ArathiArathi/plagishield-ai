@@ -20,7 +20,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
 import { useWorkspaceData } from "@/hooks/use-workspace-data";
 import { useAnalysisQueue } from "@/hooks/use-analysis-queue";
 import { secureUserCache } from "@/lib/cache/secure-cache";
@@ -38,9 +37,9 @@ export const Route = createFileRoute("/analysis")({
   head: () => ({
     meta: [
       { title: "Analysis — PlagiShield AI" },
-      { name: "description", content: "Plagiarism, AI detection, grammar, and citation analysis workspace." },
+      { name: "description", content: "Source-linked text comparison, language review, and reference verification." },
       { property: "og:title", content: "Analysis workspace — PlagiShield AI" },
-      { property: "og:description", content: "Review similarity, AI-generation, grammar, and citation results per document." },
+      { property: "og:description", content: "Review exact text matches, language findings, and reference records." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -55,18 +54,18 @@ type Results = {
   stage?: string;
   stage_pct?: number;
   text_excerpt?: string;
+  meta?: { engine_version?: string; words?: number; extraction?: string };
   plagiarism?: { score?: number; matches?: Array<{ source?: string; similarity?: number; snippet?: string }>; highlights?: Highlight[] };
-  ai_detection?: { score?: number; confidence?: string; reasoning?: string; highlights?: Highlight[] };
-  grammar?: { score?: number; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
-  citations?: { score?: number; total?: number; verified?: number; issues?: string[] };
+  ai_detection?: { score?: number | null; confidence?: string; reasoning?: string; highlights?: Highlight[] };
+  grammar?: { score?: number | null; issues?: Array<{ type?: string; severity?: string; text?: string; suggestion?: string }>; highlights?: Highlight[] };
+  citations?: { score?: number | null; total?: number; verified?: number; issues?: string[]; references?: Array<{ raw?: string; verified?: boolean; matched_title?: string; doi?: string; year?: number }> };
   composition?: CompositionSlice[];
   issues?: IssueItem[];
 };
 
 
-function tone(score: number, invert = false) {
-  const s = invert ? 100 - score : score;
-  return s >= 75 ? "success" : s >= 50 ? "warning" : "destructive";
+function tone(_score: number, _invert = false) {
+  return "primary";
 }
 
 function AnalysisPage() {
@@ -89,6 +88,7 @@ function AnalysisPage() {
     [data?.analyses, selectedDoc?.id],
   );
   const results = (analysis?.results ?? {}) as Results;
+  const isOutdated = Boolean(analysis) && results.meta?.engine_version !== "3.0.0";
 
   const handleDownloadPdf = () => {
     if (!selectedDoc || !analysis) return;
@@ -103,9 +103,9 @@ function AnalysisPage() {
         authorName: selectedDoc.author_name,
         paperTitle: selectedDoc.paper_title,
         similarity: Math.round(Number(analysis.similarity_score ?? 0)),
-        ai: Math.round(Number(analysis.ai_score ?? 0)),
-        grammar: Math.round(Number(analysis.grammar_score ?? 0)),
-        citation: Math.round(Number(analysis.citation_score ?? 0)),
+        ai: null,
+        grammar: null,
+        citation: null,
         results: results as ReportInput["results"],
       };
       downloadReport("full", reportInput);
@@ -211,10 +211,7 @@ function AnalysisPage() {
     );
   }
 
-  const similarity = Math.round(Number(analysis?.similarity_score ?? 0));
-  const aiScore = Math.round(Number(analysis?.ai_score ?? 0));
-  const grammarScore = Math.round(Number(analysis?.grammar_score ?? 0));
-  const citationScore = Math.round(Number(analysis?.citation_score ?? 0));
+  const similarity = Math.round(Number(results.plagiarism?.score ?? analysis?.similarity_score ?? 0));
   const status = rerunning ? "processing" : (analysis?.status ?? "pending");
   const isProcessing = rerunning || status === "processing";
 
@@ -228,11 +225,6 @@ function AnalysisPage() {
     ...(results.plagiarism?.highlights ?? []),
     ...(results.ai_detection?.highlights ?? []),
     ...(results.grammar?.highlights ?? []),
-  ];
-
-  const aiSplit = [
-    { label: "Human", value: Math.max(0, 100 - aiScore), tone: "success" as const },
-    { label: "AI likelihood", value: aiScore, tone: aiScore >= 60 ? ("destructive" as const) : ("warning" as const) },
   ];
 
   const matchChart = matches.slice(0, 7).map((m, i) => ({
@@ -311,9 +303,9 @@ function AnalysisPage() {
                       ? currentStage === "extracting"
                         ? "Stage 1/4: Ingesting text & tokenizing sentence structures"
                         : currentStage === "retrieving"
-                          ? "Stage 2/4: Live literature retrieval (Wikipedia, OpenAlex, Crossref)"
+                          ? "Stage 2/4: Public source retrieval"
                           : currentStage === "scoring"
-                            ? "Stage 3/4: Forensic AI stylometrics & grammar syntax review"
+                            ? "Stage 3/4: Language and reference checks"
                             : currentStage === "rendering"
                               ? "Stage 4/4: Bibliographic cross-matching & evidence compilation"
                               : "Multi-signal analysis pipeline actively processing in real time…"
@@ -324,8 +316,8 @@ function AnalysisPage() {
                           : "Ready to analyze"}
                   </p>
                   {status === "processing" && (
-                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px] animate-pulse">
-                      Live Real-Time
+                    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+                      Processing
                     </Badge>
                   )}
                 </div>
@@ -353,32 +345,43 @@ function AnalysisPage() {
           </div>
           {status === "processing" && (
             <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span className="capitalize">{currentStage} stage</span>
-                <span className="font-semibold text-foreground">{results.stage_pct ?? (rerunning ? 25 : 45)}%</span>
+              <div className="text-[11px] text-muted-foreground">
+                <span className="capitalize">{currentStage} stage in progress</span>
               </div>
-              <Progress value={results.stage_pct ?? (rerunning ? 25 : 45)} className="h-2" />
             </div>
           )}
         </Card>
       )}
 
       {status === "completed" && !rerunning ? (
+        <>
+        {isOutdated && (
+          <Card className="flex flex-wrap items-center justify-between gap-3 border-warning/30 bg-warning/5 p-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">This analysis uses an older engine version</p>
+              <p className="mt-1 text-xs text-muted-foreground">Re-run it to use updated source retrieval, text exclusions, full-text storage and annotated PDF output.</p>
+            </div>
+            <Button size="sm" onClick={handleRerun}>Re-run analysis</Button>
+          </Card>
+        )}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] min-w-0">
         <Card className="p-5 min-w-0 overflow-hidden">
           <h3 className="mb-4 text-sm font-semibold text-foreground">Integrity summary</h3>
           <div className="space-y-4">
-            <ScoreBlock label="Similarity" value={similarity} tone={tone(similarity, true)} sub={similarity < 25 ? "Below 25% threshold" : "Above recommended threshold"} />
-            <ScoreBlock label="AI likelihood" value={aiScore} tone={tone(aiScore, true)} sub={results.ai_detection?.confidence ? `Confidence: ${results.ai_detection.confidence}` : "—"} />
-            <ScoreBlock label="Writing quality" value={grammarScore} tone={tone(grammarScore)} sub={`${grammarIssues.length} issues detected`} />
-            <ScoreBlock label="Citation quality" value={citationScore} tone={tone(citationScore)} sub={`${results.citations?.verified ?? 0} of ${results.citations?.total ?? 0} references verified`} />
+            <ScoreBlock label="Observed similarity" value={similarity} tone={tone(similarity)} sub={Number(results.plagiarism?.matched_words ?? 0).toLocaleString() + " matched words across " + matches.length + " retrieved source records"} />
+            <div className="rounded-md border border-border p-3">
+              <p className="text-sm font-medium text-foreground">AI authorship</p>
+              <p className="mt-1 text-sm text-muted-foreground">Not assessed — no independently validated detector is configured.</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-sm font-medium text-foreground">Language review</p>
+              <p className="mt-1 text-sm text-muted-foreground">{grammarIssues.length} issue(s) returned by the configured language checker.</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="text-sm font-medium text-foreground">Reference verification</p>
+              <p className="mt-1 text-sm text-muted-foreground">{results.citations?.verified ?? 0} of {results.citations?.total ?? 0} detected references matched to a public scholarly record.</p>
+            </div>
           </div>
-          <div className="mt-5 flex items-center gap-4 text-xs text-muted-foreground">
-            <Legend color="success" label="Healthy" />
-            <Legend color="warning" label="Needs review" />
-            <Legend color="destructive" label="High risk" />
-          </div>
-
           <div className="mt-6 border-t border-border pt-5">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Content composition</h3>
             <CompositionChart data={composition} />
@@ -403,14 +406,14 @@ function AnalysisPage() {
 
             <TabsContent value="highlights" className="mt-5 space-y-4">
               <p className="text-xs text-muted-foreground">
-                Plagiarised, AI-generated and language-issue passages are highlighted directly in the submitted text.
+                Exact text matches and language issues are highlighted in the extracted submission text. AI-authorship highlights are not generated.
               </p>
               <HighlightedDocument text={excerpt} highlights={allHighlights} />
             </TabsContent>
 
             <TabsContent value="evidence" className="mt-5 space-y-4">
               <p className="text-xs text-muted-foreground">
-                Every flagged segment with its matched source snippet, retrieval provider and confidence.
+                Each exact matched passage is paired with the retrieved source excerpt and a link to the source record.
               </p>
               <EvidencePanel highlights={allHighlights} />
             </TabsContent>
@@ -425,7 +428,7 @@ function AnalysisPage() {
               <ScoreBlock label="Overall similarity" value={similarity} tone={tone(similarity, true)} sub={`${matches.length} source matches`} />
               {matchChart.length > 0 && (
                 <Card className="bg-muted/30 p-4">
-                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Match strength by source</p>
+                  <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Eligible document words matched by source</p>
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={matchChart}>
@@ -453,7 +456,7 @@ function AnalysisPage() {
                         <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{s.source ?? "Unknown source"}</p>
                         <div className="text-right">
                           <p className="text-xs text-muted-foreground">Match</p>
-                          <p className="text-sm font-semibold text-foreground">{Math.round(Number(s.similarity ?? 0))}%</p>
+                          <p className="text-sm font-semibold text-foreground">{Number(s.similarity ?? 0).toFixed(1)}%</p>
                         </div>
                       </div>
                       {s.snippet && <p className="mt-2 border-l-2 border-warning bg-warning/10 px-3 py-2 text-xs text-foreground/90 break-words [overflow-wrap:anywhere]">{s.snippet}</p>}
@@ -464,9 +467,10 @@ function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="ai" className="mt-5 space-y-5">
-              <div className="grid grid-cols-2 gap-3">
-                {aiSplit.map((a) => <MiniStat key={a.label} label={a.label} value={`${a.value}%`} tone={a.tone} />)}
-              </div>
+              <Card className="border-border bg-muted/20 p-4">
+                <p className="text-sm font-medium text-foreground">AI authorship detection is not assessed</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">A defensible AI-writing assessment requires an independently validated detector and representative benchmark data. PlagiShield does not generate a percentage from stylistic guesses.</p>
+              </Card>
               {results.ai_detection?.reasoning && (
                 <Card className="bg-muted/30 p-4">
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Detector reasoning</p>
@@ -476,9 +480,9 @@ function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="grammar" className="mt-5 space-y-3">
-              <ScoreBlock label="Writing quality" value={grammarScore} tone={tone(grammarScore)} sub={`${grammarIssues.length} issues across the document`} />
+              <p className="text-sm text-muted-foreground">{grammarIssues.length} issue(s) returned by the configured language checker.</p>
               {grammarIssues.length === 0 ? (
-                <Empty label="No grammar issues detected." />
+                <Empty label="The configured checker returned no issues for the text it processed." />
               ) : grammarIssues.map((g, i) => (
                 <div key={i} className="rounded-md border border-border p-3">
                   <div className="mb-1 flex items-center gap-2">
@@ -496,21 +500,26 @@ function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="citation" className="mt-5 space-y-4">
-              <div className="grid grid-cols-4 gap-2">
-                {["APA", "MLA", "IEEE", "Harvard"].map((s) => (
-                  <div key={s} className="rounded-md border border-border bg-muted/30 px-3 py-2 text-center text-xs font-medium text-foreground">
-                    <GraduationCap className="mx-auto mb-1 h-4 w-4 text-primary" />{s}
-                  </div>
-                ))}
-              </div>
-              <ScoreBlock
-                label="Citation quality"
-                value={citationScore}
-                tone={tone(citationScore)}
-                sub={`${results.citations?.verified ?? 0} verified of ${results.citations?.total ?? 0} references`}
-              />
+              <Card className="border-border bg-muted/20 p-4">
+                <p className="text-sm font-medium text-foreground">Reference records</p>
+                <p className="mt-1 text-sm text-muted-foreground">{results.citations?.verified ?? 0} of {results.citations?.total ?? 0} detected entries matched a public scholarly record. This checks record identity, not APA, MLA, IEEE or Harvard formatting.</p>
+              </Card>
+              {(results.citations?.references ?? []).length > 0 && (
+                <div className="space-y-2">
+                  {(results.citations?.references ?? []).map((reference, index) => (
+                    <div key={reference.doi ?? reference.raw ?? index} className="rounded-md border border-border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-xs leading-5 text-foreground">{reference.raw}</p>
+                        <Badge variant="outline">{reference.verified ? "Matched" : "No public-index match"}</Badge>
+                      </div>
+                      {reference.matched_title && <p className="mt-2 text-xs text-muted-foreground">Matched record: {reference.matched_title}</p>}
+                      {reference.doi && <a className="mt-1 inline-block text-xs text-primary hover:underline" href={reference.doi.startsWith("http") ? reference.doi : "https://doi.org/" + reference.doi} target="_blank" rel="noreferrer">Open DOI record</a>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {citationIssues.length === 0 ? (
-                <Empty label="No citation issues found." />
+                <Empty label="No additional reference verification notes were returned." />
               ) : citationIssues.map((c, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-md border border-border p-3">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -520,7 +529,7 @@ function AnalysisPage() {
             </TabsContent>
 
             <TabsContent value="recs" className="mt-5 space-y-3">
-              {buildRecommendations({ similarity, aiScore, grammarScore, citationScore }).map((r, i) => (
+              {buildRecommendations({ similarity, grammarIssues, citationIssues }).map((r, i) => (
                 <div key={i} className="rounded-md border border-border p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <Badge className={cn(
@@ -536,7 +545,8 @@ function AnalysisPage() {
             </TabsContent>
           </Tabs>
         </Card>
-      </div>
+        </div>
+        </>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2 p-6 space-y-6 border-primary/20 bg-card">
@@ -595,7 +605,7 @@ function AnalysisPage() {
                     <span className="text-[11px] text-muted-foreground">{stageIdx > 1 ? "Complete" : stageIdx === 1 ? "Active" : "Pending"}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Querying 150M+ Crossref scholarly records, OpenAlex research works, and Wikipedia full-text extracts for verbatim and paraphrased overlap.
+                    Searching selected public records from Crossref, OpenAlex, Semantic Scholar, Europe PMC and Wikipedia. Only retrieved text is compared.
                   </p>
                 </div>
               </div>
@@ -613,11 +623,11 @@ function AnalysisPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-foreground">Forensic AI Stylometrics & Authorship Evaluation</p>
+                    <p className="text-sm font-medium text-foreground">AI authorship assessment status</p>
                     <span className="text-[11px] text-muted-foreground">{stageIdx > 2 ? "Complete" : stageIdx === 2 ? "Active" : "Pending"}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Measuring sentence burstiness entropy (CV), first-order delta jumps, transition opener density, and crediting empirical research data.
+                    AI authorship scoring is deliberately not reported until a detector has been validated against a representative labelled dataset.
                   </p>
                 </div>
               </div>
@@ -663,7 +673,7 @@ function AnalysisPage() {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-border">
                 <span className="text-muted-foreground">Connected Repositories</span>
-                <span className="font-medium text-foreground text-right">Crossref, OpenAlex, Wikipedia</span>
+                <span className="font-medium text-foreground text-right">Crossref, OpenAlex, Semantic Scholar, Europe PMC, Wikipedia</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-border">
                 <span className="text-muted-foreground">Language Service</span>
@@ -672,7 +682,7 @@ function AnalysisPage() {
               <div className="flex justify-between items-center py-2">
                 <span className="text-muted-foreground">Audit Trail</span>
                 <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">
-                  Real-time Verified
+                  Coverage shown in report
                 </Badge>
               </div>
             </div>
@@ -680,7 +690,7 @@ function AnalysisPage() {
             <div className="rounded-lg bg-muted/40 p-3.5 text-[11px] text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">⚡ Live Execution Notice</p>
               <p>
-                Every analysis queries live academic repositories across the open web. No dummy values or static mocks are ever returned.
+                Results depend on the public source records retrieved for this document. Private student-paper repositories and licensed publisher full text are not connected.
               </p>
             </div>
           </Card>
@@ -690,29 +700,21 @@ function AnalysisPage() {
   );
 }
 
-function buildRecommendations({ similarity, aiScore, grammarScore, citationScore }: {
-  similarity: number; aiScore: number; grammarScore: number; citationScore: number;
+function buildRecommendations({ similarity, grammarIssues, citationIssues }: {
+  similarity: number;
+  grammarIssues: Array<{ type?: string }>;
+  citationIssues: string[];
 }) {
   const recs: Array<{ group: string; priority: "High" | "Medium" | "Low"; text: string }> = [];
-  recs.push(similarity >= 25
-    ? { group: "Plagiarism", priority: "High", text: "Similarity exceeds the 25% threshold. Paraphrase flagged passages and attribute every borrowed idea." }
-    : { group: "Plagiarism", priority: "Low", text: "Similarity is within accepted limits. Keep quoting and attributing consistently." });
-  recs.push(aiScore >= 60
-    ? { group: "AI Detection", priority: "High", text: "High AI-generation likelihood. Rewrite affected sections in your own voice and document your drafting process." }
-    : aiScore >= 25
-      ? { group: "AI Detection", priority: "Medium", text: "Some passages read as AI-assisted. Add original analysis and vary sentence structure." }
-      : { group: "AI Detection", priority: "Low", text: "Writing reads as human-authored." });
-  recs.push(grammarScore < 80
-    ? { group: "Grammar", priority: "Medium", text: "Apply the suggested grammar fixes to raise writing quality above 80." }
-    : { group: "Grammar", priority: "Low", text: "Grammar is strong; only minor polish remains." });
-  recs.push(citationScore < 80
-    ? { group: "Citations", priority: "High", text: "Complete and normalize incomplete references to a single citation style." }
-    : { group: "Citations", priority: "Low", text: "Citations are well formed and verifiable." });
+  if (similarity > 0) recs.push({ group: "Similarity", priority: "Medium", text: "Review each matched passage beside its linked source and check quotation and citation context." });
+  if (grammarIssues.length > 0) recs.push({ group: "Language", priority: "Medium", text: "Review the language checker suggestions and accept only changes that preserve your meaning." });
+  if (citationIssues.length > 0) recs.push({ group: "References", priority: "Medium", text: "Check unresolved reference records against the publisher or DOI landing page." });
+  if (recs.length === 0) recs.push({ group: "Review", priority: "Low", text: "No findings were returned by the enabled checks. This does not certify originality or authorship." });
   return recs;
 }
 
 function ScoreBlock({ label, value, tone, sub }: { label: string; value: number; tone: string; sub?: string }) {
-  const bar = tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : "bg-destructive";
+  const bar = tone === "primary" ? "bg-primary" : tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : "bg-destructive";
   return (
     <div>
       <div className="mb-1.5 flex items-end justify-between">
@@ -727,28 +729,7 @@ function ScoreBlock({ label, value, tone, sub }: { label: string; value: number;
   );
 }
 
-function MiniStat({ label, value, tone }: { label: string; value: string; tone: "success" | "warning" | "destructive" }) {
-  const tones = {
-    success: "bg-success/10 text-success",
-    warning: "bg-warning/15 text-warning",
-    destructive: "bg-destructive/10 text-destructive",
-  };
-  return (
-    <div className={cn("rounded-md p-3 text-center", tones[tone])}>
-      <p className="text-lg font-semibold">{value}</p>
-      <p className="text-xs opacity-80">{label}</p>
-    </div>
-  );
-}
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn("h-2.5 w-2.5 rounded-full", color === "success" ? "bg-success" : color === "warning" ? "bg-warning" : "bg-destructive")} />
-      {label}
-    </span>
-  );
-}
 
 function Empty({ label }: { label: string }) {
   return (

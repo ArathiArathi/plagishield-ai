@@ -36,6 +36,21 @@ export type DocumentRow = {
 const avg = (nums: number[]) =>
   nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 0;
 
+function resultOf(analysis: AnalysisRow): any {
+  return analysis.results && typeof analysis.results === "object" ? analysis.results : {};
+}
+
+function observedSimilarity(analysis: AnalysisRow): number {
+  const value = resultOf(analysis).plagiarism?.score ?? analysis.similarity_score;
+  return Number.isFinite(Number(value)) ? Math.max(0, Math.min(100, Number(value))) : 0;
+}
+
+function matchedWordCount(analysis: AnalysisRow): number {
+  const value = resultOf(analysis).plagiarism?.matched_words;
+  return Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+}
+
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 let activeChannel: ReturnType<typeof supabase.channel> | null = null;
@@ -108,8 +123,6 @@ export function useWorkspaceData() {
       return hasActive ? 1200 : false;
     },
     queryFn: async () => {
-      const session = (await supabase.auth.getSession()).data.session;
-      const userId = session?.user?.id ?? "global";
 
       const [docsRes, analysesRes] = await Promise.all([
         supabase
@@ -126,73 +139,81 @@ export function useWorkspaceData() {
 
       const documents = (docsRes.data ?? []) as DocumentRow[];
       const analyses = (analysesRes.data ?? []) as AnalysisRow[];
-      const done = analyses.filter((a) => a.status === "completed");
+      const completed = analyses.filter((analysis) => analysis.status === "completed");
+      const done = completed.filter((analysis) => resultOf(analysis).meta?.engine_version === "3.0.0");
 
-      const similarity = avg(done.map((a) => Number(a.similarity_score ?? 0)));
-      const aiDetection = avg(done.map((a) => Number(a.ai_score ?? 0)));
-      const grammar = avg(done.map((a) => Number(a.grammar_score ?? 0)));
-      const citation = avg(done.map((a) => Number(a.citation_score ?? 0)));
-      const qualityScore = done.length
-        ? Math.round((grammar + citation) / 2)
-        : 0;
+      const similarity = avg(done.map(observedSimilarity));
+      const matchedDocuments = done.filter((analysis) => matchedWordCount(analysis) > 0).length;
+      const matchedWords = done.reduce((sum, analysis) => sum + matchedWordCount(analysis), 0);
+      const sourceRecordsRetrieved = done.reduce((sum, analysis) => {
+        const count = resultOf(analysis).plagiarism?.source_coverage?.sources_retrieved;
+        return sum + (Number.isFinite(Number(count)) ? Number(count) : 0);
+      }, 0);
+      const grammarIssues = done.reduce((sum, analysis) => {
+        const issues = resultOf(analysis).grammar?.issues;
+        return sum + (Array.isArray(issues) ? issues.length : 0);
+      }, 0);
+      const referencesVerified = done.reduce((sum, analysis) => {
+        const count = resultOf(analysis).citations?.verified;
+        return sum + (Number.isFinite(Number(count)) ? Number(count) : 0);
+      }, 0);
 
-      // Submission trend — last 7 calendar months
+      // Submission trend — last 7 calendar months. These are counts of uploads
+      // and completed analyses, not a fabricated risk or pass/fail series.
       const now = new Date();
       const submissionTrend = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (6 - i), 1);
         const inMonth = documents.filter((doc) => {
-          const c = new Date(doc.created_at);
-          return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
+          const created = new Date(doc.created_at);
+          return created.getFullYear() === d.getFullYear() && created.getMonth() === d.getMonth();
         });
-        const flagged = inMonth.filter((doc) => {
-          const a = done.find((x) => x.document_id === doc.id);
-          return a ? Number(a.similarity_score ?? 0) >= 25 || Number(a.ai_score ?? 0) >= 50 : false;
+        const completedInMonth = completed.filter((analysis) => {
+          const created = new Date(analysis.created_at);
+          return created.getFullYear() === d.getFullYear() && created.getMonth() === d.getMonth();
         });
-        return { month: MONTHS[d.getMonth()], submissions: inMonth.length, flagged: flagged.length };
+        return { month: MONTHS[d.getMonth()], submissions: inMonth.length, analyses: completedInMonth.length };
       });
 
       const buckets = [
-        { range: "0-10%", min: 0, max: 10, fill: "var(--color-success)" },
-        { range: "11-25%", min: 11, max: 25, fill: "var(--color-success)" },
-        { range: "26-40%", min: 26, max: 40, fill: "var(--color-warning)" },
-        { range: "41-60%", min: 41, max: 60, fill: "var(--color-warning)" },
-        { range: "61%+", min: 61, max: 101, fill: "var(--color-destructive)" },
+        { range: "0%", min: 0, max: 0, fill: "var(--color-muted-foreground)" },
+        { range: "1–10%", min: 0.01, max: 10, fill: "var(--color-primary)" },
+        { range: "11–25%", min: 10.01, max: 25, fill: "var(--color-primary)" },
+        { range: "26–50%", min: 25.01, max: 50, fill: "var(--color-primary)" },
+        { range: "51–100%", min: 50.01, max: 100, fill: "var(--color-primary)" },
       ];
-      const similarityDistribution = buckets.map((b) => ({
-        range: b.range,
-        fill: b.fill,
-        count: done.filter((a) => {
-          const s = Number(a.similarity_score ?? 0);
-          return s >= b.min && s <= b.max;
+      const similarityDistribution = buckets.map((bucket) => ({
+        range: bucket.range,
+        fill: bucket.fill,
+        count: done.filter((analysis) => {
+          const score = observedSimilarity(analysis);
+          return score >= bucket.min && score <= bucket.max;
         }).length,
       }));
 
-      const aiHigh = done.filter((a) => Number(a.ai_score ?? 0) >= 60).length;
-      const aiMid = done.filter((a) => {
-        const s = Number(a.ai_score ?? 0);
-        return s >= 25 && s < 60;
-      }).length;
-      const aiLow = done.length - aiHigh - aiMid;
-      const aiContentAnalysis = [
-        { name: "Lower signal", value: aiLow, fill: "var(--color-success)" },
-        { name: "Moderate signal", value: aiMid, fill: "var(--color-warning)" },
-        { name: "Higher signal", value: aiHigh, fill: "var(--color-destructive)" },
-      ];
-
       const recentActivity = documents.slice(0, 6).map((doc) => {
-        const a = analyses.find((x) => x.document_id === doc.id);
+        const analysis = analyses.find((item) => item.document_id === doc.id);
+        const current = analysis ? resultOf(analysis).meta?.engine_version === "3.0.0" : false;
+        const matched = analysis && current ? matchedWordCount(analysis) : 0;
         const status =
           doc.status === "failed" ? "error" :
-          doc.status === "analyzed"
-            ? Number(a?.similarity_score ?? 0) >= 25 ? "warning" : "success"
-            : "info";
+          doc.status === "analyzed" && !current ? "info" :
+          doc.status === "analyzed" && matched > 0 ? "warning" :
+          doc.status === "analyzed" ? "success" : "info";
         return {
           id: doc.id,
           title: doc.name,
           action:
-            doc.status === "analyzed" ? `Analysis complete · ${Math.round(Number(a?.similarity_score ?? 0))}% similarity` :
-            doc.status === "failed" ? "Analysis failed" :
-            doc.status === "processing" ? "Analysis running" : "Uploaded",
+            doc.status === "analyzed"
+              ? !current
+                ? "Older analysis · re-run to refresh"
+                : matched > 0
+                  ? `Analysis complete · ${matched.toLocaleString()} matched words`
+                  : "No exact matches in retrieved sources"
+              : doc.status === "failed"
+                ? "Analysis failed"
+                : doc.status === "processing"
+                  ? "Analysis running"
+                  : "Uploaded",
           time: new Date(doc.updated_at).toLocaleString(),
           status,
         };
@@ -202,17 +223,17 @@ export function useWorkspaceData() {
         documents,
         analyses,
         summaryStats: {
-          qualityScore,
           similarity,
-          aiDetection,
-          grammar,
-          citation,
+          matchedDocuments,
+          matchedWords,
+          sourceRecordsRetrieved,
+          grammarIssues,
+          referencesVerified,
           totalDocuments: documents.length,
           analyzed: done.length,
         },
         submissionTrend,
         similarityDistribution,
-        aiContentAnalysis,
         recentActivity,
       };
     },
