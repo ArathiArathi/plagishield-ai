@@ -757,15 +757,34 @@ function chunk_slice(text: string, offset: number, length: number) {
 /* -------------------------------------------- 4. citation verification */
 
 function extractReferences(text: string) {
-  const lines = text.split(/\n+/).map((l) => l.trim());
-  const refIndex = lines.findIndex((l) => /^(references|bibliography|works cited|literature cited|reference list)\b/i.test(l));
-  const pool = refIndex >= 0 ? lines.slice(refIndex + 1) : [];
-  const refs = pool
-    .filter((l) => l.length > 40 && /\(?(19|20)\d{2}\)?/.test(l) && /[A-Z][a-z]+/.test(l))
-    .map((l) => l.replace(/^\[\d+\]\s*/, "").replace(/^\d+\.\s*/, ""))
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const refIndex = lines.findIndex((line) =>
+    /^(references|bibliography|works cited|literature cited|reference list)\b/i.test(line)
+  );
+  if (refIndex < 0) {
+    const inText = (text.match(/\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g) ?? []).length;
+    return { refs: [] as string[], inText, hasSection: false };
+  }
+
+  const entries: string[] = [];
+  for (const line of lines.slice(refIndex + 1)) {
+    if (/^(appendix|appendices|acknowledg(?:e)?ments|glossary)\b/i.test(line)) break;
+    const numbered = /^(?:\[\d+\]|\d+[.)])\s*/.test(line);
+    const hasYear = /\(?(?:19|20)\d{2}\)?/.test(line);
+    const currentHasYear = entries.length > 0 && /\(?(?:19|20)\d{2}\)?/.test(entries[entries.length - 1]!);
+    if (entries.length === 0 || numbered || (hasYear && currentHasYear)) {
+      entries.push(line.replace(/^(?:\[\d+\]|\d+[.)])\s*/, ""));
+    } else {
+      entries[entries.length - 1] += " " + line;
+    }
+  }
+
+  const refs = entries
+    .map((entry) => entry.replace(/\s+/g, " ").trim())
+    .filter((entry) => entry.length > 40 && /\(?(?:19|20)\d{2}\)?/.test(entry))
     .slice(0, 50);
   const inText = (text.match(/\((?:[A-Z][A-Za-z\-']+(?:\s+(?:et al\.?|and|&)\s+[A-Z][A-Za-z\-']+)?,\s*(?:19|20)\d{2}[a-z]?)\)|\[\d{1,3}\]/g) ?? []).length;
-  return { refs, inText, hasSection: refIndex >= 0 };
+  return { refs, inText, hasSection: true };
 }
 
 function extractTitleFromRef(raw: string): string {
